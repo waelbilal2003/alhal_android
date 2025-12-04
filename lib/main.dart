@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart'; // لحفظ حالة تسجيل الدخول
 import 'screens/login_screen.dart'; // شاشة تسجيل الدخول
-import 'screens/location_selection_screen.dart'; // شاشة اختيار المحل
-import 'screens/home_screen.dart'; // الشاشة الرئيسية
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

@@ -1,8 +1,16 @@
 import 'package:flutter/material.dart';
-import 'screens/login_screen.dart'; // شاشة تسجيل الدخول
+import 'package:flutter/services.dart'; // <-- 1. أضف الاستيراد
+import 'screens/login_screen.dart'; // تأكد من أن المسار صحيح
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 2. قفل اتجاه التطبيق بأكمله هنا قبل تشغيل التطبيق
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.landscapeLeft,
+    DeviceOrientation.landscapeRight,
+  ]);
+
   runApp(const MyApp());
 }
 
@@ -22,7 +30,6 @@ class MyApp extends StatelessWidget {
         useMaterial3: true,
         fontFamily: 'Arial',
       ),
-      // الشاشة التي ستظهر عند بدء التطبيق
       home: const LoginScreen(),
     );
   }

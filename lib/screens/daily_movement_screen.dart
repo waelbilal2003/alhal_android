@@ -1,206 +1,137 @@
 import 'package:flutter/material.dart';
-// لم نعد نحتاج لاستيراد InvoiceEntryScreen
 
 class DailyMovementScreen extends StatelessWidget {
   final String selectedDate;
   final String storeType;
-  final String? sellerName; // إضافة اسم البائع
+  final String? sellerName;
 
   const DailyMovementScreen({
     super.key,
     required this.selectedDate,
     required this.storeType,
-    this.sellerName, // جعلها اختيارية
+    this.sellerName,
   });
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        title: Text(
-          'حركة اليومية - $selectedDate',
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
+        title: Text('حركة اليومية - $selectedDate',
+            style: const TextStyle(fontWeight: FontWeight.bold)),
         centerTitle: true,
         backgroundColor: Colors.green[600],
         foregroundColor: Colors.white,
       ),
       body: Directionality(
         textDirection: TextDirection.rtl,
-        child: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                Colors.green[50]!,
-                Colors.grey[100]!,
-              ],
+        child: Column(
+          children: [
+            // شريط المعلومات العلوي المدمج
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+              decoration: BoxDecoration(
+                color: Colors.green[50],
+                boxShadow: [
+                  BoxShadow(color: Colors.grey.withOpacity(0.2), blurRadius: 2)
+                ],
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                textDirection: TextDirection.rtl,
+                children: [
+                  Text('المتجر: $storeType',
+                      style: const TextStyle(
+                          fontSize: 14, fontWeight: FontWeight.bold)),
+                  Text('التاريخ: $selectedDate',
+                      style: const TextStyle(
+                          fontSize: 14, fontWeight: FontWeight.bold)),
+                  if (sellerName != null)
+                    Text('البائع: $sellerName',
+                        style: const TextStyle(
+                            fontSize: 14, fontWeight: FontWeight.bold)),
+                ],
+              ),
             ),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Column(
-              children: [
-                // عرض معلومات المتجر والتاريخ والبائع
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  margin: const EdgeInsets.only(bottom: 20),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(10),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.grey.withOpacity(0.2),
-                        spreadRadius: 1,
-                        blurRadius: 3,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'نوع المتجر: $storeType',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.grey[700],
-                            ),
-                          ),
-                          Text(
-                            'التاريخ: $selectedDate',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.grey[700],
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (sellerName != null) ...[
-                        const SizedBox(height: 10),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: Text(
-                            'البائع: $sellerName',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.grey[700],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                // القائمة الرئيسية
-                Expanded(
-                  child: GridView.count(
-                    crossAxisCount: 2,
-                    crossAxisSpacing: 15.0,
-                    mainAxisSpacing: 15.0,
-                    childAspectRatio: 1.2,
-                    children: [
-                      _buildMenuButton(
-                        context,
+            // شبكة الأزرار
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: GridView.count(
+                  crossAxisCount: 4, // 4 أعمدة لاستغلال العرض
+                  crossAxisSpacing: 10.0,
+                  mainAxisSpacing: 10.0,
+                  childAspectRatio: 1.0, // مربع تقريباً
+                  children: [
+                    _buildMenuButton(context,
                         icon: Icons.inventory,
-                        label: 'يومية الاستلام',
-                        color: Colors.blue[700]!,
-                        onTap: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                                content: Text('تم الضغط على يومية الاستلام')),
-                          );
-                        },
-                      ),
-                      _buildMenuButton(
-                        context,
+                        label: 'الاستلام',
+                        color: Colors.blue[700]!),
+                    _buildMenuButton(context,
                         icon: Icons.point_of_sale,
-                        label: 'يومية المبيعات',
-                        color: Colors.orange[700]!,
-                        onTap: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                                content: Text('تم الضغط على يومية المبيعات')),
-                          );
-                        },
-                      ),
-                      _buildMenuButton(
-                        context,
+                        label: 'المبيعات',
+                        color: Colors.orange[700]!),
+                    _buildMenuButton(context,
                         icon: Icons.shopping_cart,
-                        label: 'يومية المشتريات',
-                        color: Colors.red[700]!,
-                        onTap: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                                content: Text('تم الضغط على يومية المشتريات')),
-                          );
-                        },
-                      ),
-                      _buildMenuButton(
-                        context,
+                        label: 'المشتريات',
+                        color: Colors.red[700]!),
+                    _buildMenuButton(context,
                         icon: Icons.account_balance,
-                        label: 'يومية الصندوق',
-                        color: Colors.blueGrey[600]!,
-                        onTap: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                                content: Text('تم الضغط على يومية الصندوق')),
-                          );
-                        },
-                      ),
-                    ],
-                  ),
+                        label: 'الصندوق',
+                        color: Colors.blueGrey[600]!),
+                    _buildMenuButton(context,
+                        icon: Icons.grain,
+                        label: 'الغلة',
+                        color: Colors.purple[700]!),
+                    _buildMenuButton(context,
+                        icon: Icons.settings,
+                        label: 'الإعدادات',
+                        color: Colors.grey[600]!),
+                  ],
                 ),
-              ],
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );
   }
 
-  // دالة مساعدة لبناء أزرار القائمة
+  // دالة بناء الزر المدمج
   Widget _buildMenuButton(BuildContext context,
-      {required IconData icon,
-      required String label,
-      required Color color,
-      required VoidCallback onTap}) {
+      {required IconData icon, required String label, required Color color}) {
     return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(15),
+      onTap: () {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('تم الضغط على $label'),
+            backgroundColor: color,
+            duration: const Duration(seconds: 1),
+          ),
+        );
+      },
+      borderRadius: BorderRadius.circular(12),
       child: Container(
         decoration: BoxDecoration(
           color: color,
-          borderRadius: BorderRadius.circular(15),
+          borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              color: color.withOpacity(0.3),
-              spreadRadius: 2,
-              blurRadius: 5,
-              offset: const Offset(0, 3),
-            ),
+                color: color.withOpacity(0.4), spreadRadius: 1, blurRadius: 3)
           ],
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 50, color: Colors.white),
-            const SizedBox(height: 10),
+            Icon(icon, size: 30, color: Colors.white),
+            const SizedBox(height: 4),
             Text(
               label,
               textAlign: TextAlign.center,
               style: const TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold),
             ),
           ],
         ),

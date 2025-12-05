@@ -20,11 +20,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
   bool _isLoading = false;
   String? _errorMessage;
 
-  // --- تم حذف المتغيرات غير الضرورية ---
-  // bool _isFirstTime = true;  <-- غير مفيد
-  // String? _savedSellerName;  <-- يمكننا قراءته مباشرة
-
-  bool _showSetupScreen = true; // الافتراضي هو الإعداد
+  bool _showSetupScreen = true;
   String? _savedPassword;
   String? _savedSellerName;
 
@@ -32,7 +28,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _checkAppStatus(); // دالة ذات اسم أوضح
+    _checkAppStatus();
   }
 
   @override
@@ -58,13 +54,11 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     await prefs.setBool('is_logged_in', false);
   }
 
-  // دالة ذات اسم أوضح للتحقق من حالة التطبيق
   Future<void> _checkAppStatus() async {
     final prefs = await SharedPreferences.getInstance();
     final savedPassword = prefs.getString('app_password');
     final savedSellerName = prefs.getString('seller_name');
 
-    // إذا كانت هناك كلمة مرور محفوظة، فهذا يعني أن الإعداد تم بالفعل
     if (savedPassword != null) {
       setState(() {
         _showSetupScreen = false;
@@ -87,7 +81,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
 
     setState(() {
       _isLoading = false;
-      _showSetupScreen = false; // الانتقال مباشرة لشاشة الدخول
+      _showSetupScreen = false;
       _savedPassword = newPassword;
       _savedSellerName = sellerName;
     });
@@ -112,7 +106,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
           MaterialPageRoute(
             builder: (context) => DateSelectionScreen(
               storeType: 'متجر رئيسي',
-              storeName: 'اسم المتجر',
+              storeName: 'سوق الهال',
               sellerName: _savedSellerName,
             ),
           ),
@@ -121,7 +115,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     } else {
       setState(() {
         _isLoading = false;
-        _errorMessage = 'كلمة المرور غير صحيحة. حاول مرة أخرى.';
+        _errorMessage = 'كلمة المرور غير صحيحة.';
       });
     }
   }
@@ -129,8 +123,14 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Directionality(
-        textDirection: TextDirection.rtl,
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.teal[400]!, Colors.teal[700]!],
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+          ),
+        ),
         child: Center(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(24.0),
@@ -141,151 +141,135 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     );
   }
 
-  // ... باقي الدوال _buildSetupScreen و _buildLoginScreen لم تتغير ...
+  // --- واجهة الإعداد ---
   Widget _buildSetupScreen() {
     return Form(
       key: _setupFormKey,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.vpn_key, size: 80, color: Colors.teal),
-          const SizedBox(height: 24),
+          const Icon(Icons.vpn_key, size: 60, color: Colors.white),
+          const SizedBox(height: 20),
           const Text('إعداد التطبيق',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 16),
-          const Text('يرجى إعداد كلمة المرور واسم البائع',
-              textAlign: TextAlign.center),
-          const SizedBox(height: 32),
-          TextFormField(
-            controller: _sellerNameController,
-            textAlign: TextAlign.center,
-            decoration: const InputDecoration(
-              hintText: 'أدخل اسم البائع',
-              border: OutlineInputBorder(
-                  borderRadius: BorderRadius.all(Radius.circular(12))),
-              focusedBorder: OutlineInputBorder(
-                  borderSide: BorderSide(color: Colors.teal, width: 2),
-                  borderRadius: BorderRadius.all(Radius.circular(12))),
-            ),
-            validator: (value) {
-              if (value == null || value.trim().isEmpty)
-                return 'الرجاء إدخال اسم البائع';
-              return null;
-            },
-            textInputAction: TextInputAction.next,
+              style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white)),
+          const SizedBox(height: 30),
+          // استخدام Row لوضع الحقول بجانب بعضها
+          Row(
+            textDirection: TextDirection.rtl,
+            children: [
+              Expanded(
+                  child: _buildInputField(
+                      _sellerNameController, 'اسم البائع', false)),
+              const SizedBox(width: 20),
+              Expanded(
+                  child: _buildInputField(
+                      _newPasswordController, 'كلمة المرور الجديدة', true)),
+              const SizedBox(width: 20),
+              Expanded(
+                  child: _buildInputField(
+                      _confirmPasswordController, 'تأكيد كلمة المرور', true)),
+            ],
           ),
-          const SizedBox(height: 16),
-          TextFormField(
-            controller: _newPasswordController,
-            obscureText: true,
-            textAlign: TextAlign.center,
-            decoration: const InputDecoration(
-              hintText: 'أدخل كلمة المرور الجديدة',
-              border: OutlineInputBorder(
-                  borderRadius: BorderRadius.all(Radius.circular(12))),
-              focusedBorder: OutlineInputBorder(
-                  borderSide: BorderSide(color: Colors.teal, width: 2),
-                  borderRadius: BorderRadius.all(Radius.circular(12))),
-            ),
-            validator: (value) {
-              if (value == null || value.isEmpty)
-                return 'الرجاء إدخال كلمة المرور';
-              if (value.length < 4)
-                return 'كلمة المرور يجب أن تكون 4 أحرف على الأقل';
-              return null;
-            },
-            textInputAction: TextInputAction.next,
-          ),
-          const SizedBox(height: 16),
-          TextFormField(
-            controller: _confirmPasswordController,
-            obscureText: true,
-            textAlign: TextAlign.center,
-            decoration: const InputDecoration(
-              hintText: 'أكد كلمة المرور',
-              border: OutlineInputBorder(
-                  borderRadius: BorderRadius.all(Radius.circular(12))),
-              focusedBorder: OutlineInputBorder(
-                  borderSide: BorderSide(color: Colors.teal, width: 2),
-                  borderRadius: BorderRadius.all(Radius.circular(12))),
-            ),
-            validator: (value) {
-              if (value == null || value.isEmpty)
-                return 'الرجاء تأكيد كلمة المرور';
-              if (value != _newPasswordController.text)
-                return 'كلمتا المرور غير متطابقتين';
-              return null;
-            },
-            onFieldSubmitted: (_) => _savePasswordAndSeller(),
-          ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 30),
           _isLoading
-              ? const CircularProgressIndicator(color: Colors.teal)
+              ? const CircularProgressIndicator(color: Colors.white)
               : ElevatedButton(
                   onPressed: _savePasswordAndSeller,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.teal,
+                    backgroundColor: Colors.white,
+                    foregroundColor: Colors.teal[700],
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 50, vertical: 15),
+                        horizontal: 60, vertical: 15),
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12)),
                   ),
                   child: const Text('حفظ',
-                      style: TextStyle(fontSize: 18, color: Colors.white)),
+                      style:
+                          TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                 ),
         ],
       ),
     );
   }
 
+  // --- واجهة تسجيل الدخول ---
   Widget _buildLoginScreen() {
     return Form(
       key: _formKey,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.lock, size: 80, color: Colors.teal),
-          const SizedBox(height: 24),
+          const Icon(Icons.lock, size: 60, color: Colors.white),
+          const SizedBox(height: 20),
           const Text('تسجيل الدخول',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 32),
-          TextFormField(
-            controller: _passwordController,
-            obscureText: true,
-            textAlign: TextAlign.center,
-            decoration: InputDecoration(
-              hintText: 'أدخل كلمة المرور',
-              border: const OutlineInputBorder(
-                  borderRadius: BorderRadius.all(Radius.circular(12))),
-              focusedBorder: const OutlineInputBorder(
-                  borderSide: BorderSide(color: Colors.teal, width: 2),
-                  borderRadius: BorderRadius.all(Radius.circular(12))),
-              errorText: _errorMessage,
-            ),
-            validator: (value) {
-              if (value == null || value.isEmpty)
-                return 'الرجاء إدخال كلمة المرور';
-              return null;
-            },
-            onFieldSubmitted: (_) => _login(),
+              style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white)),
+          const SizedBox(height: 40),
+          SizedBox(
+            width: 300,
+            child: _buildInputField(
+                _passwordController, 'أدخل كلمة المرور', true,
+                errorText: _errorMessage),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 30),
           _isLoading
-              ? const CircularProgressIndicator(color: Colors.teal)
+              ? const CircularProgressIndicator(color: Colors.white)
               : ElevatedButton(
                   onPressed: _login,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.teal,
+                    backgroundColor: Colors.white,
+                    foregroundColor: Colors.teal[700],
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 50, vertical: 15),
+                        horizontal: 60, vertical: 15),
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12)),
                   ),
                   child: const Text('دخول',
-                      style: TextStyle(fontSize: 18, color: Colors.white)),
+                      style:
+                          TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                 ),
         ],
       ),
+    );
+  }
+
+  // --- دالة بناء حقل الإدخال لإعادة الاستخدام ---
+  Widget _buildInputField(
+      TextEditingController controller, String hint, bool obscure,
+      {String? errorText}) {
+    return TextFormField(
+      controller: controller,
+      obscureText: obscure,
+      textAlign: TextAlign.center,
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: const TextStyle(color: Colors.white70),
+        filled: true,
+        fillColor: Colors.white.withOpacity(0.2),
+        border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide.none),
+        focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Colors.white, width: 2)),
+        errorText: errorText,
+        errorStyle: const TextStyle(color: Colors.yellowAccent),
+      ),
+      validator: (value) {
+        if (value == null || value.isEmpty) return 'الرجاء إدخال $hint';
+        if (hint.contains('كلمة المرور') && value.length < 4)
+          return 'كلمة المرور قصيرة جداً';
+        if (hint.contains('تأكيد') && value != _newPasswordController.text)
+          return 'كلمتا المرور غير متطابقتين';
+        return null;
+      },
+      onFieldSubmitted: (_) =>
+          _showSetupScreen ? _savePasswordAndSeller() : _login(),
     );
   }
 }

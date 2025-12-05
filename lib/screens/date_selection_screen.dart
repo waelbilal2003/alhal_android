@@ -4,7 +4,7 @@ import 'daily_movement_screen.dart';
 class DateSelectionScreen extends StatefulWidget {
   final String storeType;
   final String storeName;
-  final String? sellerName; // استقبال اسم البائع
+  final String? sellerName;
 
   const DateSelectionScreen({
     super.key,
@@ -18,138 +18,220 @@ class DateSelectionScreen extends StatefulWidget {
 }
 
 class _DateSelectionScreenState extends State<DateSelectionScreen> {
-  int _selectedDay = DateTime.now().day;
-  int _selectedMonth = DateTime.now().month;
-  int _selectedYear = DateTime.now().year;
-
-  final ScrollController _dayController = ScrollController();
-  final ScrollController _monthController = ScrollController();
-  final ScrollController _yearController = ScrollController();
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _dayController.jumpTo((_selectedDay - 1) * 50.0);
-      _monthController.jumpTo((_selectedMonth - 1) * 50.0);
-      _yearController.jumpTo((_selectedYear - 2020) * 50.0);
-    });
-  }
-
-  void _proceedToNextScreen() {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (context) => DailyMovementScreen(
-          selectedDate: '$_selectedDay/$_selectedMonth/$_selectedYear',
-          storeType: widget.storeType,
-          sellerName: widget.sellerName, // تمرير اسم البائع
-        ),
-      ),
-    );
-  }
+  DateTime _selectedDate = DateTime.now();
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
       appBar: AppBar(
-        title: Text('اختيار التاريخ - ${widget.storeName}'),
+        title: const Text(
+          'اختيار التاريخ',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         backgroundColor: Colors.teal[600],
         foregroundColor: Colors.white,
-        elevation: 0,
+        centerTitle: true,
       ),
-      body: Directionality(
-        textDirection: TextDirection.rtl,
-        child: Column(
-          children: [
-            Expanded(
-              child: Row(
-                children: [
-                  Expanded(
-                      child: _buildPicker('اليوم', _dayController,
-                          (index) => _selectedDay = index + 1, 31, false)),
-                  Expanded(
-                      child: _buildPicker('الشهر', _monthController,
-                          (index) => _selectedMonth = index + 1, 12, true)),
-                  Expanded(
-                      child: _buildPicker('السنة', _yearController,
-                          (index) => _selectedYear = 2020 + index, 82, false)),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: ElevatedButton(
-                onPressed: _proceedToNextScreen,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.teal[600],
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8)),
+      // تم تغليف المحتوى بـ SingleChildScrollView لمنع تجاوز المساحة
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
+        child: SizedBox(
+          // تحديد ارتفاع الشاشة المتاح للمنع من تجاوز المساحة
+          height: MediaQuery.of(context).size.height -
+              MediaQuery.of(context).padding.top - // ارتفاع شريط الحالة
+              AppBar().preferredSize.height - // ارتفاع الـ AppBar
+              32, // هامش إضافي
+          child: Row(
+            textDirection: TextDirection.rtl,
+            children: [
+              // جزء عرض المعلومات والتاريخ
+              Expanded(
+                flex: 2,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'المتجر: ${widget.storeName}',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        color: Colors.black87,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    if (widget.sellerName != null)
+                      Text(
+                        'البائع: ${widget.sellerName}',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.grey[600],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    const SizedBox(height: 20),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: Colors.teal[50],
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.teal[300]!),
+                      ),
+                      child: Text(
+                        '${_selectedDate.day} / ${_selectedDate.month} / ${_selectedDate.year}',
+                        style: const TextStyle(
+                          fontSize: 26,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.teal,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ],
                 ),
-                child: const Text('دخول',
-                    style:
-                        TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               ),
-            ),
-          ],
+              const SizedBox(width: 30),
+              // جزء التحكم بالتاريخ
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _buildCompactPicker('اليوم', _selectedDate.day, 31,
+                        (newDay) {
+                      setState(() {
+                        _selectedDate = DateTime(
+                            _selectedDate.year, _selectedDate.month, newDay);
+                      });
+                    }),
+                    const SizedBox(height: 25),
+                    _buildCompactPicker('الشهر', _selectedDate.month, 12,
+                        (newMonth) {
+                      setState(() {
+                        _selectedDate = DateTime(
+                            _selectedDate.year, newMonth, _selectedDate.day);
+                      });
+                    }),
+                    const SizedBox(height: 25),
+                    _buildCompactPicker('السنة', _selectedDate.year - 2020, 50,
+                        (newYearIndex) {
+                      setState(() {
+                        _selectedDate = DateTime(2020 + newYearIndex,
+                            _selectedDate.month, _selectedDate.day);
+                      });
+                    }),
+                    const SizedBox(height: 30),
+                    // إعادة زر الدخول بحجمه الأكبر
+                    ElevatedButton(
+                      onPressed: () {
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => DailyMovementScreen(
+                              selectedDate:
+                                  '${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}',
+                              storeType: widget.storeType,
+                              sellerName: widget.sellerName,
+                            ),
+                          ),
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green[600],
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 50, vertical: 15),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: const Text(
+                        'دخول',
+                        style: TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                    )
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildPicker(String title, ScrollController controller,
-      Function(int) onChanged, int itemCount, bool isMonth) {
+  // دالة بناء منتقي التاريخ المدمج
+  Widget _buildCompactPicker(
+      String label, int currentValue, int maxValue, Function(int) onChanged) {
+    final months = [
+      'يناير',
+      'فبراير',
+      'مارس',
+      'أبريل',
+      'مايو',
+      'يونيو',
+      'يوليو',
+      'أغسطس',
+      'سبتمبر',
+      'أكتوبر',
+      'نوفمبر',
+      'ديسمبر'
+    ];
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Text(title,
-              style:
-                  const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        Text(
+          label,
+          style: const TextStyle(
+              fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87),
         ),
-        Expanded(
-          child: ListWheelScrollView.useDelegate(
-            controller: controller,
-            itemExtent: 50,
-            physics: const FixedExtentScrollPhysics(),
-            onSelectedItemChanged: (index) {
-              setState(() {
-                onChanged(index);
-              });
-            },
-            childDelegate: ListWheelChildBuilderDelegate(
-              builder: (context, index) {
-                String text;
-                if (isMonth) {
-                  final months = [
-                    'يناير',
-                    'فبراير',
-                    'مارس',
-                    'أبريل',
-                    'مايو',
-                    'يونيو',
-                    'يوليو',
-                    'أغسطس',
-                    'سبتمبر',
-                    'أكتوبر',
-                    'نوفمبر',
-                    'ديسمبر'
-                  ];
-                  text = months[index];
-                } else {
-                  text = '${(title == 'السنة' ? 2020 + index : index + 1)}';
-                }
-                return Center(
-                    child: Text(text,
-                        style:
-                            TextStyle(fontSize: 20, color: Colors.teal[700])));
-              },
-              childCount: itemCount,
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            SizedBox(
+              width: 70,
+              child: Text(
+                label == 'الشهر'
+                    ? months[currentValue - 1]
+                    : (label == 'السنة'
+                        ? (2020 + currentValue).toString()
+                        : currentValue.toString()),
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87),
+              ),
             ),
-          ),
+            const SizedBox(width: 10),
+            Column(
+              children: [
+                SizedBox(
+                  width: 30,
+                  height: 30,
+                  child: IconButton(
+                    padding: EdgeInsets.zero,
+                    icon: const Icon(Icons.keyboard_arrow_up, size: 24),
+                    onPressed: currentValue > (label == 'السنة' ? 0 : 1)
+                        ? () => onChanged(currentValue - 1)
+                        : null,
+                  ),
+                ),
+                SizedBox(
+                  width: 30,
+                  height: 30,
+                  child: IconButton(
+                    padding: EdgeInsets.zero,
+                    icon: const Icon(Icons.keyboard_arrow_down, size: 24),
+                    onPressed: currentValue <
+                            (label == 'السنة' ? maxValue - 1 : maxValue)
+                        ? () => onChanged(currentValue + 1)
+                        : null,
+                  ),
+                ),
+              ],
+            )
+          ],
         ),
       ],
     );

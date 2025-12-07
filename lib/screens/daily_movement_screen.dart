@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'change_password_screen.dart'; // إضافة هذا الاستيراد
 
 class DailyMovementScreen extends StatelessWidget {
   final String selectedDate;
@@ -16,7 +17,7 @@ class DailyMovementScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('حركة اليومية - $selectedDate',
+        title: Text('الحركة اليومية - $selectedDate',
             style: const TextStyle(fontWeight: FontWeight.bold)),
         centerTitle: true,
         backgroundColor: Colors.green[600],
@@ -29,39 +30,42 @@ class DailyMovementScreen extends StatelessWidget {
             // شريط المعلومات العلوي المدمج
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
               decoration: BoxDecoration(
                 color: Colors.green[50],
                 boxShadow: [
-                  BoxShadow(color: Colors.grey.withOpacity(0.2), blurRadius: 2)
+                  BoxShadow(
+                      color: Colors.grey.withOpacity(0.2),
+                      spreadRadius: 1,
+                      blurRadius: 3)
                 ],
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                textDirection: TextDirection.rtl,
                 children: [
                   Text('المتجر: $storeType',
                       style: const TextStyle(
-                          fontSize: 14, fontWeight: FontWeight.bold)),
+                          fontSize: 15, fontWeight: FontWeight.bold)),
                   Text('التاريخ: $selectedDate',
                       style: const TextStyle(
-                          fontSize: 14, fontWeight: FontWeight.bold)),
+                          fontSize: 15, fontWeight: FontWeight.bold)),
                   if (sellerName != null)
                     Text('البائع: $sellerName',
                         style: const TextStyle(
-                            fontSize: 14, fontWeight: FontWeight.bold)),
+                            fontSize: 15, fontWeight: FontWeight.bold)),
                 ],
               ),
             ),
             // شبكة الأزرار
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.all(12.0),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 16.0, vertical: 20.0),
                 child: GridView.count(
-                  crossAxisCount: 4, // 4 أعمدة لاستغلال العرض
-                  crossAxisSpacing: 10.0,
-                  mainAxisSpacing: 10.0,
-                  childAspectRatio: 1.0, // مربع تقريباً
+                  crossAxisCount: 3,
+                  crossAxisSpacing: 12.0,
+                  mainAxisSpacing: 12.0,
+                  childAspectRatio: 2.25,
                   children: [
                     _buildMenuButton(context,
                         icon: Icons.inventory,
@@ -86,7 +90,15 @@ class DailyMovementScreen extends StatelessWidget {
                     _buildMenuButton(context,
                         icon: Icons.settings,
                         label: 'الإعدادات',
-                        color: Colors.grey[600]!),
+                        color: Colors.grey[600]!, onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => ChangePasswordScreen(
+                            sellerName: sellerName,
+                          ),
+                        ),
+                      );
+                    }),
                   ],
                 ),
               ),
@@ -97,19 +109,23 @@ class DailyMovementScreen extends StatelessWidget {
     );
   }
 
-  // دالة بناء الزر المدمج
+  // تعديل دالة بناء الزر لإضافة معامل onTap اختياري
   Widget _buildMenuButton(BuildContext context,
-      {required IconData icon, required String label, required Color color}) {
+      {required IconData icon,
+      required String label,
+      required Color color,
+      VoidCallback? onTap}) {
     return InkWell(
-      onTap: () {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('تم الضغط على $label'),
-            backgroundColor: color,
-            duration: const Duration(seconds: 1),
-          ),
-        );
-      },
+      onTap: onTap ??
+          () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('تم الضغط على $label'),
+                backgroundColor: color,
+                duration: const Duration(seconds: 1),
+              ),
+            );
+          },
       borderRadius: BorderRadius.circular(12),
       child: Container(
         decoration: BoxDecoration(
@@ -123,14 +139,14 @@ class DailyMovementScreen extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 30, color: Colors.white),
-            const SizedBox(height: 4),
+            Icon(icon, size: 32, color: Colors.white),
+            const SizedBox(height: 5),
             Text(
               label,
               textAlign: TextAlign.center,
               style: const TextStyle(
                   color: Colors.white,
-                  fontSize: 12,
+                  fontSize: 13,
                   fontWeight: FontWeight.bold),
             ),
           ],

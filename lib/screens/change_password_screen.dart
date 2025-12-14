@@ -374,15 +374,6 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
           children: [
             const Icon(Icons.person, size: 50, color: Colors.white),
             const SizedBox(height: 15),
-            const Text(
-              'تغيير اسم البائع',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-            const SizedBox(height: 25),
             _buildInputField(
               _sellerNameController,
               'اسم البائع الجديد',

@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
-import 'change_password_screen.dart'; // إضافة هذا الاستيراد
+import 'daily_movement/services_screen.dart';
+import 'daily_movement/yield_screen.dart';
+import 'daily_movement/purchases_screen.dart';
 
 class DailyMovementScreen extends StatelessWidget {
   final String selectedDate;
   final String storeType;
-  final String? sellerName;
+  final String sellerName;
 
   const DailyMovementScreen({
     super.key,
     required this.selectedDate,
     required this.storeType,
-    this.sellerName,
+    required this.sellerName,
   });
 
   @override
@@ -30,7 +32,7 @@ class DailyMovementScreen extends StatelessWidget {
             // شريط المعلومات العلوي المدمج
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+              padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 24),
               decoration: BoxDecoration(
                 color: Colors.green[50],
                 boxShadow: [
@@ -40,27 +42,20 @@ class DailyMovementScreen extends StatelessWidget {
                       blurRadius: 3)
                 ],
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('المتجر: $storeType',
-                      style: const TextStyle(
-                          fontSize: 15, fontWeight: FontWeight.bold)),
-                  Text('التاريخ: $selectedDate',
-                      style: const TextStyle(
-                          fontSize: 15, fontWeight: FontWeight.bold)),
-                  if (sellerName != null)
-                    Text('البائع: $sellerName',
-                        style: const TextStyle(
-                            fontSize: 15, fontWeight: FontWeight.bold)),
-                ],
+              child: Text(
+                'البائع: $sellerName',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
               ),
             ),
             // شبكة الأزرار
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 16.0, vertical: 20.0),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20.0, vertical: 5.0),
                 child: GridView.count(
                   crossAxisCount: 3,
                   crossAxisSpacing: 12.0,
@@ -78,7 +73,16 @@ class DailyMovementScreen extends StatelessWidget {
                     _buildMenuButton(context,
                         icon: Icons.shopping_cart,
                         label: 'المشتريات',
-                        color: Colors.red[700]!),
+                        color: Colors.red[700]!, onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => PurchasesScreen(
+                            sellerName: sellerName,
+                            selectedDate: selectedDate,
+                          ),
+                        ),
+                      );
+                    }),
                     _buildMenuButton(context,
                         icon: Icons.account_balance,
                         label: 'الصندوق',
@@ -86,14 +90,23 @@ class DailyMovementScreen extends StatelessWidget {
                     _buildMenuButton(context,
                         icon: Icons.grain,
                         label: 'الغلة',
-                        color: Colors.purple[700]!),
+                        color: Colors.purple[700]!, onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => YieldScreen(
+                            sellerName: sellerName,
+                            password: '******',
+                          ),
+                        ),
+                      );
+                    }),
                     _buildMenuButton(context,
                         icon: Icons.settings,
-                        label: 'الإعدادات',
+                        label: 'الخدمات',
                         color: Colors.grey[600]!, onTap: () {
                       Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (context) => ChangePasswordScreen(
+                          builder: (context) => ServicesScreen(
                             sellerName: sellerName,
                           ),
                         ),

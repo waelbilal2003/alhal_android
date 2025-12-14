@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'date_selection_screen.dart';
@@ -21,8 +22,6 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
   String? _errorMessage;
 
   bool _showSetupScreen = true;
-  String? _savedPassword;
-  String? _savedSellerName;
 
   @override
   void initState() {
@@ -57,13 +56,65 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
   Future<void> _checkAppStatus() async {
     final prefs = await SharedPreferences.getInstance();
     final savedPassword = prefs.getString('app_password');
-    final savedSellerName = prefs.getString('seller_name');
 
     if (savedPassword != null) {
       setState(() {
         _showSetupScreen = false;
-        _savedPassword = savedPassword;
-        _savedSellerName = savedSellerName;
+      });
+    }
+  }
+
+  Future<void> _saveAccount(String sellerName, String password) async {
+    final prefs = await SharedPreferences.getInstance();
+    final accounts = prefs.getString('accounts');
+    final Map<String, String> accountsMap =
+        accounts != null ? Map<String, String>.from(json.decode(accounts)) : {};
+
+    accountsMap[sellerName] = password;
+    await prefs.setString('accounts', json.encode(accountsMap));
+  }
+
+  Future<Map<String, String>> _getAccounts() async {
+    final prefs = await SharedPreferences.getInstance();
+    final accounts = prefs.getString('accounts');
+    return accounts != null
+        ? Map<String, String>.from(json.decode(accounts))
+        : {};
+  }
+
+  Future<void> _login() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    final enteredSellerName = _sellerNameController.text;
+    final enteredPassword = _passwordController.text;
+
+    final accounts = await _getAccounts();
+
+    if (accounts.containsKey(enteredSellerName) &&
+        accounts[enteredSellerName] == enteredPassword) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('is_logged_in', true);
+      await prefs.setString('current_seller', enteredSellerName);
+
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (context) => DateSelectionScreen(
+              storeType: 'متجر رئيسي',
+              storeName: 'سوق الهال',
+              sellerName: enteredSellerName,
+            ),
+          ),
+        );
+      }
+    } else {
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'اسم البائع أو كلمة المرور غير صحيحة.';
       });
     }
   }
@@ -75,49 +126,16 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     final newPassword = _newPasswordController.text;
     final sellerName = _sellerNameController.text;
 
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('app_password', newPassword);
-    await prefs.setString('seller_name', sellerName);
+    await _saveAccount(sellerName, newPassword);
 
     setState(() {
       _isLoading = false;
       _showSetupScreen = false;
-      _savedPassword = newPassword;
-      _savedSellerName = sellerName;
     });
 
     _newPasswordController.clear();
     _confirmPasswordController.clear();
     _sellerNameController.clear();
-  }
-
-  Future<void> _login() async {
-    if (!_formKey.currentState!.validate()) return;
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-    final enteredPassword = _passwordController.text;
-    if (enteredPassword == _savedPassword) {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('is_logged_in', true);
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (context) => DateSelectionScreen(
-              storeType: 'متجر رئيسي',
-              storeName: 'سوق الهال',
-              sellerName: _savedSellerName,
-            ),
-          ),
-        );
-      }
-    } else {
-      setState(() {
-        _isLoading = false;
-        _errorMessage = 'كلمة المرور غير صحيحة.';
-      });
-    }
   }
 
   @override
@@ -195,7 +213,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     );
   }
 
-  // --- واجهة تسجيل الدخول ---
+  // --- تعديل واجهة تسجيل الدخول ---
   Widget _buildLoginScreen() {
     return Form(
       key: _formKey,
@@ -210,11 +228,25 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                   fontWeight: FontWeight.bold,
                   color: Colors.white)),
           const SizedBox(height: 40),
-          SizedBox(
-            width: 300,
-            child: _buildInputField(
-                _passwordController, 'أدخل كلمة المرور', true,
-                errorText: _errorMessage),
+          Row(
+            textDirection: TextDirection.rtl,
+            children: [
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                  child: _buildInputField(
+                      _sellerNameController, 'أدخل اسم البائع', false),
+                ),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                  child: _buildInputField(
+                      _passwordController, 'أدخل كلمة المرور', true,
+                      errorText: _errorMessage),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 30),
           _isLoading

@@ -1,11 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'login_screen.dart';
+import '../services/store_db_service.dart'; // استيراد خدمة قاعدة البيانات
 
 class ChangePasswordScreen extends StatefulWidget {
   final String? sellerName;
+  final String currentStoreName;
+  final Function(String) onStoreNameChanged;
 
-  const ChangePasswordScreen({super.key, this.sellerName});
+  const ChangePasswordScreen({
+    super.key,
+    this.sellerName,
+    required this.currentStoreName,
+    required this.onStoreNameChanged,
+  });
 
   @override
   State<ChangePasswordScreen> createState() => _ChangePasswordScreenState();
@@ -14,7 +22,7 @@ class ChangePasswordScreen extends StatefulWidget {
 class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   // متغيرات التحكم في الواجهة المعروضة
   int _currentScreen =
-      0; // 0: الاختيار، 1: تغيير كلمة المرور، 2: تغيير اسم البائع
+      0; // 0: الاختيار، 1: تغيير كلمة المرور، 2: تغيير اسم البائع، 3: تغيير اسم المحل
 
   // متغيرات تغيير كلمة المرور
   final _oldPasswordController = TextEditingController();
@@ -25,6 +33,10 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   // متغيرات تغيير اسم البائع
   final _sellerNameController = TextEditingController();
   final _sellerFormKey = GlobalKey<FormState>();
+
+  // متغيرات تغيير اسم المحل
+  final _storeNameController = TextEditingController();
+  final _storeNameFormKey = GlobalKey<FormState>();
 
   // متغيرات مشتركة
   bool _isLoading = false;
@@ -41,6 +53,10 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     if (widget.sellerName != null) {
       _sellerNameController.text = widget.sellerName!;
     }
+    // تهيئة اسم المحل الحالي
+    _storeNameController.text = widget.currentStoreName;
+    // التأكد من أن اسم المحل يتم تحميله من SQLite عند الدخول
+    _loadStoreName();
   }
 
   @override
@@ -49,6 +65,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     _newPasswordController.dispose();
     _confirmPasswordController.dispose();
     _sellerNameController.dispose();
+    _storeNameController.dispose();
     super.dispose();
   }
 
@@ -92,7 +109,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
 
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
-        builder: (context) => LoginScreen(),
+        builder: (context) => const LoginScreen(),
       ),
     );
   }
@@ -119,9 +136,48 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
 
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
-        builder: (context) => LoginScreen(),
+        builder: (context) => const LoginScreen(),
       ),
     );
+  }
+
+  Future<void> _loadStoreName() async {
+    final storeDbService = StoreDbService();
+    final savedStoreName = await storeDbService.getStoreName();
+    if (savedStoreName != null) {
+      setState(() {
+        _storeNameController.text = savedStoreName;
+      });
+    }
+  }
+
+  Future<void> _changeStoreName() async {
+    if (!_storeNameFormKey.currentState!.validate()) return;
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    final newStoreName = _storeNameController.text;
+    final storeDbService = StoreDbService();
+
+    await storeDbService.saveStoreName(newStoreName);
+
+    // تحديث اسم المحل في الشاشة السابقة
+    widget.onStoreNameChanged(newStoreName);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('تم تغيير اسم المحل بنجاح'),
+        backgroundColor: Colors.green,
+      ),
+    );
+
+    setState(() {
+      _isLoading = false;
+      _currentScreen = 0; // العودة إلى شاشة الاختيار
+    });
   }
 
   @override
@@ -156,6 +212,8 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
         return 'تغيير كلمة المرور';
       case 2:
         return 'تغيير اسم البائع';
+      case 3:
+        return 'تغيير اسم المحل';
       default:
         return 'الإعدادات';
     }
@@ -169,6 +227,8 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
         return _buildPasswordChangeScreen();
       case 2:
         return _buildSellerNameChangeScreen();
+      case 3:
+        return _buildStoreNameChangeScreen();
       default:
         return _buildSelectionScreen();
     }
@@ -205,6 +265,11 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                 icon: Icons.person,
                 label: 'تغيير اسم البائع',
                 onTap: () => setState(() => _currentScreen = 2),
+              ),
+              _buildSelectionOption(
+                icon: Icons.store,
+                label: 'تغيير اسم المحل',
+                onTap: () => setState(() => _currentScreen = 3),
               ),
             ],
           ),
@@ -281,6 +346,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
               _oldPasswordController,
               'كلمة المرور القديمة',
               true,
+              onSubmitted: () => FocusScope.of(context).nextFocus(),
             ),
             const SizedBox(height: 15),
             Row(
@@ -291,6 +357,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                     _newPasswordController,
                     'كلمة المرور الجديدة',
                     true,
+                    onSubmitted: () => FocusScope.of(context).nextFocus(),
                   ),
                 ),
                 const SizedBox(width: 15),
@@ -299,6 +366,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                     _confirmPasswordController,
                     'تأكيد كلمة المرور',
                     true,
+                    onSubmitted: _changePassword,
                   ),
                 ),
               ],
@@ -378,6 +446,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
               _sellerNameController,
               'اسم البائع الجديد',
               false,
+              onSubmitted: _changeSellerName,
             ),
             if (_errorMessage != null)
               Padding(
@@ -439,12 +508,23 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     );
   }
 
+  // دالة بناء حقل الإدخال لإعادة الاستخدام مع دعم زر ENTER
   Widget _buildInputField(
-      TextEditingController controller, String hint, bool obscure) {
+      TextEditingController controller, String hint, bool obscure,
+      {String? errorText, Function()? onSubmitted}) {
     return TextFormField(
       controller: controller,
       obscureText: obscure,
       textAlign: TextAlign.center,
+      textInputAction:
+          onSubmitted != null ? TextInputAction.done : TextInputAction.next,
+      onFieldSubmitted: (_) {
+        if (onSubmitted != null) {
+          onSubmitted();
+        } else {
+          FocusScope.of(context).nextFocus();
+        }
+      },
       decoration: InputDecoration(
         hintText: hint,
         hintStyle: const TextStyle(color: Colors.white70),
@@ -460,6 +540,8 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
         ),
         contentPadding:
             const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+        errorText: errorText,
+        errorStyle: const TextStyle(color: Colors.yellowAccent),
       ),
       validator: (value) {
         if (value == null || value.isEmpty) {
@@ -473,6 +555,83 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
         }
         return null;
       },
+    );
+  }
+
+  // واجهة تغيير اسم المحل الجديدة
+  Widget _buildStoreNameChangeScreen() {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Form(
+        key: _storeNameFormKey,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.store, size: 50, color: Colors.white),
+            const SizedBox(height: 15),
+            _buildInputField(
+              _storeNameController,
+              'اسم المحل الجديد',
+              false,
+              onSubmitted: _changeStoreName,
+            ),
+            if (_errorMessage != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 10.0),
+                child: Text(
+                  _errorMessage!,
+                  style: const TextStyle(
+                    color: Colors.yellowAccent,
+                    fontSize: 14,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            const SizedBox(height: 30),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                ElevatedButton(
+                  onPressed: () => setState(() => _currentScreen = 0),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white.withOpacity(0.2),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 30, vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: const BorderSide(color: Colors.white, width: 1),
+                    ),
+                  ),
+                  child: const Text(
+                    'رجوع',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                _isLoading
+                    ? const CircularProgressIndicator(color: Colors.white)
+                    : ElevatedButton(
+                        onPressed: _changeStoreName,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: Colors.teal[700],
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 30, vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text(
+                          'حفظ',
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

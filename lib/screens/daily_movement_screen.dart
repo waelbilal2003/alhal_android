@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import 'daily_movement/services_screen.dart';
+import '../services/store_db_service.dart'; // استيراد خدمة قاعدة البيانات
+import 'seller_management_screen.dart'; // استيراد الشاشة الجديدة
 import 'daily_movement/yield_screen.dart';
 import 'daily_movement/purchases_screen.dart';
 
-class DailyMovementScreen extends StatelessWidget {
+class DailyMovementScreen extends StatefulWidget {
   final String selectedDate;
   final String storeType;
   final String sellerName;
@@ -16,10 +17,31 @@ class DailyMovementScreen extends StatelessWidget {
   });
 
   @override
+  State<DailyMovementScreen> createState() => _DailyMovementScreenState();
+}
+
+class _DailyMovementScreenState extends State<DailyMovementScreen> {
+  String _storeName = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStoreName();
+  }
+
+  Future<void> _loadStoreName() async {
+    final storeDbService = StoreDbService();
+    final savedStoreName = await storeDbService.getStoreName();
+    setState(() {
+      _storeName = savedStoreName ?? widget.storeType;
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('الحركة اليومية - $selectedDate',
+        title: Text('الحركة اليومية - ${widget.selectedDate}',
             style: const TextStyle(fontWeight: FontWeight.bold)),
         centerTitle: true,
         backgroundColor: Colors.green[600],
@@ -43,7 +65,7 @@ class DailyMovementScreen extends StatelessWidget {
                 ],
               ),
               child: Text(
-                'البائع: $sellerName',
+                'البائع: ${widget.sellerName}',
                 style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
@@ -77,8 +99,10 @@ class DailyMovementScreen extends StatelessWidget {
                       Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (context) => PurchasesScreen(
-                            sellerName: sellerName,
-                            selectedDate: selectedDate,
+                            sellerName: widget
+                                .sellerName, // تغيير sellerName إلى widget.sellerName
+                            selectedDate: widget
+                                .selectedDate, // تغيير selectedDate إلى widget.selectedDate
                           ),
                         ),
                       );
@@ -94,7 +118,8 @@ class DailyMovementScreen extends StatelessWidget {
                       Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (context) => YieldScreen(
-                            sellerName: sellerName,
+                            sellerName: widget
+                                .sellerName, // تغيير sellerName إلى widget.sellerName
                             password: '******',
                           ),
                         ),
@@ -106,8 +131,14 @@ class DailyMovementScreen extends StatelessWidget {
                         color: Colors.grey[600]!, onTap: () {
                       Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (context) => ServicesScreen(
-                            sellerName: sellerName,
+                          builder: (context) => SellerManagementScreen(
+                            currentStoreName:
+                                _storeName, // استخدام اسم المحل الموحد
+                            onLogout: () {
+                              // دالة لتسجيل الخروج والعودة إلى شاشة تسجيل الدخول
+                              Navigator.of(context)
+                                  .popUntil((route) => route.isFirst);
+                            },
                           ),
                         ),
                       );

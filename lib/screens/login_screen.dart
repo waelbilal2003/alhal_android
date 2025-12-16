@@ -2,32 +2,44 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'date_selection_screen.dart';
+import '../services/store_db_service.dart'; // استيراد خدمة قاعدة البيانات
+
+enum LoginFlowState { setup, storeName, login }
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  final LoginFlowState initialState;
+
+  const LoginScreen({super.key, this.initialState = LoginFlowState.login});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
 class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
+  final _storeNameController = TextEditingController();
   final _passwordController = TextEditingController();
   final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   final _sellerNameController = TextEditingController();
+  String _storeName = 'سوق الهال'; // القيمة الافتراضية
 
   final _formKey = GlobalKey<FormState>();
   final _setupFormKey = GlobalKey<FormState>();
+  final _storeNameFormKey = GlobalKey<FormState>();
   bool _isLoading = false;
   String? _errorMessage;
 
-  bool _showSetupScreen = true;
+  LoginFlowState _currentFlowState = LoginFlowState.setup;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _checkAppStatus();
+    if (widget.initialState == LoginFlowState.setup) {
+      _currentFlowState = LoginFlowState.setup;
+    } else {
+      _checkAppStatus();
+    }
   }
 
   @override
@@ -37,6 +49,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     _newPasswordController.dispose();
     _confirmPasswordController.dispose();
     _sellerNameController.dispose();
+    _storeNameController.dispose();
     super.dispose();
   }
 
@@ -55,11 +68,24 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
 
   Future<void> _checkAppStatus() async {
     final prefs = await SharedPreferences.getInstance();
-    final savedPassword = prefs.getString('app_password');
+    final accountsJson = prefs.getString('accounts');
+    final storeDbService = StoreDbService();
+    final savedStoreName = await storeDbService.getStoreName();
 
-    if (savedPassword != null) {
+    if (accountsJson != null) {
+      if (savedStoreName != null) {
+        setState(() {
+          _currentFlowState = LoginFlowState.login;
+          _storeName = savedStoreName;
+        });
+      } else {
+        setState(() {
+          _currentFlowState = LoginFlowState.storeName;
+        });
+      }
+    } else {
       setState(() {
-        _showSetupScreen = false;
+        _currentFlowState = LoginFlowState.setup;
       });
     }
   }
@@ -105,7 +131,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
           MaterialPageRoute(
             builder: (context) => DateSelectionScreen(
               storeType: 'متجر رئيسي',
-              storeName: 'سوق الهال',
+              storeName: _storeName, // استخدام اسم المحل المحفوظ
               sellerName: enteredSellerName,
             ),
           ),
@@ -130,7 +156,8 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
 
     setState(() {
       _isLoading = false;
-      _showSetupScreen = false;
+      _currentFlowState =
+          LoginFlowState.storeName; // الانتقال إلى شاشة اسم المحل
     });
 
     _newPasswordController.clear();
@@ -140,6 +167,19 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    Widget currentScreen;
+    switch (_currentFlowState) {
+      case LoginFlowState.setup:
+        currentScreen = _buildSetupScreen();
+        break;
+      case LoginFlowState.storeName:
+        currentScreen = _buildStoreNameScreen();
+        break;
+      case LoginFlowState.login:
+        currentScreen = _buildLoginScreen();
+        break;
+    }
+
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
@@ -152,7 +192,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
         child: Center(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(24.0),
-            child: _showSetupScreen ? _buildSetupScreen() : _buildLoginScreen(),
+            child: currentScreen,
           ),
         ),
       ),
@@ -300,8 +340,75 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
           return 'كلمتا المرور غير متطابقتين';
         return null;
       },
-      onFieldSubmitted: (_) =>
-          _showSetupScreen ? _savePasswordAndSeller() : _login(),
+      onFieldSubmitted: (_) {
+        if (_currentFlowState == LoginFlowState.setup) {
+          _savePasswordAndSeller();
+        } else if (_currentFlowState == LoginFlowState.login) {
+          _login();
+        } else if (_currentFlowState == LoginFlowState.storeName) {
+          _saveStoreName();
+        }
+      },
     );
+  }
+
+  // --- واجهة اسم المحل الجديدة ---
+  Widget _buildStoreNameScreen() {
+    return Form(
+      key: _storeNameFormKey,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.store, size: 60, color: Colors.white),
+          const SizedBox(height: 20),
+          const Text('تحديد اسم المحل',
+              style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white)),
+          const SizedBox(height: 30),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 50.0),
+            child:
+                _buildInputField(_storeNameController, 'أدخل اسم المحل', false),
+          ),
+          const SizedBox(height: 30),
+          _isLoading
+              ? const CircularProgressIndicator(color: Colors.white)
+              : ElevatedButton(
+                  onPressed: _saveStoreName,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: Colors.teal[700],
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 60, vertical: 15),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('حفظ ومتابعة',
+                      style:
+                          TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _saveStoreName() async {
+    if (!_storeNameFormKey.currentState!.validate()) return;
+    setState(() => _isLoading = true);
+
+    final newStoreName = _storeNameController.text;
+    final storeDbService = StoreDbService();
+
+    await storeDbService.saveStoreName(newStoreName);
+
+    setState(() {
+      _isLoading = false;
+      _storeName = newStoreName;
+      _currentFlowState = LoginFlowState.login;
+    });
+
+    _storeNameController.clear();
   }
 }

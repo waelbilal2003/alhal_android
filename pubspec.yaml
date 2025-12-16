@@ -50,6 +50,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/logo.png
+    - assets/db/alhal_store.db
 
 # 👇 قسم أيقونة التطبيق
 flutter_launcher_icons:

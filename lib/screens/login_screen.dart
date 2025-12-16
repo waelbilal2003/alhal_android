@@ -38,7 +38,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     if (widget.initialState == LoginFlowState.setup) {
       _currentFlowState = LoginFlowState.setup;
     } else {
-      _checkAppStatus();
+      _initializeAndCheckAppStatus(); // دالة جديدة لضمان التهيئة أولاً
     }
   }
 
@@ -66,10 +66,13 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     await prefs.setBool('is_logged_in', false);
   }
 
-  Future<void> _checkAppStatus() async {
+  Future<void> _initializeAndCheckAppStatus() async {
+    final storeDbService = StoreDbService();
+    await storeDbService
+        .initializeDatabase(); // ضمان تهيئة قاعدة البيانات أولاً
+
     final prefs = await SharedPreferences.getInstance();
     final accountsJson = prefs.getString('accounts');
-    final storeDbService = StoreDbService();
     final savedStoreName = await storeDbService.getStoreName();
 
     if (accountsJson != null) {

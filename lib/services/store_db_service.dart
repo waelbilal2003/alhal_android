@@ -9,11 +9,18 @@ class StoreDbService {
   StoreDbService._internal();
 
   static Database? _database;
+  static bool _isInitialized = false; // مؤشر للتحقق من التهيئة
 
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDB();
+    await initializeDatabase(); // ضمان التهيئة
     return _database!;
+  }
+
+  Future<void> initializeDatabase() async {
+    if (_isInitialized) return;
+    _database = await _initDB();
+    _isInitialized = true;
   }
 
   Future<Database> _initDB() async {

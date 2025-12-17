@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
-import '../../widgets/daily_movement_widget.dart';
 
 class YieldScreen extends StatefulWidget {
   final String sellerName;
@@ -42,8 +41,8 @@ class _YieldScreenState extends State<YieldScreen> {
     } else {
       final difference = (_yield - collected).abs().toStringAsFixed(2);
       _status = collected > _yield
-          ? 'زيادة  الغلة  $difference'
-          : 'نقص  الغلة  $difference';
+          ? 'زيادة الغلة $difference'
+          : 'نقص الغلة $difference';
     }
   }
 
@@ -72,44 +71,97 @@ class _YieldScreenState extends State<YieldScreen> {
             TextEditingController();
         final TextEditingController passwordController =
             TextEditingController();
+        final FocusNode sellerNameFocus = FocusNode();
+        final FocusNode passwordFocus = FocusNode();
 
-        return Directionality(
-          textDirection: TextDirection.rtl,
-          child: AlertDialog(
-            title: const Text('تسجيل الدخول'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: sellerNameController,
-                    decoration: const InputDecoration(labelText: 'اسم البائع'),
-                    textInputAction: TextInputAction.next,
-                  ),
-                  TextField(
-                    controller: passwordController,
-                    decoration: const InputDecoration(labelText: 'كلمة السر'),
-                    obscureText: true,
-                    textInputAction: TextInputAction.done,
-                    onSubmitted: (_) => _validateLogin(
-                        sellerNameController.text,
-                        passwordController.text,
-                        accountsMap),
-                  ),
-                ],
+        return GestureDetector(
+          onTap: () {
+            FocusScope.of(context).unfocus();
+          },
+          child: Directionality(
+            textDirection: TextDirection.rtl,
+            child: AlertDialog(
+              scrollable: true,
+              contentPadding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+              title: const Text(
+                'تسجيل الدخول',
+                style: TextStyle(fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
               ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: sellerNameController,
+                      focusNode: sellerNameFocus,
+                      decoration: const InputDecoration(
+                        labelText: 'اسم البائع',
+                        border: OutlineInputBorder(),
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 16,
+                        ),
+                      ),
+                      textInputAction: TextInputAction.next,
+                      onEditingComplete: () {
+                        sellerNameFocus.unfocus();
+                        FocusScope.of(context).requestFocus(passwordFocus);
+                      },
+                    ),
+                    const SizedBox(height: 4),
+                    TextField(
+                      controller: passwordController,
+                      focusNode: passwordFocus,
+                      decoration: const InputDecoration(
+                        labelText: 'كلمة السر',
+                        border: OutlineInputBorder(),
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 16,
+                        ),
+                      ),
+                      obscureText: true,
+                      textInputAction: TextInputAction.done,
+                      onSubmitted: (_) => _validateLogin(
+                          sellerNameController.text,
+                          passwordController.text,
+                          accountsMap),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => _validateLogin(sellerNameController.text,
+                        passwordController.text, accountsMap),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.teal[600],
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: const Text(
+                      'تسجيل الدخول',
+                      style:
+                          TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+              ],
             ),
-            actions: [
-              TextButton(
-                onPressed: () => _validateLogin(sellerNameController.text,
-                    passwordController.text, accountsMap),
-                child: const Text('تسجيل الدخول'),
-              ),
-            ],
           ),
         );
       },
-    );
+    ).then((_) {
+      // التأكد من إعادة توجيه التركيز بعد إغلاق الديالوج
+      FocusScope.of(context).requestFocus(FocusNode());
+    });
   }
 
   void _validateLogin(
@@ -137,6 +189,12 @@ class _YieldScreenState extends State<YieldScreen> {
   @override
   Widget build(BuildContext context) {
     _calculateYield();
+
+    // جعل الشاشة تعمل فقط في الوضع الأفقي
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // يمكنك إضافة منطق لإجبار الوضع الأفقي هنا إذا لزم الأمر
+    });
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('شاشة الغلة',
@@ -145,82 +203,228 @@ class _YieldScreenState extends State<YieldScreen> {
         backgroundColor: Colors.teal[600],
         foregroundColor: Colors.white,
       ),
-      body: Directionality(
-        textDirection: TextDirection.rtl,
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(32.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'غلة البائع: ${widget.sellerName} ${_yield.toStringAsFixed(2)}',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
+      body: SafeArea(
+        child: Directionality(
+          textDirection: TextDirection.rtl,
+          child: SingleChildScrollView(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.of(context).size.width * 0.9,
+                  minHeight: MediaQuery.of(context).size.height,
                 ),
-                const SizedBox(height: 20),
-                Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Expanded(
-                      child: DailyMovementWidget.buildInputField(
-                          'مبيعات نقدية', _cashSalesController),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: DailyMovementWidget.buildInputField(
-                          'مقبوضات', _receiptsController),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: DailyMovementWidget.buildInputField(
-                          'مشتريات نقدية', _cashPurchasesController),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: DailyMovementWidget.buildInputField(
-                          'مدفوعات', _paymentsController),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: DailyMovementWidget.buildInputField(
-                          'المقبوض منه', _collectedController),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
+                    // عنوان الغلة
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 8,
+                        horizontal: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.teal[50],
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.teal[200]!),
+                      ),
                       child: Text(
-                        _status,
-                        style: TextStyle(
-                          fontSize: 16,
+                        'غلة البائع: ${widget.sellerName}',
+                        style: const TextStyle(
+                          fontSize: 12,
                           fontWeight: FontWeight.bold,
-                          color: _status == 'زيادة غلة'
-                              ? Colors.green
-                              : Colors.red,
+                          color: Colors.teal,
                         ),
-                        textAlign: TextAlign.right,
                       ),
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: DailyMovementWidget.buildResultRow(
-                        'الغلة:',
-                        _yield.toStringAsFixed(2),
+                    const SizedBox(height: 4),
+
+                    // الصف الأول: مبيعات نقدية - مقبوضات
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: _buildInputField(
+                            'مبيعات نقدية',
+                            _cashSalesController,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: _buildInputField(
+                            'مقبوضات',
+                            _receiptsController,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+
+                    // الصف الثاني: مشتريات نقدية - مدفوعات
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: _buildInputField(
+                            'مشتريات نقدية',
+                            _cashPurchasesController,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: _buildInputField(
+                            'مدفوعات',
+                            _paymentsController,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+
+                    // الصف الثالث: الغلة - المقبوض منه
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        // حقل الناتج (الغلة) - تصميم مشابه لحقل الإدخال
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.grey[100],
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.grey[300]!),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'الغلة',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey[700],
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  _yield.toStringAsFixed(2),
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.teal,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: _buildInputField(
+                            'المقبوض منه',
+                            _collectedController,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+
+                    // الصف الرابع: زيادة أو نقص الغلة
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 16,
+                        horizontal: 24,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _status.contains('زيادة')
+                            ? Colors.green[50]
+                            : _status.contains('نقص')
+                                ? Colors.red[50]
+                                : Colors.grey[100],
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: _status.contains('زيادة')
+                              ? Colors.green[200]!
+                              : _status.contains('نقص')
+                                  ? Colors.red[200]!
+                                  : Colors.grey[300]!,
+                        ),
+                      ),
+                      child: Text(
+                        _status.isNotEmpty ? _status : 'لا يوجد فرق',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: _status.contains('زيادة')
+                              ? Colors.green[800]
+                              : _status.contains('نقص')
+                                  ? Colors.red[800]
+                                  : Colors.grey[600],
+                        ),
+                        textAlign: TextAlign.center,
                       ),
                     ),
+
+                    // مسافة إضافية في الأسفل للتأكد من ظهور كل المحتوى
+                    const SizedBox(height: 40),
                   ],
                 ),
-              ],
+              ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInputField(String label, TextEditingController controller) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 1,
+            offset: const Offset(0, 0.54),
+          ),
+        ],
+      ),
+      child: TextField(
+        controller: controller,
+        textAlign: TextAlign.center,
+        keyboardType: TextInputType.number,
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: TextStyle(
+            fontSize: 12,
+            color: Colors.grey[700],
+            fontWeight: FontWeight.bold,
+          ),
+          filled: true,
+          fillColor: Colors.white,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(color: Colors.grey[300]!),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(color: Colors.grey[300]!),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(color: Colors.teal[400]!, width: 2),
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 1,
           ),
         ),
       ),

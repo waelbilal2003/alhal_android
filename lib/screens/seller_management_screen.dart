@@ -124,13 +124,6 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
       ),
       child: Scaffold(
         backgroundColor: Colors.transparent,
-        appBar: AppBar(
-          title: const Text('إدارة البائعين',
-              style: TextStyle(color: Colors.white)),
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          automaticallyImplyLeading: false,
-        ),
         body: Center(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(24.0),

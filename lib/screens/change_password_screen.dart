@@ -20,42 +20,40 @@ class ChangePasswordScreen extends StatefulWidget {
 }
 
 class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
-  // متغيرات التحكم في الواجهة المعروضة
-  int _currentScreen =
-      0; // 0: الاختيار، 1: تغيير كلمة المرور، 2: تغيير اسم البائع، 3: تغيير اسم المحل
+  int _currentScreen = 0;
 
-  // متغيرات تغيير كلمة المرور
+  // متغيرات التحكم
   final _oldPasswordController = TextEditingController();
   final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   final _passwordFormKey = GlobalKey<FormState>();
 
-  // متغيرات تغيير اسم البائع
   final _sellerNameController = TextEditingController();
   final _sellerFormKey = GlobalKey<FormState>();
 
-  // متغيرات تغيير اسم المحل
   final _storeNameController = TextEditingController();
   final _storeNameFormKey = GlobalKey<FormState>();
 
-  // متغيرات مشتركة
   bool _isLoading = false;
   String? _errorMessage;
   String? _savedPassword;
-  // تم حذف _savedSellerName لأنه غير مستخدم
+
+  // إضافة FocusNode لكل حقل
+  final _oldPasswordFocus = FocusNode();
+  final _newPasswordFocus = FocusNode();
+  final _confirmPasswordFocus = FocusNode();
+  final _sellerNameFocus = FocusNode();
+  final _storeNameFocus = FocusNode();
 
   @override
   void initState() {
     super.initState();
     _getSavedData();
 
-    // تهيئة اسم البائع الحالي إذا كان متوفراً
     if (widget.sellerName != null) {
       _sellerNameController.text = widget.sellerName!;
     }
-    // تهيئة اسم المحل الحالي
     _storeNameController.text = widget.currentStoreName;
-    // التأكد من أن اسم المحل يتم تحميله من SQLite عند الدخول
     _loadStoreName();
   }
 
@@ -66,6 +64,13 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     _confirmPasswordController.dispose();
     _sellerNameController.dispose();
     _storeNameController.dispose();
+
+    // التخلص من FocusNodes
+    _oldPasswordFocus.dispose();
+    _newPasswordFocus.dispose();
+    _confirmPasswordFocus.dispose();
+    _sellerNameFocus.dispose();
+    _storeNameFocus.dispose();
     super.dispose();
   }
 
@@ -197,9 +202,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
             end: Alignment.centerRight,
           ),
         ),
-        child: Center(
-          child: _buildCurrentScreen(),
-        ),
+        child: _buildCurrentScreen(),
       ),
     );
   }
@@ -333,304 +336,337 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
 
   // واجهة تغيير كلمة المرور
   Widget _buildPasswordChangeScreen() {
-    return Padding(
-      padding: const EdgeInsets.all(1.0),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20.0),
       child: Form(
         key: _passwordFormKey,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.lock_reset, size: 80, color: Colors.white),
-            const SizedBox(height: 15),
-            _buildInputField(
-              _oldPasswordController,
-              'كلمة المرور القديمة',
-              true,
-              onSubmitted: () => FocusScope.of(context).nextFocus(),
-            ),
-            const SizedBox(height: 15),
-            Row(
-              textDirection: TextDirection.rtl,
-              children: [
-                Expanded(
-                  child: _buildInputField(
-                    _newPasswordController,
-                    'كلمة المرور الجديدة',
-                    true,
-                    onSubmitted: () => FocusScope.of(context).nextFocus(),
-                  ),
-                ),
-                const SizedBox(width: 15),
-                Expanded(
-                  child: _buildInputField(
-                    _confirmPasswordController,
-                    'تأكيد كلمة المرور',
-                    true,
-                    onSubmitted: _changePassword,
-                  ),
-                ),
-              ],
-            ),
-            if (_errorMessage != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 10.0),
-                child: Text(
-                  _errorMessage!,
-                  style: const TextStyle(
-                    color: Colors.yellowAccent,
-                    fontSize: 14,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.lock_reset, size: 80, color: Colors.white),
+              const SizedBox(height: 30),
+              _buildInputField(
+                _oldPasswordController,
+                'كلمة المرور القديمة',
+                true,
+                focusNode: _oldPasswordFocus,
+                onSubmitted: () =>
+                    FocusScope.of(context).requestFocus(_newPasswordFocus),
               ),
-            const SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                ElevatedButton(
-                  onPressed: () => setState(() => _currentScreen = 0),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white.withOpacity(0.2),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 30, vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      side: const BorderSide(color: Colors.white, width: 1),
+              const SizedBox(height: 20),
+              Row(
+                textDirection: TextDirection.rtl,
+                children: [
+                  Expanded(
+                    child: _buildInputField(
+                      _newPasswordController,
+                      'كلمة المرور الجديدة',
+                      true,
+                      focusNode: _newPasswordFocus,
+                      onSubmitted: () => FocusScope.of(context)
+                          .requestFocus(_confirmPasswordFocus),
                     ),
                   ),
-                  child: const Text(
-                    'رجوع',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  const SizedBox(width: 15),
+                  Expanded(
+                    child: _buildInputField(
+                      _confirmPasswordController,
+                      'تأكيد كلمة المرور',
+                      true,
+                      focusNode: _confirmPasswordFocus,
+                      onSubmitted: _changePassword,
+                    ),
+                  ),
+                ],
+              ),
+              if (_errorMessage != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 15.0),
+                  child: Text(
+                    _errorMessage!,
+                    style: const TextStyle(
+                      color: Colors.yellowAccent,
+                      fontSize: 14,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
                 ),
-                _isLoading
-                    ? const CircularProgressIndicator(color: Colors.white)
-                    : ElevatedButton(
-                        onPressed: _changePassword,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: Colors.teal[700],
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 30, vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+              const SizedBox(height: 30),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  ElevatedButton(
+                    onPressed: () => setState(() => _currentScreen = 0),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white.withOpacity(0.2),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 30, vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: const BorderSide(color: Colors.white, width: 1),
+                      ),
+                    ),
+                    child: const Text(
+                      'رجوع',
+                      style:
+                          TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  _isLoading
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : ElevatedButton(
+                          onPressed: _changePassword,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: Colors.teal[700],
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 30, vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: const Text(
+                            'حفظ',
+                            style: TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.bold),
                           ),
                         ),
-                        child: const Text(
-                          'حفظ',
-                          style: TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-              ],
-            ),
-          ],
+                ],
+              ),
+              // مساحة إضافية في الأسفل للكيبورد
+              SizedBox(
+                  height:
+                      MediaQuery.of(context).viewInsets.bottom > 0 ? 300 : 0),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  // واجهة تغيير اسم البائع
   Widget _buildSellerNameChangeScreen() {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20.0),
       child: Form(
         key: _sellerFormKey,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.person, size: 50, color: Colors.white),
-            const SizedBox(height: 15),
-            _buildInputField(
-              _sellerNameController,
-              'اسم البائع الجديد',
-              false,
-              onSubmitted: _changeSellerName,
-            ),
-            if (_errorMessage != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 10.0),
-                child: Text(
-                  _errorMessage!,
-                  style: const TextStyle(
-                    color: Colors.yellowAccent,
-                    fontSize: 14,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.person, size: 80, color: Colors.white),
+              const SizedBox(height: 30),
+              _buildInputField(
+                _sellerNameController,
+                'اسم البائع الجديد',
+                false,
+                focusNode: _sellerNameFocus,
+                onSubmitted: _changeSellerName,
               ),
-            const SizedBox(height: 30),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                ElevatedButton(
-                  onPressed: () => setState(() => _currentScreen = 0),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white.withOpacity(0.2),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 30, vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      side: const BorderSide(color: Colors.white, width: 1),
+              if (_errorMessage != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 15.0),
+                  child: Text(
+                    _errorMessage!,
+                    style: const TextStyle(
+                      color: Colors.yellowAccent,
+                      fontSize: 14,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              const SizedBox(height: 30),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  ElevatedButton(
+                    onPressed: () => setState(() => _currentScreen = 0),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white.withOpacity(0.2),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 30, vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: const BorderSide(color: Colors.white, width: 1),
+                      ),
+                    ),
+                    child: const Text(
+                      'رجوع',
+                      style:
+                          TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                     ),
                   ),
-                  child: const Text(
-                    'رجوع',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                ),
-                _isLoading
-                    ? const CircularProgressIndicator(color: Colors.white)
-                    : ElevatedButton(
-                        onPressed: _changeSellerName,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: Colors.teal[700],
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 30, vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                  _isLoading
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : ElevatedButton(
+                          onPressed: _changeSellerName,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: Colors.teal[700],
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 30, vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: const Text(
+                            'حفظ',
+                            style: TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.bold),
                           ),
                         ),
-                        child: const Text(
-                          'حفظ',
-                          style: TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-              ],
-            ),
-          ],
+                ],
+              ),
+              // مساحة إضافية في الأسفل للكيبورد
+              SizedBox(
+                  height:
+                      MediaQuery.of(context).viewInsets.bottom > 0 ? 300 : 0),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  // دالة بناء حقل الإدخال لإعادة الاستخدام مع دعم زر ENTER
-  Widget _buildInputField(
-      TextEditingController controller, String hint, bool obscure,
-      {String? errorText, Function()? onSubmitted}) {
-    return TextFormField(
-      controller: controller,
-      obscureText: obscure,
-      textAlign: TextAlign.center,
-      textInputAction:
-          onSubmitted != null ? TextInputAction.done : TextInputAction.next,
-      onFieldSubmitted: (_) {
-        if (onSubmitted != null) {
-          onSubmitted();
-        } else {
-          FocusScope.of(context).nextFocus();
-        }
-      },
-      decoration: InputDecoration(
-        hintText: hint,
-        hintStyle: const TextStyle(color: Colors.white70),
-        filled: true,
-        fillColor: Colors.white.withOpacity(0.2),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Colors.white, width: 2),
-        ),
-        contentPadding:
-            const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-        errorText: errorText,
-        errorStyle: const TextStyle(color: Colors.yellowAccent),
-      ),
-      validator: (value) {
-        if (value == null || value.isEmpty) {
-          return 'الرجاء إدخال $hint';
-        }
-        if (hint.contains('كلمة المرور') && value.length < 4) {
-          return 'كلمة المرور قصيرة جداً';
-        }
-        if (hint.contains('تأكيد') && value != _newPasswordController.text) {
-          return 'كلمتا المرور غير متطابقتين';
-        }
-        return null;
-      },
-    );
-  }
-
-  // واجهة تغيير اسم المحل الجديدة
   Widget _buildStoreNameChangeScreen() {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20.0),
       child: Form(
         key: _storeNameFormKey,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.store, size: 50, color: Colors.white),
-            const SizedBox(height: 15),
-            _buildInputField(
-              _storeNameController,
-              'اسم المحل الجديد',
-              false,
-              onSubmitted: _changeStoreName,
-            ),
-            if (_errorMessage != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 10.0),
-                child: Text(
-                  _errorMessage!,
-                  style: const TextStyle(
-                    color: Colors.yellowAccent,
-                    fontSize: 14,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.store, size: 80, color: Colors.white),
+              const SizedBox(height: 30),
+              _buildInputField(
+                _storeNameController,
+                'اسم المحل الجديد',
+                false,
+                focusNode: _storeNameFocus,
+                onSubmitted: _changeStoreName,
               ),
-            const SizedBox(height: 30),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                ElevatedButton(
-                  onPressed: () => setState(() => _currentScreen = 0),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white.withOpacity(0.2),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 30, vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      side: const BorderSide(color: Colors.white, width: 1),
+              if (_errorMessage != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 15.0),
+                  child: Text(
+                    _errorMessage!,
+                    style: const TextStyle(
+                      color: Colors.yellowAccent,
+                      fontSize: 14,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              const SizedBox(height: 30),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  ElevatedButton(
+                    onPressed: () => setState(() => _currentScreen = 0),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white.withOpacity(0.2),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 30, vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: const BorderSide(color: Colors.white, width: 1),
+                      ),
+                    ),
+                    child: const Text(
+                      'رجوع',
+                      style:
+                          TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                     ),
                   ),
-                  child: const Text(
-                    'رجوع',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                ),
-                _isLoading
-                    ? const CircularProgressIndicator(color: Colors.white)
-                    : ElevatedButton(
-                        onPressed: _changeStoreName,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: Colors.teal[700],
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 30, vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                  _isLoading
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : ElevatedButton(
+                          onPressed: _changeStoreName,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: Colors.teal[700],
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 30, vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: const Text(
+                            'حفظ',
+                            style: TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.bold),
                           ),
                         ),
-                        child: const Text(
-                          'حفظ',
-                          style: TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-              ],
-            ),
-          ],
+                ],
+              ),
+              // مساحة إضافية في الأسفل للكيبورد
+              SizedBox(
+                  height:
+                      MediaQuery.of(context).viewInsets.bottom > 0 ? 300 : 0),
+            ],
+          ),
         ),
+      ),
+    );
+  }
+
+  // تحديث دالة بناء حقل الإدخال:
+  Widget _buildInputField(
+    TextEditingController controller,
+    String hint,
+    bool obscure, {
+    String? errorText,
+    Function()? onSubmitted,
+    FocusNode? focusNode,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: TextFormField(
+        controller: controller,
+        obscureText: obscure,
+        focusNode: focusNode,
+        textAlign: TextAlign.center,
+        textInputAction:
+            onSubmitted != null ? TextInputAction.done : TextInputAction.next,
+        onFieldSubmitted: (_) {
+          if (onSubmitted != null) {
+            onSubmitted();
+          }
+        },
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: const TextStyle(color: Colors.white70),
+          filled: true,
+          fillColor: Colors.white.withOpacity(0.2),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide.none,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Colors.white, width: 2),
+          ),
+          contentPadding:
+              const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+          errorText: errorText,
+          errorStyle: const TextStyle(color: Colors.yellowAccent),
+        ),
+        validator: (value) {
+          if (value == null || value.isEmpty) {
+            return 'الرجاء إدخال $hint';
+          }
+          if (hint.contains('كلمة المرور') && value.length < 4) {
+            return 'كلمة المرور قصيرة جداً';
+          }
+          if (hint.contains('تأكيد') && value != _newPasswordController.text) {
+            return 'كلمتا المرور غير متطابقتين';
+          }
+          return null;
+        },
       ),
     );
   }

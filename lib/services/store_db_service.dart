@@ -6,7 +6,6 @@ class StoreDbService {
   StoreDbService._internal();
 
   static const String _storeNameKey = 'store_name';
-  static const String _defaultStoreName = 'المحل الافتراضي';
 
   Future<void> initializeDatabase() async {
     // لا حاجة للتهيئة في shared_preferences
@@ -19,18 +18,11 @@ class StoreDbService {
     await prefs.setString(_storeNameKey, storeName);
   }
 
-  // استرجاع اسم المحل
+  // استرجاع اسم المحل - إرجاع null إذا لم يكن موجوداً
   Future<String?> getStoreName() async {
     final prefs = await SharedPreferences.getInstance();
-    final storeName = prefs.getString(_storeNameKey);
-
-    // إذا لم يكن هناك اسم محفوظ، نقوم بحفظ الاسم الافتراضي وإرجاعه
-    if (storeName == null) {
-      await saveStoreName(_defaultStoreName);
-      return _defaultStoreName;
-    }
-
-    return storeName;
+    return prefs
+        .getString(_storeNameKey); // إرجاع null مباشرة إذا لم يكن موجوداً
   }
 
   // تحديث اسم المحل

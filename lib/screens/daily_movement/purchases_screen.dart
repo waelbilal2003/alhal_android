@@ -34,7 +34,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   late TextEditingController totalBaseController;
   late TextEditingController totalNetController;
   late TextEditingController totalGrandController;
-  late TextEditingController totalPriceController;
 
   // قوائم الخيارات
   final List<String> cashOrDebtOptions = ['نقدي', 'دين'];
@@ -55,7 +54,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     totalBaseController = TextEditingController();
     totalNetController = TextEditingController();
     totalGrandController = TextEditingController();
-    totalPriceController = TextEditingController();
 
     _resetTotalValues();
 
@@ -84,7 +82,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     totalBaseController.dispose();
     totalNetController.dispose();
     totalGrandController.dispose();
-    totalPriceController.dispose();
 
     super.dispose();
   }
@@ -95,7 +92,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     totalBaseController.text = '0.00';
     totalNetController.text = '0.00';
     totalGrandController.text = '0.00';
-    totalPriceController.text = '0.00';
   }
 
   // دالة لإضافة صف جديد
@@ -181,7 +177,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       double totalBase = 0;
       double totalNet = 0;
       double totalGrand = 0;
-      double totalPrice = 0;
 
       for (var controllers in rowControllers) {
         try {
@@ -200,9 +195,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           // مجموع الإجمالي
           double total = double.tryParse(controllers[8].text) ?? 0;
           totalGrand += total;
-
-          double price = double.tryParse(controllers[7].text) ?? 0;
-          totalPrice += price;
         } catch (e) {
           // تجاهل الأخطاء
         }
@@ -213,7 +205,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       totalBaseController.text = totalBase.toStringAsFixed(2);
       totalNetController.text = totalNet.toStringAsFixed(2);
       totalGrandController.text = totalGrand.toStringAsFixed(2);
-      totalPriceController.text = totalPrice.toStringAsFixed(2);
     });
   }
 
@@ -291,7 +282,8 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                 TextEditingController()..text = '', FocusNode(), false, -1, -1),
             _buildTotalCell(totalBaseController), // مجموع القائم
             _buildTotalCell(totalNetController), // مجموع الصافي
-            _buildTotalCell(totalPriceController), // مجموع السعر
+            _buildTableCell(
+                TextEditingController()..text = '', FocusNode(), false, -1, -1),
             _buildTotalCell(totalGrandController), // مجموع الإجمالي
             _buildTableCell(
                 TextEditingController()..text = '', FocusNode(), false, -1, -1),
@@ -496,7 +488,8 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('المشتريات',
+        title: Text(
+            'يومية مشتريات رقم /${serialNumber}/ ليوم $dayName تاريخ ${widget.selectedDate} البائع : ${widget.sellerName}',
             style: const TextStyle(fontWeight: FontWeight.bold)),
         centerTitle: true,
         backgroundColor: Colors.red[700],
@@ -508,7 +501,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           builder: (context, constraints) {
             return SingleChildScrollView(
               child: Container(
-                padding: const EdgeInsets.all(12.0),
+                padding: const EdgeInsets.all(6.0),
                 constraints: BoxConstraints(
                   minHeight: constraints.maxHeight,
                 ),
@@ -516,28 +509,9 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // صف المعلومات العلوي
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          vertical: 8, horizontal: 12),
-                      decoration: BoxDecoration(
-                        color: Colors.red[50],
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        'يومية مشتريات رقم /${serialNumber}/ ليوم $dayName تاريخ ${widget.selectedDate} البائع : ${widget.sellerName}',
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
                     // المحتوى الرئيسي
                     Container(
-                      height: constraints.maxHeight * 0.5,
+                      height: constraints.maxHeight,
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
@@ -552,37 +526,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                             ),
                           ),
                         ],
-                      ),
-                    ),
-                    // الأزرار
-                    Container(
-                      margin: const EdgeInsets.only(top: 8),
-                      padding: const EdgeInsets.symmetric(
-                          vertical: 6, horizontal: 4),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey[300]!),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: LayoutBuilder(
-                        builder: (context, constraints) {
-                          return Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              _buildResponsiveButton(
-                                  'إنشاء', Colors.blue[700]!),
-                              _buildResponsiveButton(
-                                  'إضافة', Colors.green[700]!,
-                                  onPressed: _addNewRow),
-                              _buildResponsiveButton(
-                                  'تعديل', Colors.orange[700]!),
-                              _buildResponsiveButton('حذف', Colors.purple[700]!,
-                                  onPressed: _deleteLastRow),
-                              _buildResponsiveButton(
-                                  'طباعة', Colors.blueGrey[600]!),
-                              _buildResponsiveButton('خروج', Colors.red[700]!),
-                            ],
-                          );
-                        },
                       ),
                     ),
                   ],
@@ -626,50 +569,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           ),
           textAlign: TextAlign.center,
           maxLines: 2,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildResponsiveButton(String text, Color color,
-      {VoidCallback? onPressed}) {
-    return Flexible(
-      fit: FlexFit.tight,
-      child: Container(
-        constraints: BoxConstraints(
-          minWidth: 50,
-          maxWidth: 100,
-        ),
-        margin: const EdgeInsets.symmetric(horizontal: 1),
-        height: 32,
-        child: ElevatedButton(
-          onPressed: onPressed ??
-              () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('تم الضغط على $text'),
-                    backgroundColor: color,
-                    duration: const Duration(seconds: 1),
-                  ),
-                );
-              },
-          style: ElevatedButton.styleFrom(
-            backgroundColor: color,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(4),
-            ),
-            elevation: 1,
-          ),
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              text,
-              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
-              textAlign: TextAlign.center,
-            ),
-          ),
         ),
       ),
     );
@@ -786,56 +685,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
         );
       },
     );
-  }
-
-  // دالة لحذف آخر صف
-  void _deleteLastRow() {
-    if (rowControllers.length > 1) {
-      setState(() {
-        // تنظيف متحكمات الصف الأخير
-        for (var controller in rowControllers.last) {
-          controller.dispose();
-        }
-
-        // تنظيف FocusNodes للصف الأخير
-        for (var node in rowFocusNodes.last) {
-          node.dispose();
-        }
-
-        // إزالة الصف الأخير
-        rowControllers.removeLast();
-        rowFocusNodes.removeLast();
-        cashOrDebtValues.removeLast();
-        emptiesValues.removeLast();
-
-        // تحديث المسلسل
-        for (int i = 0; i < rowControllers.length; i++) {
-          rowControllers[i][0].text = (i + 1).toString();
-        }
-
-        // إعادة بناء صفوف الجدول
-        _buildTableRows();
-
-        // تحديث جميع المجاميع
-        _calculateAllTotals();
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('تم حذف الصف الأخير'),
-            backgroundColor: Colors.purple[700],
-            duration: const Duration(seconds: 1),
-          ),
-        );
-      });
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('لا يمكن حذف الصف الوحيد'),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 2),
-        ),
-      );
-    }
   }
 
   void _extractDayName(String dateString) {

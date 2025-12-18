@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'date_selection_screen.dart';
-import '../services/store_db_service.dart'; // استيراد خدمة shared_preferences المعدلة
+import '../services/store_db_service.dart'; // استيراد خدمة قاعدة البيانات
 
 enum LoginFlowState { setup, storeName, login }
 
@@ -21,14 +21,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
   final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   final _sellerNameController = TextEditingController();
-  String _storeName = 'سوق الهال';
-
-  // إضافة FocusNodes
-  final _sellerNameFocus = FocusNode();
-  final _passwordFocus = FocusNode();
-  final _newPasswordFocus = FocusNode();
-  final _confirmPasswordFocus = FocusNode();
-  final _storeNameFieldFocus = FocusNode();
+  String _storeName = 'سوق الهال'; // القيمة الافتراضية
 
   final _formKey = GlobalKey<FormState>();
   final _setupFormKey = GlobalKey<FormState>();
@@ -38,45 +31,31 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
 
   LoginFlowState _currentFlowState = LoginFlowState.setup;
 
+  // FocusNodes لإدارة انتقال التركيز بين الحقول
+  late FocusNode _sellerNameFocus;
+  late FocusNode _newPasswordFocus;
+  late FocusNode _confirmPasswordFocus;
+  late FocusNode _loginSellerNameFocus;
+  late FocusNode _loginPasswordFocus;
+  late FocusNode _storeNameFocus;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
 
-    // الانتقال المباشر للإعداد إذا كانت الحالة setup
+    // تهيئة FocusNodes
+    _sellerNameFocus = FocusNode();
+    _newPasswordFocus = FocusNode();
+    _confirmPasswordFocus = FocusNode();
+    _loginSellerNameFocus = FocusNode();
+    _loginPasswordFocus = FocusNode();
+    _storeNameFocus = FocusNode();
+
     if (widget.initialState == LoginFlowState.setup) {
       _currentFlowState = LoginFlowState.setup;
     } else {
-      // التحقق من الحالة
-      _checkInitialState();
-    }
-  }
-
-// دالة جديدة للتحقق من الحالة الأولية
-  Future<void> _checkInitialState() async {
-    final storeDbService = StoreDbService();
-    await storeDbService.initializeDatabase();
-
-    final savedStoreName = await storeDbService.getStoreName();
-    final prefs = await SharedPreferences.getInstance();
-    final accountsJson = prefs.getString('accounts');
-
-    // إذا كان اسم المحل موجوداً، انتقل مباشرة لتسجيل الدخول
-    if (savedStoreName != null && savedStoreName.isNotEmpty) {
-      setState(() {
-        _currentFlowState = LoginFlowState.login;
-        _storeName = savedStoreName;
-      });
-    } else if (accountsJson != null) {
-      // حسابات موجودة ولكن اسم المحل غير موجود
-      setState(() {
-        _currentFlowState = LoginFlowState.storeName;
-      });
-    } else {
-      // لا توجد حسابات
-      setState(() {
-        _currentFlowState = LoginFlowState.setup;
-      });
+      _initializeAndCheckAppStatus(); // دالة جديدة لضمان التهيئة أولاً
     }
   }
 
@@ -91,10 +70,12 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
 
     // التخلص من FocusNodes
     _sellerNameFocus.dispose();
-    _passwordFocus.dispose();
     _newPasswordFocus.dispose();
     _confirmPasswordFocus.dispose();
-    _storeNameFieldFocus.dispose();
+    _loginSellerNameFocus.dispose();
+    _loginPasswordFocus.dispose();
+    _storeNameFocus.dispose();
+
     super.dispose();
   }
 
@@ -109,6 +90,33 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
   Future<void> _logout() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('is_logged_in', false);
+  }
+
+  Future<void> _initializeAndCheckAppStatus() async {
+    final storeDbService = StoreDbService();
+    await storeDbService
+        .initializeDatabase(); // ضمان تهيئة قاعدة البيانات أولاً
+
+    final prefs = await SharedPreferences.getInstance();
+    final accountsJson = prefs.getString('accounts');
+    final savedStoreName = await storeDbService.getStoreName();
+
+    if (accountsJson != null) {
+      if (savedStoreName != null) {
+        setState(() {
+          _currentFlowState = LoginFlowState.login;
+          _storeName = savedStoreName;
+        });
+      } else {
+        setState(() {
+          _currentFlowState = LoginFlowState.storeName;
+        });
+      }
+    } else {
+      setState(() {
+        _currentFlowState = LoginFlowState.setup;
+      });
+    }
   }
 
   Future<void> _saveAccount(String sellerName, String password) async {
@@ -175,19 +183,17 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
 
     await _saveAccount(sellerName, newPassword);
 
-    // التحقق من وجود اسم المحل قبل الانتقال
+    // التحقق مما إذا كان اسم المحل محفوظاً مسبقاً
     final storeDbService = StoreDbService();
     final savedStoreName = await storeDbService.getStoreName();
 
     setState(() {
       _isLoading = false;
-
-      if (savedStoreName != null && savedStoreName.isNotEmpty) {
-        // اسم المحل موجود بالفعل، انتقل مباشرة لتسجيل الدخول
-        _currentFlowState = LoginFlowState.login;
+      // إذا كان اسم المحل محفوظاً بالفعل، انتقل مباشرة إلى تسجيل الدخول
+      if (savedStoreName != null) {
         _storeName = savedStoreName;
+        _currentFlowState = LoginFlowState.login;
       } else {
-        // اسم المحل غير موجود، انتقل إلى شاشة تحديد اسم المحل
         _currentFlowState = LoginFlowState.storeName;
       }
     });
@@ -205,8 +211,6 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
         currentScreen = _buildSetupScreen();
         break;
       case LoginFlowState.storeName:
-        // التحقق مرة أخرى قبل عرض شاشة اسم المحل
-        _verifyStoreNameNeeded();
         currentScreen = _buildStoreNameScreen();
         break;
       case LoginFlowState.login:
@@ -233,22 +237,6 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     );
   }
 
-// دالة للتحقق من الحاجة لعرض شاشة اسم المحل
-  Future<void> _verifyStoreNameNeeded() async {
-    final storeDbService = StoreDbService();
-    final savedStoreName = await storeDbService.getStoreName();
-
-    if (savedStoreName != null && savedStoreName.isNotEmpty) {
-      // اسم المحل موجود، انتقل مباشرة لتسجيل الدخول
-      if (mounted) {
-        setState(() {
-          _currentFlowState = LoginFlowState.login;
-          _storeName = savedStoreName;
-        });
-      }
-    }
-  }
-
   // --- واجهة الإعداد ---
   Widget _buildSetupScreen() {
     return Form(
@@ -269,34 +257,46 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
             textDirection: TextDirection.rtl,
             children: [
               Expanded(
+                  child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8.0),
                 child: _buildInputField(
                   _sellerNameController,
                   'اسم البائع',
                   false,
                   focusNode: _sellerNameFocus,
-                  nextFocus: _newPasswordFocus,
+                  nextFocusNode: _newPasswordFocus,
+                  isLastInRow: false,
+                  flowState: LoginFlowState.setup,
                 ),
-              ),
-              const SizedBox(width: 20),
+              )),
+              const SizedBox(width: 12),
               Expanded(
+                  child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8.0),
                 child: _buildInputField(
                   _newPasswordController,
                   'كلمة المرور الجديدة',
                   true,
                   focusNode: _newPasswordFocus,
-                  nextFocus: _confirmPasswordFocus,
+                  nextFocusNode: _confirmPasswordFocus,
+                  isLastInRow: false,
+                  flowState: LoginFlowState.setup,
                 ),
-              ),
-              const SizedBox(width: 20),
+              )),
+              const SizedBox(width: 12),
               Expanded(
+                  child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8.0),
                 child: _buildInputField(
                   _confirmPasswordController,
                   'تأكيد كلمة المرور',
                   true,
                   focusNode: _confirmPasswordFocus,
-                  onSubmitted: _savePasswordAndSeller,
+                  nextFocusNode: null,
+                  isLastInRow: true,
+                  flowState: LoginFlowState.setup,
                 ),
-              ),
+              )),
             ],
           ),
           const SizedBox(height: 30),
@@ -346,11 +346,15 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                     _sellerNameController,
                     'أدخل اسم البائع',
                     false,
-                    focusNode: _sellerNameFocus,
-                    nextFocus: _passwordFocus,
+                    focusNode: _loginSellerNameFocus,
+                    nextFocusNode: _loginPasswordFocus,
+                    isLastInRow: false,
+                    flowState: LoginFlowState.login,
+                    errorText: _errorMessage,
                   ),
                 ),
               ),
+              const SizedBox(width: 12),
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 8.0),
@@ -358,9 +362,10 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                     _passwordController,
                     'أدخل كلمة المرور',
                     true,
-                    focusNode: _passwordFocus,
-                    onSubmitted: _login,
-                    errorText: _errorMessage,
+                    focusNode: _loginPasswordFocus,
+                    nextFocusNode: null,
+                    isLastInRow: true,
+                    flowState: LoginFlowState.login,
                   ),
                 ),
               ),
@@ -388,43 +393,34 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     );
   }
 
-  // --- دالة بناء حقل الإدخال لإعادة الاستخدام ---
+  // --- دالة بناء حقل الإدخال المعدلة لإدارة FocusNodes ---
   Widget _buildInputField(
-      TextEditingController controller, String hint, bool obscure,
-      {String? errorText,
-      FocusNode? focusNode,
-      FocusNode? nextFocus,
-      Function()? onSubmitted}) {
+    TextEditingController controller,
+    String hint,
+    bool obscure, {
+    FocusNode? focusNode,
+    FocusNode? nextFocusNode,
+    bool isLastInRow = false,
+    LoginFlowState? flowState,
+    String? errorText,
+  }) {
     return TextFormField(
       controller: controller,
       obscureText: obscure,
-      focusNode: focusNode,
       textAlign: TextAlign.center,
+      focusNode: focusNode,
       textDirection: TextDirection.rtl,
-      textInputAction: nextFocus != null || onSubmitted != null
-          ? TextInputAction.next
-          : TextInputAction.done,
-      onFieldSubmitted: (_) {
-        if (nextFocus != null) {
-          // الانتقال للحقل التالي من اليمين لليسار
-          FocusScope.of(context).requestFocus(nextFocus);
-        } else if (onSubmitted != null) {
-          onSubmitted();
-        }
-      },
       decoration: InputDecoration(
         hintText: hint,
         hintStyle: const TextStyle(color: Colors.white70),
         filled: true,
         fillColor: Colors.white.withOpacity(0.2),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide.none),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Colors.white, width: 2),
-        ),
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Colors.white, width: 2)),
         errorText: errorText,
         errorStyle: const TextStyle(color: Colors.yellowAccent),
       ),
@@ -435,6 +431,21 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
         if (hint.contains('تأكيد') && value != _newPasswordController.text)
           return 'كلمتا المرور غير متطابقتين';
         return null;
+      },
+      onFieldSubmitted: (_) {
+        if (isLastInRow) {
+          // إذا كان هذا الحقل الأخير في الصف، نفذ الإجراء المناسب
+          if (flowState == LoginFlowState.setup) {
+            _savePasswordAndSeller();
+          } else if (flowState == LoginFlowState.login) {
+            _login();
+          } else if (flowState == LoginFlowState.storeName) {
+            _saveStoreName();
+          }
+        } else if (nextFocusNode != null) {
+          // إذا كان هناك حقل تالٍ، انقل التركيز إليه
+          FocusScope.of(context).requestFocus(nextFocusNode);
+        }
       },
     );
   }
@@ -460,8 +471,10 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
               _storeNameController,
               'أدخل اسم المحل',
               false,
-              focusNode: _storeNameFieldFocus,
-              onSubmitted: _saveStoreName,
+              focusNode: _storeNameFocus,
+              nextFocusNode: null,
+              isLastInRow: true,
+              flowState: LoginFlowState.storeName,
             ),
           ),
           const SizedBox(height: 30),
@@ -488,44 +501,11 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
 
   Future<void> _saveStoreName() async {
     if (!_storeNameFormKey.currentState!.validate()) return;
-
-    final newStoreName = _storeNameController.text.trim();
-
-    // التحقق من أن اسم المحل ليس فارغاً
-    if (newStoreName.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('الرجاء إدخال اسم المحل'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
     setState(() => _isLoading = true);
 
+    final newStoreName = _storeNameController.text;
     final storeDbService = StoreDbService();
 
-    // التحقق أولاً من عدم وجود اسم محدد بالفعل
-    final existingStoreName = await storeDbService.getStoreName();
-    if (existingStoreName != null && existingStoreName.isNotEmpty) {
-      // اسم المحل موجود بالفعل، انتقل مباشرة لتسجيل الدخول
-      setState(() {
-        _isLoading = false;
-        _storeName = existingStoreName;
-        _currentFlowState = LoginFlowState.login;
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('اسم المحل "$existingStoreName" مضبوط بالفعل'),
-          backgroundColor: Colors.blue,
-        ),
-      );
-      return;
-    }
-
-    // حفظ اسم المحل الجديد
     await storeDbService.saveStoreName(newStoreName);
 
     setState(() {
@@ -535,12 +515,5 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     });
 
     _storeNameController.clear();
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('تم حفظ اسم المحل: $newStoreName'),
-        backgroundColor: Colors.green,
-      ),
-    );
   }
 }

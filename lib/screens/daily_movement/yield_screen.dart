@@ -21,6 +21,16 @@ class _YieldScreenState extends State<YieldScreen> {
   final TextEditingController _paymentsController = TextEditingController();
   final TextEditingController _collectedController = TextEditingController();
 
+  // متغيرات التحكم بشاشة تسجيل الدخول
+  bool _isLoggedIn = false;
+  bool _isLoading = false;
+  String _errorMessage = '';
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  final TextEditingController _sellerNameController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  final FocusNode _loginSellerNameFocus = FocusNode();
+  final FocusNode _loginPasswordFocus = FocusNode();
+
   double _yield = 0;
   String _status = '';
 
@@ -49,7 +59,9 @@ class _YieldScreenState extends State<YieldScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _showLoginDialog());
+    // تحقق إذا كان المستخدم مسجل دخول مسبقاً
+    _checkIfLoggedIn();
+
     _cashSalesController.addListener(() => setState(_calculateYield));
     _receiptsController.addListener(() => setState(_calculateYield));
     _cashPurchasesController.addListener(() => setState(_calculateYield));
@@ -57,212 +69,225 @@ class _YieldScreenState extends State<YieldScreen> {
     _collectedController.addListener(() => setState(_calculateYield));
   }
 
-  void _showLoginDialog() async {
+  Future<void> _checkIfLoggedIn() async {
     final prefs = await SharedPreferences.getInstance();
-    final accounts = prefs.getString('accounts');
-    final Map<String, String> accountsMap =
-        accounts != null ? Map<String, String>.from(json.decode(accounts)) : {};
+    final loggedIn = prefs.getBool('isLoggedIn') ?? false;
+    final savedSellerName = prefs.getString('currentSellerName') ?? '';
 
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        final TextEditingController sellerNameController =
-            TextEditingController();
-        final TextEditingController passwordController =
-            TextEditingController();
-        final FocusNode sellerNameFocus = FocusNode();
-        final FocusNode passwordFocus = FocusNode();
+    if (loggedIn && savedSellerName.isNotEmpty) {
+      setState(() {
+        _isLoggedIn = true;
+      });
+    }
+  }
 
-        return GestureDetector(
-          onTap: () => FocusScope.of(context).unfocus(),
-          child: AnimatedPadding(
-            padding: EdgeInsets.only(
-              top: MediaQuery.of(context).viewInsets.top > 50
-                  ? 20
-                  : MediaQuery.of(context).size.height * 0.2,
-              bottom: MediaQuery.of(context).viewInsets.bottom,
-            ),
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeInOut,
-            child: Dialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(24),
-                      child: Directionality(
-                        textDirection: TextDirection.rtl,
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            // العنوان
-                            const Text(
-                              'الرجاء إدخال بيانات الدخول',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.grey,
-                              ),
-                            ),
+  Future<void> _login() async {
+    if (_formKey.currentState?.validate() ?? false) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = '';
+      });
 
-                            const SizedBox(height: 24),
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final accounts = prefs.getString('accounts');
+        final Map<String, String> accountsMap = accounts != null
+            ? Map<String, String>.from(json.decode(accounts))
+            : {};
 
-                            // حقل اسم البائع
-                            TextFormField(
-                              controller: sellerNameController,
-                              focusNode: sellerNameFocus,
-                              autofocus: true,
-                              decoration: InputDecoration(
-                                labelText: 'اسم البائع',
-                                prefixIcon: const Icon(Icons.person),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 14,
-                                ),
-                              ),
-                              textInputAction: TextInputAction.next,
-                              onEditingComplete: () {
-                                FocusScope.of(context)
-                                    .requestFocus(passwordFocus);
-                                // تحريك الشاشة لأسفل قليلاً لعرض الحقل الثاني
-                                Future.delayed(
-                                    const Duration(milliseconds: 100), () {
-                                  Scrollable.ensureVisible(
-                                    passwordFocus.context!,
-                                    duration: const Duration(milliseconds: 300),
-                                    curve: Curves.easeInOut,
-                                  );
-                                });
-                              },
-                            ),
+        final sellerName = _sellerNameController.text.trim();
+        final password = _passwordController.text.trim();
 
-                            const SizedBox(height: 16),
+        // التحقق من بيانات الدخول
+        if (accountsMap.containsKey(sellerName) &&
+            accountsMap[sellerName] == password) {
+          // حفظ حالة تسجيل الدخول
+          await prefs.setBool('isLoggedIn', true);
+          await prefs.setString('currentSellerName', sellerName);
 
-                            // حقل كلمة السر
-                            Builder(
-                              builder: (context) {
-                                return TextFormField(
-                                  controller: passwordController,
-                                  focusNode: passwordFocus,
-                                  obscureText: true,
-                                  decoration: InputDecoration(
-                                    labelText: 'كلمة السر',
-                                    prefixIcon: const Icon(Icons.lock),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 16,
-                                      vertical: 14,
-                                    ),
-                                  ),
-                                  textInputAction: TextInputAction.go,
-                                  onTap: () {
-                                    // عند النقر على حقل كلمة السر
-                                    Future.delayed(
-                                        const Duration(milliseconds: 300), () {
-                                      Scrollable.ensureVisible(
-                                        passwordFocus.context!,
-                                        duration:
-                                            const Duration(milliseconds: 500),
-                                        curve: Curves.easeInOut,
-                                        alignment:
-                                            0.3, // لجعل الحقل يظهر في الثلث العلوي
-                                      );
-                                    });
-                                  },
-                                  onFieldSubmitted: (_) {
-                                    // عند الضغط على Enter
-                                    _validateLogin(
-                                      sellerNameController.text,
-                                      passwordController.text,
-                                      accountsMap,
-                                    );
-                                  },
-                                );
-                              },
-                            ),
+          setState(() {
+            _isLoggedIn = true;
+            _isLoading = false;
+          });
+        } else {
+          setState(() {
+            _errorMessage = 'اسم البائع أو كلمة المرور غير صحيحة';
+            _isLoading = false;
+          });
+        }
+      } catch (e) {
+        setState(() {
+          _errorMessage = 'حدث خطأ أثناء تسجيل الدخول';
+          _isLoading = false;
+        });
+      }
+    }
+  }
 
-                            const SizedBox(height: 30),
+  Future<void> _logout() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('isLoggedIn', false);
+    await prefs.remove('currentSellerName');
 
-                            // رسالة تذكير بالضغط على Enter
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: Colors.teal[50],
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: Colors.teal[100]!),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(Icons.info_outline,
-                                      color: Colors.teal[400], size: 20),
-                                  const SizedBox(width: 8),
-                                  const Expanded(
-                                    child: Text(
-                                      'يمكنك الضغط على زر Enter في الكيبورد لتسجيل الدخول',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.teal,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+    setState(() {
+      _isLoggedIn = false;
+      _sellerNameController.clear();
+      _passwordController.clear();
+      _errorMessage = '';
+    });
+  }
+
+  Widget _buildLoginScreen() {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.teal[700]!,
+            Colors.teal[500]!,
+            Colors.teal[300]!,
+          ],
+        ),
+      ),
+      child: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.lock, size: 60, color: Colors.white),
+            const SizedBox(height: 20),
+            const Text('تسجيل الدخول',
+                style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white)),
+            const SizedBox(height: 40),
+            Row(
+              textDirection: TextDirection.rtl,
+              children: [
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                    child: _buildLoginInputField(
+                      _sellerNameController,
+                      'أدخل اسم البائع',
+                      false,
+                      focusNode: _loginSellerNameFocus,
+                      nextFocusNode: _loginPasswordFocus,
                     ),
-                  ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                    child: _buildLoginInputField(
+                      _passwordController,
+                      'أدخل كلمة المرور',
+                      true,
+                      focusNode: _loginPasswordFocus,
+                      nextFocusNode: null,
+                      isPassword: true,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (_errorMessage.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                child: Text(
+                  _errorMessage,
+                  style: const TextStyle(
+                    color: Colors.red,
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  textAlign: TextAlign.center,
                 ),
               ),
-            ),
-          ),
-        );
+            ],
+            const SizedBox(height: 30),
+            _isLoading
+                ? const CircularProgressIndicator(color: Colors.white)
+                : ElevatedButton(
+                    onPressed: _login,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.teal[700],
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 60, vertical: 15),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: const Text('دخول',
+                        style: TextStyle(
+                            fontSize: 20, fontWeight: FontWeight.bold)),
+                  ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLoginInputField(
+    TextEditingController controller,
+    String hintText,
+    bool isLastInRow, {
+    FocusNode? focusNode,
+    FocusNode? nextFocusNode,
+    bool isPassword = false,
+  }) {
+    return TextFormField(
+      controller: controller,
+      focusNode: focusNode,
+      obscureText: isPassword,
+      style: const TextStyle(color: Colors.white, fontSize: 16),
+      textDirection: TextDirection.rtl, // إضافة هذا السطر
+      textAlign: TextAlign.right, // إضافة هذا السطر
+      decoration: InputDecoration(
+        hintText: hintText,
+        hintStyle: const TextStyle(color: Colors.white70),
+        filled: true,
+        fillColor: Colors.white.withOpacity(0.1),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: Colors.white.withOpacity(0.5)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: Colors.white.withOpacity(0.5)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Colors.white, width: 2),
+        ),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        errorStyle: const TextStyle(color: Colors.yellow),
+        hintTextDirection: TextDirection.rtl, // إضافة هذا السطر
+      ),
+      textInputAction:
+          isLastInRow ? TextInputAction.done : TextInputAction.next,
+      onFieldSubmitted: (_) {
+        if (isLastInRow) {
+          _login();
+        } else if (nextFocusNode != null) {
+          FocusScope.of(context).requestFocus(nextFocusNode);
+        }
+      },
+      validator: (value) {
+        if (value == null || value.trim().isEmpty) {
+          return 'هذا الحقل مطلوب';
+        }
+        return null;
       },
     );
   }
 
-  void _validateLogin(
-      String sellerName, String password, Map<String, String> accountsMap) {
-    if (accountsMap.containsKey(sellerName) &&
-        accountsMap[sellerName] == password) {
-      Navigator.of(context).pop();
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('اسم البائع أو كلمة السر غير صحيحة')),
-      );
-    }
-  }
-
-  @override
-  void dispose() {
-    _cashSalesController.dispose();
-    _receiptsController.dispose();
-    _cashPurchasesController.dispose();
-    _paymentsController.dispose();
-    _collectedController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    _calculateYield();
-
-    // جعل الشاشة تعمل فقط في الوضع الأفقي
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      // يمكنك إضافة منطق لإجبار الوضع الأفقي هنا إذا لزم الأمر
-    });
-
+  Widget _buildYieldScreen() {
     return Scaffold(
       appBar: AppBar(
         title: const Text('شاشة الغلة',
@@ -270,6 +295,13 @@ class _YieldScreenState extends State<YieldScreen> {
         centerTitle: true,
         backgroundColor: Colors.teal[600],
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: _logout,
+            tooltip: 'تسجيل الخروج',
+          ),
+        ],
       ),
       body: SafeArea(
         child: Directionality(
@@ -297,7 +329,7 @@ class _YieldScreenState extends State<YieldScreen> {
                         border: Border.all(color: Colors.teal[200]!),
                       ),
                       child: Text(
-                        'غلة البائع: ${widget.sellerName}',
+                        'غلة البائع: ${_sellerNameController.text}',
                         style: const TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
@@ -437,7 +469,7 @@ class _YieldScreenState extends State<YieldScreen> {
                       ),
                     ),
 
-                    // مسافة إضافية في الأسفل للتأكد من ظهور كل المحتوى
+                    // مسافة إضافية في الأسفل
                     const SizedBox(height: 40),
                   ],
                 ),
@@ -497,5 +529,35 @@ class _YieldScreenState extends State<YieldScreen> {
         ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _cashSalesController.dispose();
+    _receiptsController.dispose();
+    _cashPurchasesController.dispose();
+    _paymentsController.dispose();
+    _collectedController.dispose();
+    _sellerNameController.dispose();
+    _passwordController.dispose();
+    _loginSellerNameFocus.dispose();
+    _loginPasswordFocus.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _calculateYield();
+
+    // بناء واجهة المستخدم بناءً على حالة تسجيل الدخول
+    if (!_isLoggedIn) {
+      // عرض شاشة تسجيل الدخول كاملة
+      return Scaffold(
+        body: _buildLoginScreen(),
+      );
+    } else {
+      // عرض شاشة الغلة
+      return _buildYieldScreen();
+    }
   }
 }

@@ -39,6 +39,11 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   final List<String> cashOrDebtOptions = ['نقدي', 'دين'];
   final List<String> emptiesOptions = ['مع فوارغ', 'بدون فوارغ'];
 
+  // متحكمات للتمرير
+  final ScrollController _verticalScrollController = ScrollController();
+  final ScrollController _horizontalScrollController = ScrollController();
+  final GlobalKey _tableKey = GlobalKey();
+
   @override
   void initState() {
     super.initState();
@@ -83,6 +88,10 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     totalNetController.dispose();
     totalGrandController.dispose();
 
+    // تنظيف متحكمات التمرير
+    _verticalScrollController.dispose();
+    _horizontalScrollController.dispose();
+
     super.dispose();
   }
 
@@ -106,22 +115,8 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
       // تعيين المسلسل تلقائياً
       newControllers[0].text = (rowControllers.length + 1).toString();
-/*
-      // إضافة مستمع للحقل الأخير (الفوارغ) لإضافة صف جديد عند الضغط على Enter
-      newFocusNodes[10].addListener(() {
-        if (newFocusNodes[10].hasFocus) {
-          _setupEnterKeyListener(newFocusNodes[10]);
-        }
-      });
 
-      // إضافة مستمع لحقل السعر (المؤشر 7) لإضافة صف جديد عند الضغط على Enter
-      newFocusNodes[7].addListener(() {
-        if (newFocusNodes[7].hasFocus) {
-          _setupEnterKeyListener(newFocusNodes[7]);
-        }
-      });
-*/
-      // إضافة المستمعين لحقول الحساب (العدد، العبوة، القائم، السعر)
+      // إضافة المستمعين لحقول الحساب (العدد، العبوة، القائم، الصافي، السعر)
       newControllers[3].addListener(() {
         _calculateRowValues(rowControllers.length);
         _calculateAllTotals();
@@ -134,6 +129,12 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
         _calculateRowValues(rowControllers.length);
         _calculateAllTotals();
       });
+      // ===== تم التعديل: إضافة مستمع لحقل "الصافي" =====
+      newControllers[6].addListener(() {
+        _calculateRowValues(rowControllers.length);
+        _calculateAllTotals();
+      });
+      // =================================================
       newControllers[7].addListener(() {
         _calculateRowValues(rowControllers.length);
         _calculateAllTotals();
@@ -158,13 +159,17 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     setState(() {
       try {
         double count = double.tryParse(controllers[3].text) ?? 0; // العدد
+        double net = double.tryParse(controllers[6].text) ?? 0; // الصافي
         double price = double.tryParse(controllers[7].text) ?? 0; // السعر
 
-        // حساب الإجمالي: العدد × السعر
-        double total = count * price;
+        // تطبيق القاعدة الجديدة:
+        // إذا كان الصافي > 0، استخدم الصافي، وإلا استخدم العدد
+        double baseValue = net > 0 ? net : count;
+
+        // حساب الإجمالي: القيمة المحددة × السعر
+        double total = baseValue * price;
         controllers[8].text = total.toStringAsFixed(2); // الإجمالي
       } catch (e) {
-        controllers[6].text = '';
         controllers[8].text = '';
       }
     });
@@ -251,7 +256,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                 4), // العبوة
             _buildTableCell(rowControllers[i][5], rowFocusNodes[i][5], true, i,
                 5), // القائم
-            _buildTableCell(rowControllers[i][6], rowFocusNodes[i][6], false, i,
+            _buildTableCell(rowControllers[i][6], rowFocusNodes[i][6], true, i,
                 6), // الصافي
             _buildTableCell(
                 rowControllers[i][7], rowFocusNodes[i][7], true, i, 7), // السعر
@@ -315,25 +320,20 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
         maxLines: 1,
         keyboardType: isNumeric ? TextInputType.number : TextInputType.text,
         textInputAction: TextInputAction.next, // جميع الحقول تستخدم next
+        onTap: () {
+          // عند النقر على الحقل، قم بالتمرير لضمان ظهوره
+          _scrollToField(rowIndex, colIndex);
+        },
         onSubmitted: (value) {
-          // في اتجاه RTL (من اليمين لليسار):
-          // colIndex = 0 ← أقصى اليمين (المسلسل)
-          // colIndex = 10 ← أقصى اليسار (الفوارغ)
-
-          // نريد الانتقال من اليمين لليسار: 0 → 1 → 2 → ... → 10
-          // ولكن عند الضغط Enter نريد الانتقال عكس ذلك: 10 ← 9 ← 8 ← ... ← 0
-
           if (colIndex < 10) {
-            // إذا لم نكن في آخر حقل (الفوارغ)، انتقل إلى الحقل التالي (إلى اليسار)
             FocusScope.of(context)
                 .requestFocus(rowFocusNodes[rowIndex][colIndex + 1]);
           } else if (colIndex == 10) {
-            // إذا كنا في آخر حقل (الفوارغ)، انتقل إلى الصف التالي أو أضف صف جديد
             _addNewRow();
             if (rowControllers.length > 0) {
               final newRowIndex = rowControllers.length - 1;
-              FocusScope.of(context).requestFocus(
-                  rowFocusNodes[newRowIndex][0]); // المسلسل في الصف الجديد
+              FocusScope.of(context)
+                  .requestFocus(rowFocusNodes[newRowIndex][0]);
             }
           }
         },
@@ -345,16 +345,45 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
             }
           }
 
-          // إذا كان حقل حسابي (العدد، العبوة، القائم، السعر)
+          // ===== تم التعديل: إضافة المؤشر 6 (الصافي) إلى الشرط =====
+          // إذا كان حقل حسابي (العدد، العبوة، القائم، الصافي، السعر)
           if (colIndex == 3 ||
               colIndex == 4 ||
               colIndex == 5 ||
+              colIndex == 6 || // <-- تمت إضافة هذا السطر
               colIndex == 7) {
             _calculateRowValues(rowIndex);
             _calculateAllTotals();
           }
+          // ========================================================
         },
       ),
+    );
+  }
+
+  // دالة للتمرير إلى الحقل المحدد
+  void _scrollToField(int rowIndex, int colIndex) {
+    final RenderBox? renderBox =
+        _tableKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
+
+    const double rowHeight = 25.0;
+    final double verticalPosition = (rowIndex + 1) * rowHeight;
+    const double columnWidth = 60.0;
+    final double horizontalPosition = colIndex * columnWidth;
+
+    final double verticalScrollOffset =
+        verticalPosition - (MediaQuery.of(context).size.height * 0.3);
+    _verticalScrollController.animateTo(
+      verticalScrollOffset,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
+
+    _horizontalScrollController.animateTo(
+      horizontalPosition,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
     );
   }
 
@@ -394,6 +423,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       child: InkWell(
         onTap: () {
           _showCashOrDebtDialog(rowIndex);
+          _scrollToField(rowIndex, colIndex);
         },
         child: Container(
           decoration: BoxDecoration(
@@ -443,6 +473,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       child: InkWell(
         onTap: () {
           _showEmptiesDialog(rowIndex);
+          _scrollToField(rowIndex, colIndex);
         },
         child: Container(
           decoration: BoxDecoration(
@@ -501,7 +532,9 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           builder: (context, constraints) {
             return SingleChildScrollView(
               child: Container(
-                padding: const EdgeInsets.all(6.0),
+                padding: EdgeInsets.only(
+                  bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+                ),
                 constraints: BoxConstraints(
                   minHeight: constraints.maxHeight,
                 ),
@@ -509,9 +542,9 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // المحتوى الرئيسي
                     Container(
-                      height: constraints.maxHeight,
+                      height: constraints.maxHeight -
+                          MediaQuery.of(context).viewInsets.bottom,
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
@@ -540,12 +573,14 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
   Widget _buildCompactTable(double maxHeight) {
     return SingleChildScrollView(
+      key: _tableKey,
       scrollDirection: Axis.horizontal,
+      controller: _horizontalScrollController,
       child: SingleChildScrollView(
         scrollDirection: Axis.vertical,
+        controller: _verticalScrollController,
         child: SizedBox(
           width: MediaQuery.of(context).size.width * 0.97,
-          height: maxHeight,
           child: Table(
             defaultColumnWidth: const FlexColumnWidth(),
             border: TableBorder.all(color: Colors.grey, width: 0.5),
@@ -574,7 +609,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     );
   }
 
-  // عرض مربع حوار لاختيار "نقدي او دين"
   void _showCashOrDebtDialog(int rowIndex) {
     showDialog(
       context: context,
@@ -595,13 +629,8 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                         cashOrDebtValues[rowIndex] = value!;
                       });
                       Navigator.of(context).pop();
-                      // بعد الاختيار، أعد بناء الجدول للتحديث الفوري
                       _buildTableRows();
-                      // انتقل للحقل السابق (إلى اليمين - المؤشر 8)
                       if (rowIndex >= 0) {
-                        // توجد 3 خيارات للانتقال:
-
-                        // الخيار 1: الانتقال إلى حقل "الإجمالي" (المؤشر 8)
                         FocusScope.of(context)
                             .requestFocus(rowFocusNodes[rowIndex][8]);
                       }
@@ -612,9 +641,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                       cashOrDebtValues[rowIndex] = option;
                     });
                     Navigator.of(context).pop();
-                    // بعد الاختيار، أعد بناء الجدول للتحديث الفوري
                     _buildTableRows();
-                    // انتقل للحقل السابق (إلى اليمين - المؤشر 8)
                     if (rowIndex >= 0) {
                       FocusScope.of(context)
                           .requestFocus(rowFocusNodes[rowIndex][8]);
@@ -637,7 +664,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     );
   }
 
-// عرض مربع حوار لاختيار "الفوارغ"
   void _showEmptiesDialog(int rowIndex) {
     showDialog(
       context: context,
@@ -658,7 +684,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                         emptiesValues[rowIndex] = value!;
                       });
                       Navigator.of(context).pop();
-                      // بعد اختيار الفوارغ، أضف صف جديد
                       _addRowAfterEmptiesSelection(rowIndex);
                     },
                   ),
@@ -667,7 +692,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                       emptiesValues[rowIndex] = option;
                     });
                     Navigator.of(context).pop();
-                    // بعد اختيار الفوارغ، أضف صف جديد
                     _addRowAfterEmptiesSelection(rowIndex);
                   },
                 );
@@ -702,16 +726,13 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   }
 
   void _addRowAfterEmptiesSelection(int rowIndex) {
-    // بعد اختيار الفوارغ، إضافة صف جديد
     _addNewRow();
-
-    // نقل التركيز إلى الصف الجديد (الحقل الأول)
     if (rowControllers.length > 0) {
       final newRowIndex = rowControllers.length - 1;
       Future.delayed(Duration(milliseconds: 100), () {
         if (mounted) {
-          FocusScope.of(context).requestFocus(
-              rowFocusNodes[newRowIndex][0]); // المسلسل في الصف الجديد
+          FocusScope.of(context).requestFocus(rowFocusNodes[newRowIndex][0]);
+          _scrollToField(newRowIndex, 0);
         }
       });
     }

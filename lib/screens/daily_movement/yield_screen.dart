@@ -63,105 +63,120 @@ class _YieldScreenState extends State<YieldScreen> {
     final Map<String, String> accountsMap =
         accounts != null ? Map<String, String>.from(json.decode(accounts)) : {};
 
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      barrierDismissible: false,
+      isScrollControlled: true, // هذا يرفع الـ sheet مع الكيبورد
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black54,
       builder: (BuildContext context) {
         final TextEditingController sellerNameController =
             TextEditingController();
         final TextEditingController passwordController =
             TextEditingController();
-        final FocusNode sellerNameFocus = FocusNode();
-        final FocusNode passwordFocus = FocusNode();
 
         return GestureDetector(
-          onTap: () {
-            FocusScope.of(context).unfocus();
-          },
-          child: Directionality(
-            textDirection: TextDirection.rtl,
-            child: AlertDialog(
-              scrollable: true,
-              contentPadding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
-              title: const Text(
-                'تسجيل الدخول',
-                style: TextStyle(fontWeight: FontWeight.bold),
-                textAlign: TextAlign.center,
-              ),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const SizedBox(height: 10),
-                    TextField(
-                      controller: sellerNameController,
-                      focusNode: sellerNameFocus,
-                      decoration: const InputDecoration(
-                        labelText: 'اسم البائع',
-                        border: OutlineInputBorder(),
-                        contentPadding: EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 16,
+          onTap: () => FocusScope.of(context).unfocus(),
+          child: Container(
+            margin: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom,
+            ),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            padding: const EdgeInsets.all(24),
+            child: Directionality(
+              textDirection: TextDirection.rtl,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // العنوان مع زر الإغلاق
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'تسجيل الدخول',
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                      textInputAction: TextInputAction.next,
-                      onEditingComplete: () {
-                        sellerNameFocus.unfocus();
-                        FocusScope.of(context).requestFocus(passwordFocus);
-                      },
-                    ),
-                    const SizedBox(height: 4),
-                    TextField(
-                      controller: passwordController,
-                      focusNode: passwordFocus,
-                      decoration: const InputDecoration(
-                        labelText: 'كلمة السر',
-                        border: OutlineInputBorder(),
-                        contentPadding: EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 16,
-                        ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(context),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
                       ),
-                      obscureText: true,
-                      textInputAction: TextInputAction.done,
-                      onSubmitted: (_) => _validateLogin(
-                          sellerNameController.text,
-                          passwordController.text,
-                          accountsMap),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () => _validateLogin(sellerNameController.text,
-                        passwordController.text, accountsMap),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.teal[600],
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
+                    ],
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  // حقل اسم البائع
+                  TextField(
+                    controller: sellerNameController,
+                    decoration: InputDecoration(
+                      labelText: 'اسم البائع',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 14,
                       ),
                     ),
-                    child: const Text(
-                      'تسجيل الدخول',
-                      style:
-                          TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    textInputAction: TextInputAction.next,
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // حقل كلمة السر
+                  TextField(
+                    controller: passwordController,
+                    obscureText: true,
+                    decoration: InputDecoration(
+                      labelText: 'كلمة السر',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 14,
+                      ),
+                    ),
+                    textInputAction: TextInputAction.go,
+                    onSubmitted: (_) {
+                      // عند الضغط على Enter
+                      _validateLogin(
+                        sellerNameController.text,
+                        passwordController.text,
+                        accountsMap,
+                      );
+                    },
+                  ),
+
+                  const SizedBox(height: 8),
+
+                  // تذكير بالضغط على Enter
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'اضغط Enter للتسجيل',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey,
+                        fontStyle: FontStyle.italic,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         );
       },
-    ).then((_) {
-      // التأكد من إعادة توجيه التركيز بعد إغلاق الديالوج
-      FocusScope.of(context).requestFocus(FocusNode());
-    });
+    );
   }
 
   void _validateLogin(

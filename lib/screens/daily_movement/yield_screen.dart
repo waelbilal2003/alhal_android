@@ -63,114 +63,167 @@ class _YieldScreenState extends State<YieldScreen> {
     final Map<String, String> accountsMap =
         accounts != null ? Map<String, String>.from(json.decode(accounts)) : {};
 
-    showModalBottomSheet(
+    showDialog(
       context: context,
-      isScrollControlled: true, // هذا يرفع الـ sheet مع الكيبورد
-      backgroundColor: Colors.transparent,
-      barrierColor: Colors.black54,
+      barrierDismissible: false,
       builder: (BuildContext context) {
         final TextEditingController sellerNameController =
             TextEditingController();
         final TextEditingController passwordController =
             TextEditingController();
+        final FocusNode sellerNameFocus = FocusNode();
+        final FocusNode passwordFocus = FocusNode();
 
         return GestureDetector(
           onTap: () => FocusScope.of(context).unfocus(),
-          child: Container(
-            margin: EdgeInsets.only(
+          child: AnimatedPadding(
+            padding: EdgeInsets.only(
+              top: MediaQuery.of(context).viewInsets.top > 50
+                  ? 20
+                  : MediaQuery.of(context).size.height * 0.2,
               bottom: MediaQuery.of(context).viewInsets.bottom,
             ),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-            ),
-            padding: const EdgeInsets.all(24),
-            child: Directionality(
-              textDirection: TextDirection.rtl,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // العنوان مع زر الإغلاق
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'تسجيل الدخول',
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+            child: Dialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(24),
+                      child: Directionality(
+                        textDirection: TextDirection.rtl,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            // العنوان
+                            const Text(
+                              'الرجاء إدخال بيانات الدخول',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey,
+                              ),
+                            ),
+
+                            const SizedBox(height: 24),
+
+                            // حقل اسم البائع
+                            TextFormField(
+                              controller: sellerNameController,
+                              focusNode: sellerNameFocus,
+                              autofocus: true,
+                              decoration: InputDecoration(
+                                labelText: 'اسم البائع',
+                                prefixIcon: const Icon(Icons.person),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 14,
+                                ),
+                              ),
+                              textInputAction: TextInputAction.next,
+                              onEditingComplete: () {
+                                FocusScope.of(context)
+                                    .requestFocus(passwordFocus);
+                                // تحريك الشاشة لأسفل قليلاً لعرض الحقل الثاني
+                                Future.delayed(
+                                    const Duration(milliseconds: 100), () {
+                                  Scrollable.ensureVisible(
+                                    passwordFocus.context!,
+                                    duration: const Duration(milliseconds: 300),
+                                    curve: Curves.easeInOut,
+                                  );
+                                });
+                              },
+                            ),
+
+                            const SizedBox(height: 16),
+
+                            // حقل كلمة السر
+                            Builder(
+                              builder: (context) {
+                                return TextFormField(
+                                  controller: passwordController,
+                                  focusNode: passwordFocus,
+                                  obscureText: true,
+                                  decoration: InputDecoration(
+                                    labelText: 'كلمة السر',
+                                    prefixIcon: const Icon(Icons.lock),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 14,
+                                    ),
+                                  ),
+                                  textInputAction: TextInputAction.go,
+                                  onTap: () {
+                                    // عند النقر على حقل كلمة السر
+                                    Future.delayed(
+                                        const Duration(milliseconds: 300), () {
+                                      Scrollable.ensureVisible(
+                                        passwordFocus.context!,
+                                        duration:
+                                            const Duration(milliseconds: 500),
+                                        curve: Curves.easeInOut,
+                                        alignment:
+                                            0.3, // لجعل الحقل يظهر في الثلث العلوي
+                                      );
+                                    });
+                                  },
+                                  onFieldSubmitted: (_) {
+                                    // عند الضغط على Enter
+                                    _validateLogin(
+                                      sellerNameController.text,
+                                      passwordController.text,
+                                      accountsMap,
+                                    );
+                                  },
+                                );
+                              },
+                            ),
+
+                            const SizedBox(height: 30),
+
+                            // رسالة تذكير بالضغط على Enter
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.teal[50],
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.teal[100]!),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.info_outline,
+                                      color: Colors.teal[400], size: 20),
+                                  const SizedBox(width: 8),
+                                  const Expanded(
+                                    child: Text(
+                                      'يمكنك الضغط على زر Enter في الكيبورد لتسجيل الدخول',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.teal,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.close),
-                        onPressed: () => Navigator.pop(context),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  // حقل اسم البائع
-                  TextField(
-                    controller: sellerNameController,
-                    decoration: InputDecoration(
-                      labelText: 'اسم البائع',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 14,
-                      ),
                     ),
-                    textInputAction: TextInputAction.next,
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // حقل كلمة السر
-                  TextField(
-                    controller: passwordController,
-                    obscureText: true,
-                    decoration: InputDecoration(
-                      labelText: 'كلمة السر',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 14,
-                      ),
-                    ),
-                    textInputAction: TextInputAction.go,
-                    onSubmitted: (_) {
-                      // عند الضغط على Enter
-                      _validateLogin(
-                        sellerNameController.text,
-                        passwordController.text,
-                        accountsMap,
-                      );
-                    },
-                  ),
-
-                  const SizedBox(height: 8),
-
-                  // تذكير بالضغط على Enter
-                  const Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'اضغط Enter للتسجيل',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey,
-                        fontStyle: FontStyle.italic,
-                      ),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

@@ -138,23 +138,18 @@ class _YieldScreenState extends State<YieldScreen> {
   }
 
   Widget _buildLoginScreen() {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Colors.teal[700]!,
-            Colors.teal[500]!,
-            Colors.teal[300]!,
-          ],
-        ),
-      ),
-      child: Form(
-        key: _formKey,
+    // تم إزالة الـ Container مع الخلفية التدرجية من هنا
+    return Form(
+      key: _formKey,
+      child: SingleChildScrollView(
+        // إضافة SingleChildScrollView للسماح بالتمرير
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+        ), // إضافة مساحة عند ظهور لوحة المفاتيح
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            const SizedBox(height: 60), // مسافة من الأعلى
             const Icon(Icons.lock, size: 60, color: Colors.white),
             const SizedBox(height: 20),
             const Text('تسجيل الدخول',
@@ -226,6 +221,7 @@ class _YieldScreenState extends State<YieldScreen> {
                         style: TextStyle(
                             fontSize: 20, fontWeight: FontWeight.bold)),
                   ),
+            const SizedBox(height: 60), // مسافة من الأسفل
           ],
         ),
       ),
@@ -551,9 +547,24 @@ class _YieldScreenState extends State<YieldScreen> {
 
     // بناء واجهة المستخدم بناءً على حالة تسجيل الدخول
     if (!_isLoggedIn) {
-      // عرض شاشة تسجيل الدخول كاملة
+      // عرض شاشة تسجيل الدخول كاملة مع الخلفية هنا
       return Scaffold(
-        body: _buildLoginScreen(),
+        // وضع الخلفية التدرجية في Scaffold
+        body: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Colors.teal[700]!,
+                Colors.teal[500]!,
+                Colors.teal[300]!,
+              ],
+            ),
+          ),
+          // استدعاء شاشة تسجيل الدخول المعدلة
+          child: _buildLoginScreen(),
+        ),
       );
     } else {
       // عرض شاشة الغلة

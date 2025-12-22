@@ -246,57 +246,63 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
         children: [
           const Icon(Icons.vpn_key, size: 60, color: Colors.white),
           const SizedBox(height: 20),
-          const Text('إعداد التطبيق',
-              style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white)),
+          const Text(
+            'إعداد التطبيق',
+            style: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
           const SizedBox(height: 30),
           // استخدام Row لوضع الحقول بجانب بعضها
           Row(
             textDirection: TextDirection.rtl,
             children: [
               Expanded(
-                  child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                child: _buildInputField(
-                  _sellerNameController,
-                  'اسم البائع',
-                  false,
-                  focusNode: _sellerNameFocus,
-                  nextFocusNode: _newPasswordFocus,
-                  isLastInRow: false,
-                  flowState: LoginFlowState.setup,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                  child: _buildInputField(
+                    _sellerNameController,
+                    'اسم البائع',
+                    false,
+                    focusNode: _sellerNameFocus,
+                    nextFocusNode: _newPasswordFocus,
+                    isLastInRow: false,
+                    flowState: LoginFlowState.setup,
+                  ),
                 ),
-              )),
+              ),
               const SizedBox(width: 12),
               Expanded(
-                  child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                child: _buildInputField(
-                  _newPasswordController,
-                  'كلمة المرور الجديدة',
-                  true,
-                  focusNode: _newPasswordFocus,
-                  nextFocusNode: _confirmPasswordFocus,
-                  isLastInRow: false,
-                  flowState: LoginFlowState.setup,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                  child: _buildInputField(
+                    _newPasswordController,
+                    'كلمة المرور الجديدة',
+                    true,
+                    focusNode: _newPasswordFocus,
+                    nextFocusNode: _confirmPasswordFocus,
+                    isLastInRow: false,
+                    flowState: LoginFlowState.setup,
+                  ),
                 ),
-              )),
+              ),
               const SizedBox(width: 12),
               Expanded(
-                  child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                child: _buildInputField(
-                  _confirmPasswordController,
-                  'تأكيد كلمة المرور',
-                  true,
-                  focusNode: _confirmPasswordFocus,
-                  nextFocusNode: null,
-                  isLastInRow: true,
-                  flowState: LoginFlowState.setup,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                  child: _buildInputField(
+                    _confirmPasswordController,
+                    'تأكيد كلمة المرور',
+                    true,
+                    focusNode: _confirmPasswordFocus,
+                    nextFocusNode: null,
+                    isLastInRow: true,
+                    flowState: LoginFlowState.setup,
+                  ),
                 ),
-              )),
+              ),
             ],
           ),
           const SizedBox(height: 30),
@@ -308,13 +314,17 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                     backgroundColor: Colors.white,
                     foregroundColor: Colors.teal[700],
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 60, vertical: 15),
+                      horizontal: 60,
+                      vertical: 15,
+                    ),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
-                  child: const Text('حفظ',
-                      style:
-                          TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  child: const Text(
+                    'حفظ',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
                 ),
         ],
       ),
@@ -330,11 +340,14 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
         children: [
           const Icon(Icons.lock, size: 60, color: Colors.white),
           const SizedBox(height: 20),
-          const Text('تسجيل الدخول',
-              style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white)),
+          const Text(
+            'تسجيل الدخول',
+            style: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
           const SizedBox(height: 40),
           Row(
             textDirection: TextDirection.rtl,
@@ -380,13 +393,17 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                     backgroundColor: Colors.white,
                     foregroundColor: Colors.teal[700],
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 60, vertical: 15),
+                      horizontal: 60,
+                      vertical: 15,
+                    ),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
-                  child: const Text('دخول',
-                      style:
-                          TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  child: const Text(
+                    'دخول',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
                 ),
         ],
       ),
@@ -416,11 +433,13 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
         filled: true,
         fillColor: Colors.white.withOpacity(0.2),
         border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none),
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
         focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Colors.white, width: 2)),
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.white, width: 2),
+        ),
         errorText: errorText,
         errorStyle: const TextStyle(color: Colors.yellowAccent),
       ),
@@ -459,11 +478,14 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
         children: [
           const Icon(Icons.store, size: 60, color: Colors.white),
           const SizedBox(height: 20),
-          const Text('تحديد اسم المحل',
-              style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white)),
+          const Text(
+            'تحديد اسم المحل',
+            style: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
           const SizedBox(height: 30),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 50.0),
@@ -486,13 +508,17 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                     backgroundColor: Colors.white,
                     foregroundColor: Colors.teal[700],
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 60, vertical: 15),
+                      horizontal: 60,
+                      vertical: 15,
+                    ),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
-                  child: const Text('حفظ ومتابعة',
-                      style:
-                          TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  child: const Text(
+                    'حفظ ومتابعة',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
                 ),
         ],
       ),

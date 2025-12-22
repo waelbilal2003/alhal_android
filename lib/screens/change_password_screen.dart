@@ -285,7 +285,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 12),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
-                side: const BorderSide(color: Colors.white, width: 1),
+                side: BorderSide(color: Colors.white, width: 1),
               ),
             ),
             child: const Text(
@@ -312,7 +312,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
         decoration: BoxDecoration(
           color: Colors.white.withOpacity(0.15),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white.withOpacity(0.3), width: 1),
+          border: Border.all(color: Colors.white, width: 1),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -405,7 +405,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                           horizontal: 30, vertical: 12),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
-                        side: const BorderSide(color: Colors.white, width: 1),
+                        side: BorderSide(color: Colors.white, width: 1),
                       ),
                     ),
                     child: const Text(
@@ -489,7 +489,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                           horizontal: 30, vertical: 12),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
-                        side: const BorderSide(color: Colors.white, width: 1),
+                        side: BorderSide(color: Colors.white, width: 1),
                       ),
                     ),
                     child: const Text(
@@ -573,7 +573,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                           horizontal: 30, vertical: 12),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
-                        side: const BorderSide(color: Colors.white, width: 1),
+                        side: BorderSide(color: Colors.white, width: 1),
                       ),
                     ),
                     child: const Text(
@@ -644,11 +644,11 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
           fillColor: Colors.white.withOpacity(0.2),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none,
+            borderSide: BorderSide(width: 0),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Colors.white, width: 2),
+            borderSide: BorderSide(color: Colors.white, width: 2),
           ),
           contentPadding:
               const EdgeInsets.symmetric(vertical: 16, horizontal: 20),

@@ -77,8 +77,12 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
 
   // دالة لبناء حقل الإدخال مع دعم زر ENTER
   Widget _buildInputField(
-      TextEditingController controller, String hint, bool obscure,
-      {String? errorText, Function()? onSubmitted}) {
+    TextEditingController controller,
+    String hint,
+    bool obscure, {
+    String? errorText,
+    Function()? onSubmitted,
+  }) {
     return TextFormField(
       controller: controller,
       obscureText: obscure,
@@ -90,11 +94,13 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
         filled: true,
         fillColor: Colors.white.withOpacity(0.2),
         border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none),
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
         focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Colors.white, width: 2)),
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.white, width: 2),
+        ),
         errorText: errorText,
         errorStyle: const TextStyle(color: Colors.yellowAccent),
       ),
@@ -134,9 +140,10 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
                 Text(
                   _currentStoreName,
                   style: const TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white),
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
                 ),
                 const SizedBox(height: 30),
 
@@ -150,19 +157,24 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 8.0),
                           child: _buildInputField(
-                              _sellerNameController, 'اسم البائع', false,
-                              onSubmitted: () =>
-                                  FocusScope.of(context).nextFocus()),
+                            _sellerNameController,
+                            'اسم البائع',
+                            false,
+                            onSubmitted: () =>
+                                FocusScope.of(context).nextFocus(),
+                          ),
                         ),
                       ),
                       Expanded(
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 8.0),
                           child: _buildInputField(
-                              _passwordController, 'كلمة السر', true,
-                              errorText: _errorMessage,
-                              onSubmitted:
-                                  _handleEditSeller), // عند الضغط على ENTER في آخر حقل، يتم محاولة التعديل
+                            _passwordController,
+                            'كلمة السر',
+                            true,
+                            errorText: _errorMessage,
+                            onSubmitted: _handleEditSeller,
+                          ), // عند الضغط على ENTER في آخر حقل، يتم محاولة التعديل
                         ),
                       ),
                     ],
@@ -201,7 +213,10 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
   }
 
   Widget _buildActionButton(
-      String text, IconData icon, VoidCallback onPressed) {
+    String text,
+    IconData icon,
+    VoidCallback onPressed,
+  ) {
     return Expanded(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8.0),
@@ -212,8 +227,9 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(vertical: 15),
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
         ),
       ),
@@ -224,9 +240,8 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
   void _handleAddSeller() {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) => const LoginScreen(
-          initialState: LoginFlowState.setup,
-        ),
+        builder: (context) =>
+            const LoginScreen(initialState: LoginFlowState.setup),
       ),
     );
   }
@@ -287,7 +302,10 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
           const Text(
             'قائمة البائعين المسجلين:',
             style: TextStyle(
-                fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 15),
@@ -311,7 +329,8 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
                       backgroundColor: Colors.red,
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8)),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                     ),
                     child: const Text('حذف'),
                   ),
@@ -331,7 +350,8 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
         return AlertDialog(
           title: const Text('تأكيد الحذف'),
           content: Text(
-              'سيؤدي هذا إلى حذف البائع "$sellerName" بشكل نهائي. هل أنت متأكد؟'),
+            'سيؤدي هذا إلى حذف البائع "$sellerName" بشكل نهائي. هل أنت متأكد؟',
+          ),
           actions: <Widget>[
             TextButton(
               child: const Text('إلغاء'),

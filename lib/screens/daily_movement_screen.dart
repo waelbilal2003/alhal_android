@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/store_db_service.dart'; // استيراد خدمة قاعدة البيانات
 import 'seller_management_screen.dart'; // استيراد الشاشة الجديدة
-import 'daily_movement/yield_screen.dart';
+import 'daily_movement/yield_screen.dart' as DailyMovementYield;
 import 'daily_movement/purchases_screen.dart';
 
 class DailyMovementScreen extends StatefulWidget {
@@ -117,9 +117,9 @@ class _DailyMovementScreenState extends State<DailyMovementScreen> {
                         color: Colors.purple[700]!, onTap: () {
                       Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (context) => YieldScreen(
-                            sellerName: widget
-                                .sellerName, // تغيير sellerName إلى widget.sellerName
+                          builder: (context) => DailyMovementYield.YieldScreen(
+                            // استخدام الـ alias
+                            sellerName: widget.sellerName,
                             password: '******',
                           ),
                         ),

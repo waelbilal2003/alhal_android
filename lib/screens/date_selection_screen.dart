@@ -57,7 +57,7 @@ class _DateSelectionScreenState extends State<DateSelectionScreen> {
       'سبتمبر',
       'أكتوبر',
       'نوفمبر',
-      'ديسمبر'
+      'ديسمبر',
     ];
 
     String displayValue =
@@ -70,9 +70,10 @@ class _DateSelectionScreenState extends State<DateSelectionScreen> {
           Text(
             '$label:',
             style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.black54),
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.black54,
+            ),
           ),
           const SizedBox(height: 8),
           Container(
@@ -96,9 +97,10 @@ class _DateSelectionScreenState extends State<DateSelectionScreen> {
                       displayValue,
                       textAlign: TextAlign.center,
                       style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87),
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
                     ),
                   ),
                 ),
@@ -195,9 +197,12 @@ class _DateSelectionScreenState extends State<DateSelectionScreen> {
                     backgroundColor: Colors.green[600],
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 60, vertical: 18),
+                      horizontal: 60,
+                      vertical: 18,
+                    ),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                     elevation: 4,
                   ),
                   icon: const Icon(Icons.check_circle_outline, size: 24),

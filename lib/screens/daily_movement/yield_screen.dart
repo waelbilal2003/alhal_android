@@ -24,12 +24,12 @@ class _YieldScreenState extends State<YieldScreen> {
   // متغيرات التحكم بشاشة تسجيل الدخول
   bool _isLoggedIn = false;
   bool _isLoading = false;
-  String _errorMessage = '';
+  String? _errorMessage; // تم التعديل ليقبل null
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final TextEditingController _sellerNameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  final FocusNode _loginSellerNameFocus = FocusNode();
-  final FocusNode _loginPasswordFocus = FocusNode();
+  late FocusNode _loginSellerNameFocus; // تم التعديل
+  late FocusNode _loginPasswordFocus; // تم التعديل
 
   double _yield = 0;
   String _status = '';
@@ -59,6 +59,10 @@ class _YieldScreenState extends State<YieldScreen> {
   @override
   void initState() {
     super.initState();
+    // تهيئة FocusNodes
+    _loginSellerNameFocus = FocusNode();
+    _loginPasswordFocus = FocusNode();
+
     // تحقق إذا كان المستخدم مسجل دخول مسبقاً
     _checkIfLoggedIn();
 
@@ -85,7 +89,7 @@ class _YieldScreenState extends State<YieldScreen> {
     if (_formKey.currentState?.validate() ?? false) {
       setState(() {
         _isLoading = true;
-        _errorMessage = '';
+        _errorMessage = null; // تم التعديل
       });
 
       try {
@@ -133,152 +137,130 @@ class _YieldScreenState extends State<YieldScreen> {
       _isLoggedIn = false;
       _sellerNameController.clear();
       _passwordController.clear();
-      _errorMessage = '';
+      _errorMessage = null;
     });
   }
 
+  // --- واجهة تسجيل الدخول الجديدة (نسخ من login_screen.dart) ---
   Widget _buildLoginScreen() {
-    // تم إزالة الـ Container مع الخلفية التدرجية من هنا
     return Form(
       key: _formKey,
-      child: SingleChildScrollView(
-        // إضافة SingleChildScrollView للسماح بالتمرير
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
-        ), // إضافة مساحة عند ظهور لوحة المفاتيح
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const SizedBox(height: 60), // مسافة من الأعلى
-            const Icon(Icons.lock, size: 60, color: Colors.white),
-            const SizedBox(height: 20),
-            const Text('تسجيل الدخول',
-                style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white)),
-            const SizedBox(height: 40),
-            Row(
-              textDirection: TextDirection.rtl,
-              children: [
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                    child: _buildLoginInputField(
-                      _sellerNameController,
-                      'أدخل اسم البائع',
-                      false,
-                      focusNode: _loginSellerNameFocus,
-                      nextFocusNode: _loginPasswordFocus,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                    child: _buildLoginInputField(
-                      _passwordController,
-                      'أدخل كلمة المرور',
-                      true,
-                      focusNode: _loginPasswordFocus,
-                      nextFocusNode: null,
-                      isPassword: true,
-                    ),
-                  ),
-                ),
-              ],
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.lock, size: 60, color: Colors.white),
+          const SizedBox(height: 20),
+          const Text(
+            'تسجيل الدخول',
+            style: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
             ),
-            if (_errorMessage.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                child: Text(
-                  _errorMessage,
-                  style: const TextStyle(
-                    color: Colors.red,
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
+          ),
+          const SizedBox(height: 40),
+          Row(
+            textDirection: TextDirection.rtl,
+            children: [
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                  child: _buildInputField(
+                    _sellerNameController,
+                    'أدخل اسم البائع',
+                    false,
+                    focusNode: _loginSellerNameFocus,
+                    nextFocusNode: _loginPasswordFocus,
+                    isLastInRow: false,
+                    errorText: _errorMessage, // تمرير رسالة الخطأ هنا
                   ),
-                  textAlign: TextAlign.center,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                  child: _buildInputField(
+                    _passwordController,
+                    'أدخل كلمة المرور',
+                    true,
+                    focusNode: _loginPasswordFocus,
+                    nextFocusNode: null,
+                    isLastInRow: true,
+                  ),
                 ),
               ),
             ],
-            const SizedBox(height: 30),
-            _isLoading
-                ? const CircularProgressIndicator(color: Colors.white)
-                : ElevatedButton(
-                    onPressed: _login,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: Colors.teal[700],
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 60, vertical: 15),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
+          ),
+          const SizedBox(height: 30),
+          _isLoading
+              ? const CircularProgressIndicator(color: Colors.white)
+              : ElevatedButton(
+                  onPressed: _login,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: Colors.teal[700],
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 60,
+                      vertical: 15,
                     ),
-                    child: const Text('دخول',
-                        style: TextStyle(
-                            fontSize: 20, fontWeight: FontWeight.bold)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
-            const SizedBox(height: 60), // مسافة من الأسفل
-          ],
-        ),
+                  child: const Text(
+                    'دخول',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                ),
+        ],
       ),
     );
   }
 
-  Widget _buildLoginInputField(
+  // --- دالة بناء حقل الإدخال الجديدة (نسخ من login_screen.dart) ---
+  Widget _buildInputField(
     TextEditingController controller,
-    String hintText,
-    bool isLastInRow, {
+    String hint,
+    bool obscure, {
     FocusNode? focusNode,
     FocusNode? nextFocusNode,
-    bool isPassword = false,
+    bool isLastInRow = false,
+    String? errorText,
   }) {
     return TextFormField(
       controller: controller,
+      obscureText: obscure,
+      textAlign: TextAlign.center,
       focusNode: focusNode,
-      obscureText: isPassword,
-      style: const TextStyle(color: Colors.white, fontSize: 16),
-      textDirection: TextDirection.rtl, // إضافة هذا السطر
-      textAlign: TextAlign.right, // إضافة هذا السطر
+      textDirection: TextDirection.rtl,
+      style: const TextStyle(color: Colors.white), // لضمان لون النص
       decoration: InputDecoration(
-        hintText: hintText,
+        hintText: hint,
         hintStyle: const TextStyle(color: Colors.white70),
         filled: true,
-        fillColor: Colors.white.withOpacity(0.1),
+        fillColor: Colors.white.withOpacity(0.2),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: Colors.white.withOpacity(0.5)),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: Colors.white.withOpacity(0.5)),
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: Colors.white, width: 2),
         ),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        errorStyle: const TextStyle(color: Colors.yellow),
-        hintTextDirection: TextDirection.rtl, // إضافة هذا السطر
+        errorText: errorText,
+        errorStyle: const TextStyle(color: Colors.yellowAccent),
       ),
-      textInputAction:
-          isLastInRow ? TextInputAction.done : TextInputAction.next,
+      validator: (value) {
+        if (value == null || value.isEmpty) return 'هذا الحقل مطلوب';
+        return null;
+      },
       onFieldSubmitted: (_) {
         if (isLastInRow) {
           _login();
         } else if (nextFocusNode != null) {
           FocusScope.of(context).requestFocus(nextFocusNode);
         }
-      },
-      validator: (value) {
-        if (value == null || value.trim().isEmpty) {
-          return 'هذا الحقل مطلوب';
-        }
-        return null;
       },
     );
   }
@@ -340,14 +322,14 @@ class _YieldScreenState extends State<YieldScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Expanded(
-                          child: _buildInputField(
+                          child: _buildYieldInputField(
                             'مبيعات نقدية',
                             _cashSalesController,
                           ),
                         ),
                         const SizedBox(width: 16),
                         Expanded(
-                          child: _buildInputField(
+                          child: _buildYieldInputField(
                             'مقبوضات',
                             _receiptsController,
                           ),
@@ -361,14 +343,14 @@ class _YieldScreenState extends State<YieldScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Expanded(
-                          child: _buildInputField(
+                          child: _buildYieldInputField(
                             'مشتريات نقدية',
                             _cashPurchasesController,
                           ),
                         ),
                         const SizedBox(width: 16),
                         Expanded(
-                          child: _buildInputField(
+                          child: _buildYieldInputField(
                             'مدفوعات',
                             _paymentsController,
                           ),
@@ -419,7 +401,7 @@ class _YieldScreenState extends State<YieldScreen> {
                         ),
                         const SizedBox(width: 16),
                         Expanded(
-                          child: _buildInputField(
+                          child: _buildYieldInputField(
                             'المقبوض منه',
                             _collectedController,
                           ),
@@ -477,7 +459,8 @@ class _YieldScreenState extends State<YieldScreen> {
     );
   }
 
-  Widget _buildInputField(String label, TextEditingController controller) {
+  // تم تغيير اسم الدالة لتجنب التعارض
+  Widget _buildYieldInputField(String label, TextEditingController controller) {
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(8),
@@ -547,23 +530,23 @@ class _YieldScreenState extends State<YieldScreen> {
 
     // بناء واجهة المستخدم بناءً على حالة تسجيل الدخول
     if (!_isLoggedIn) {
-      // عرض شاشة تسجيل الدخول كاملة مع الخلفية هنا
+      // عرض شاشة تسجيل الدخول كاملة مع الخلفية
       return Scaffold(
-        // وضع الخلفية التدرجية في Scaffold
         body: Container(
+          // استخدام نفس التدرج اللوني والتوسيط من login_screen
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                Colors.teal[700]!,
-                Colors.teal[500]!,
-                Colors.teal[300]!,
-              ],
+              colors: [Colors.teal[400]!, Colors.teal[700]!],
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
             ),
           ),
-          // استدعاء شاشة تسجيل الدخول المعدلة
-          child: _buildLoginScreen(),
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24.0),
+              child: _buildLoginScreen(),
+            ),
+          ),
         ),
       );
     } else {

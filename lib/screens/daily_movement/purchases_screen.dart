@@ -252,7 +252,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                 2), // العائدية
             _buildTableCell(
                 rowControllers[i][3], rowFocusNodes[i][3], true, i, 3), // العدد
-            _buildTableCell(rowControllers[i][4], rowFocusNodes[i][4], true, i,
+            _buildTableCell(rowControllers[i][4], rowFocusNodes[i][4], false, i,
                 4), // العبوة
             _buildTableCell(rowControllers[i][5], rowFocusNodes[i][5], true, i,
                 5), // القائم
@@ -260,8 +260,8 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                 6), // الصافي
             _buildTableCell(
                 rowControllers[i][7], rowFocusNodes[i][7], true, i, 7), // السعر
-            _buildTableCell(rowControllers[i][8], rowFocusNodes[i][8], false, i,
-                8), // الإجمالي
+            // ===== التعديل: حقل الإجمالي غير قابل للتعديل =====
+            _buildTotalValueCell(rowControllers[i][8]), // الإجمالي
             _buildCashOrDebtCell(i, 9), // نقدي او دين (المؤشر 9)
             _buildEmptiesCell(i, 10), // الفوارغ (المؤشر 10)
           ],
@@ -324,17 +324,26 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           // عند النقر على الحقل، قم بالتمرير لضمان ظهوره
           _scrollToField(rowIndex, colIndex);
         },
+        // ===== التعديل: تغيير سلوك Enter للحقل السابع =====
         onSubmitted: (value) {
-          if (colIndex < 10) {
-            FocusScope.of(context)
-                .requestFocus(rowFocusNodes[rowIndex][colIndex + 1]);
-          } else if (colIndex == 10) {
+          // إذا كان الحقل الحالي هو "السعر" (المؤشر 7)
+          if (colIndex == 7) {
+            // افتح مربع اختيار "نقدي أو دين"
+            _showCashOrDebtDialog(rowIndex);
+          }
+          // إذا كان الحقل الحالي هو "الفوارغ" (المؤشر 10)
+          else if (colIndex == 10) {
             _addNewRow();
             if (rowControllers.length > 0) {
               final newRowIndex = rowControllers.length - 1;
               FocusScope.of(context)
                   .requestFocus(rowFocusNodes[newRowIndex][0]);
             }
+          }
+          // للحقول الأخرى (0-6، 8-9) استمر في التنقل
+          else if (colIndex < 10) {
+            FocusScope.of(context)
+                .requestFocus(rowFocusNodes[rowIndex][colIndex + 1]);
           }
         },
         onChanged: (value) {
@@ -357,6 +366,32 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           }
           // ========================================================
         },
+      ),
+    );
+  }
+
+  // ===== وظيفة جديدة: خلية الإجمالي غير القابلة للتعديل =====
+  Widget _buildTotalValueCell(TextEditingController controller) {
+    return Container(
+      padding: const EdgeInsets.all(1),
+      constraints: const BoxConstraints(minHeight: 25),
+      child: TextField(
+        controller: controller,
+        decoration: const InputDecoration(
+          contentPadding: EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+          border: InputBorder.none,
+          hintText: '0.00',
+          hintStyle: TextStyle(fontSize: 13, color: Colors.grey),
+        ),
+        style: const TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.bold,
+          color: Colors.blue,
+        ),
+        maxLines: 1,
+        keyboardType: TextInputType.number,
+        enabled: false, // غير قابل للتعديل
+        readOnly: true, // للقراءة فقط
       ),
     );
   }
@@ -630,9 +665,10 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                       });
                       Navigator.of(context).pop();
                       _buildTableRows();
+                      // ===== التعديل: التبويب إلى حقل "الفوارغ" =====
                       if (rowIndex >= 0) {
-                        FocusScope.of(context)
-                            .requestFocus(rowFocusNodes[rowIndex][8]);
+                        _showEmptiesDialog(
+                            rowIndex); // افتح اختيار الفوارغ مباشرة
                       }
                     },
                   ),
@@ -642,9 +678,10 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                     });
                     Navigator.of(context).pop();
                     _buildTableRows();
+                    // ===== التعديل: التبويب إلى حقل "الفوارغ" =====
                     if (rowIndex >= 0) {
-                      FocusScope.of(context)
-                          .requestFocus(rowFocusNodes[rowIndex][8]);
+                      _showEmptiesDialog(
+                          rowIndex); // افتح اختيار الفوارغ مباشرة
                     }
                   },
                 );

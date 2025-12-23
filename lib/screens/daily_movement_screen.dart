@@ -99,11 +99,10 @@ class _DailyMovementScreenState extends State<DailyMovementScreen> {
                       Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (context) => PurchasesScreen(
-                            sellerName: widget
-                                .sellerName, // تغيير sellerName إلى widget.sellerName
-                            selectedDate: widget
-                                .selectedDate, // تغيير selectedDate إلى widget.selectedDate
-                          ),
+                              sellerName: widget.sellerName, // تخزين اسم البائع
+                              selectedDate:
+                                  widget.selectedDate, // تخزين التاريخ
+                              storeName: _storeName),
                         ),
                       );
                     }),

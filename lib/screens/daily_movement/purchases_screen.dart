@@ -1,13 +1,72 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+// أضف هذا الكود في بداية ملف purchases_screen.dart (قبل تعريف الـ class)
+class PositiveDecimalInputFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    if (newValue.text.isEmpty) {
+      return newValue;
+    }
+
+    // التحقق من أن النص يحتوي فقط على أرقام ونقطة عشرية
+    final regex = RegExp(r'^[0-9]*\.?[0-9]*$');
+    if (!regex.hasMatch(newValue.text)) {
+      return oldValue;
+    }
+
+    // التحقق من وجود نقطة عشرية واحدة فقط
+    final decimalCount = '.'.allMatches(newValue.text).length;
+    if (decimalCount > 1) {
+      return oldValue;
+    }
+
+    // منع الأرقام السالبة
+    if (newValue.text.contains('-')) {
+      return oldValue;
+    }
+
+    return newValue;
+  }
+}
+
+// كلاس لتثبيت رأس الجدول
+class _StickyTableHeaderDelegate extends SliverPersistentHeaderDelegate {
+  final Widget child;
+
+  _StickyTableHeaderDelegate({required this.child});
+
+  @override
+  Widget build(
+      BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return SizedBox.expand(child: child);
+  }
+
+  @override
+  double get maxExtent => 32.0; // ارتفاع رأس الجدول
+
+  @override
+  double get minExtent => 32.0;
+
+  @override
+  bool shouldRebuild(_StickyTableHeaderDelegate oldDelegate) {
+    return child != oldDelegate.child;
+  }
+}
 
 class PurchasesScreen extends StatefulWidget {
   final String sellerName;
   final String selectedDate;
+  final String storeName;
 
   const PurchasesScreen({
     Key? key,
     required this.sellerName,
     required this.selectedDate,
+    required this.storeName,
   }) : super(key: key);
 
   @override
@@ -42,7 +101,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   // متحكمات للتمرير
   final ScrollController _verticalScrollController = ScrollController();
   final ScrollController _horizontalScrollController = ScrollController();
-  final GlobalKey _tableKey = GlobalKey();
+ 
 
   @override
   void initState() {
@@ -64,6 +123,11 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
     // إضافة الصف الأول عند التهيئة
     _addNewRow();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (rowFocusNodes.isNotEmpty && rowFocusNodes[0].length > 1) {
+        FocusScope.of(context).requestFocus(rowFocusNodes[0][1]);
+      }
+    });
   }
 
   @override
@@ -158,9 +222,13 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
     setState(() {
       try {
-        double count = double.tryParse(controllers[3].text) ?? 0; // العدد
-        double net = double.tryParse(controllers[6].text) ?? 0; // الصافي
-        double price = double.tryParse(controllers[7].text) ?? 0; // السعر
+        // تأكد من أن القيم غير سالبة
+        double count =
+            (double.tryParse(controllers[3].text) ?? 0).abs(); // العدد
+        double net =
+            (double.tryParse(controllers[6].text) ?? 0).abs(); // الصافي
+        double price =
+            (double.tryParse(controllers[7].text) ?? 0).abs(); // السعر
 
         // تطبيق القاعدة الجديدة:
         // إذا كان الصافي > 0، استخدم الصافي، وإلا استخدم العدد
@@ -215,81 +283,92 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
   // دالة لبناء صفوف الجدول
   void _buildTableRows() {
-    List<TableRow> newTableRows = [];
+    setState(() {
+      // سيتم إعادة بناء الواجهة تلقائياً
+    });
+  }
 
-    // صف العناوين
-    newTableRows.add(
-      TableRow(
-        decoration: BoxDecoration(
-          color: Colors.grey[200],
-        ),
-        children: [
-          _buildTableHeaderCell('مسلسل'),
-          _buildTableHeaderCell('المادة'),
-          _buildTableHeaderCell('العائدية'),
-          _buildTableHeaderCell('العدد'),
-          _buildTableHeaderCell('العبوة'),
-          _buildTableHeaderCell('القائم'),
-          _buildTableHeaderCell('الصافي'),
-          _buildTableHeaderCell('السعر'),
-          _buildTableHeaderCell('الإجمالي'),
-          _buildTableHeaderCell('نقدي او دين'),
-          _buildTableHeaderCell('الفوارغ'),
-        ],
-      ),
-    );
-
-    // إضافة صفوف البيانات
-    for (int i = 0; i < rowControllers.length; i++) {
-      newTableRows.add(
-        TableRow(
-          children: [
-            _buildTableCell(rowControllers[i][0], rowFocusNodes[i][0], false, i,
-                0), // مسلسل
-            _buildTableCell(rowControllers[i][1], rowFocusNodes[i][1], false, i,
-                1), // المادة
-            _buildTableCell(rowControllers[i][2], rowFocusNodes[i][2], false, i,
-                2), // العائدية
-            _buildTableCell(
-                rowControllers[i][3], rowFocusNodes[i][3], true, i, 3), // العدد
-            _buildTableCell(rowControllers[i][4], rowFocusNodes[i][4], false, i,
-                4), // العبوة
-            _buildTableCell(rowControllers[i][5], rowFocusNodes[i][5], true, i,
-                5), // القائم
-            _buildTableCell(rowControllers[i][6], rowFocusNodes[i][6], true, i,
-                6), // الصافي
-            _buildTableCell(
-                rowControllers[i][7], rowFocusNodes[i][7], true, i, 7), // السعر
-            // ===== التعديل: حقل الإجمالي غير قابل للتعديل =====
-            _buildTotalValueCell(rowControllers[i][8]), // الإجمالي
-            _buildCashOrDebtCell(i, 9), // نقدي او دين (المؤشر 9)
-            _buildEmptiesCell(i, 10), // الفوارغ (المؤشر 10)
-          ],
-        ),
-      );
-    }
-
-    // إضافة صف المجموع فقط إذا كان هناك أكثر من صف
-    if (rowControllers.length >= 2) {
-      newTableRows.add(
+  // بناء رأس الجدول المنفصل
+  Widget _buildTableHeader() {
+    return Table(
+      defaultColumnWidth: const FlexColumnWidth(),
+      border: TableBorder.all(color: Colors.grey, width: 0.5),
+      children: [
         TableRow(
           decoration: BoxDecoration(
-            color: Colors.yellow[50],
+            color: Colors.grey[200],
           ),
           children: [
-            _buildTableHeaderCell('المجموع'),
+            _buildTableHeaderCell('مسلسل'),
+            _buildTableHeaderCell('المادة'),
+            _buildTableHeaderCell('العائدية'),
+            _buildTableHeaderCell('العدد'),
+            _buildTableHeaderCell('العبوة'),
+            _buildTableHeaderCell('القائم'),
+            _buildTableHeaderCell('الصافي'),
+            _buildTableHeaderCell('السعر'),
+            _buildTableHeaderCell('الإجمالي'),
+            _buildTableHeaderCell('نقدي او دين'),
+            _buildTableHeaderCell('الفوارغ'),
+          ],
+        ),
+      ],
+    );
+  }
+
+  // بناء محتوى الجدول (بدون الرأس)
+  Widget _buildTableContent() {
+    List<TableRow> contentRows = [];
+
+    // إضافة صفوف البيانات فقط (بدون عنوان)
+    for (int i = 0; i < rowControllers.length; i++) {
+      contentRows.add(
+        TableRow(
+          children: [
+            _buildTableCell(
+                rowControllers[i][0], rowFocusNodes[i][0], false, i, 0),
+            _buildTableCell(
+                rowControllers[i][1], rowFocusNodes[i][1], false, i, 1),
+            _buildTableCell(
+                rowControllers[i][2], rowFocusNodes[i][2], false, i, 2),
+            _buildTableCell(
+                rowControllers[i][3], rowFocusNodes[i][3], true, i, 3),
+            _buildTableCell(
+                rowControllers[i][4], rowFocusNodes[i][4], false, i, 4),
+            _buildTableCell(
+                rowControllers[i][5], rowFocusNodes[i][5], true, i, 5),
+            _buildTableCell(
+                rowControllers[i][6], rowFocusNodes[i][6], true, i, 6),
+            _buildTableCell(
+                rowControllers[i][7], rowFocusNodes[i][7], true, i, 7),
+            _buildTotalValueCell(rowControllers[i][8]),
+            _buildCashOrDebtCell(i, 9),
+            _buildEmptiesCell(i, 10),
+          ],
+        ),
+      );
+    }
+
+    // إضافة صف المجموع إذا كان هناك أكثر من صف
+    if (rowControllers.length >= 2) {
+      contentRows.add(
+        TableRow(
+          decoration: BoxDecoration(color: Colors.yellow[50]),
+          children: [
             _buildTableCell(
                 TextEditingController()..text = '', FocusNode(), false, -1, -1),
             _buildTableCell(
                 TextEditingController()..text = '', FocusNode(), false, -1, -1),
-            _buildTotalCell(totalCountController), // مجموع العدد
             _buildTableCell(
                 TextEditingController()..text = '', FocusNode(), false, -1, -1),
-            _buildTotalCell(totalBaseController), // مجموع القائم
-            _buildTotalCell(totalNetController), // مجموع الصافي
+            _buildTotalCell(totalCountController),
             _buildTableCell(
                 TextEditingController()..text = '', FocusNode(), false, -1, -1),
-            _buildTotalCell(totalGrandController), // مجموع الإجمالي
+            _buildTotalCell(totalBaseController),
+            _buildTotalCell(totalNetController),
+            _buildTableCell(
+                TextEditingController()..text = '', FocusNode(), false, -1, -1),
+            _buildTotalCell(totalGrandController),
             _buildTableCell(
                 TextEditingController()..text = '', FocusNode(), false, -1, -1),
             _buildTableCell(
@@ -299,49 +378,71 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       );
     }
 
-    tableRows = newTableRows;
+    return Table(
+      defaultColumnWidth: const FlexColumnWidth(),
+      border: TableBorder.all(color: Colors.grey, width: 0.5),
+      children: contentRows,
+    );
   }
 
   Widget _buildTableCell(TextEditingController controller, FocusNode focusNode,
       bool isNumeric, int rowIndex, int colIndex) {
+    bool isSerialField = colIndex == 0;
+
+    // تحديد الحقول الرقمية: 3=العدد، 5=القائم، 6=الصافي، 7=السعر
+    bool isNumericField =
+        colIndex == 3 || colIndex == 5 || colIndex == 6 || colIndex == 7;
+
     return Container(
       padding: const EdgeInsets.all(1),
       constraints: const BoxConstraints(minHeight: 25),
       child: TextField(
         controller: controller,
         focusNode: focusNode,
+        enabled: !isSerialField,
+        readOnly: isSerialField,
         decoration: const InputDecoration(
           contentPadding: EdgeInsets.symmetric(horizontal: 2, vertical: 1),
           border: InputBorder.none,
           hintText: '.',
           hintStyle: TextStyle(fontSize: 13),
         ),
-        style: const TextStyle(fontSize: 13),
+        style: TextStyle(
+          fontSize: 13,
+          color: isSerialField ? Colors.grey[700] : Colors.black,
+        ),
         maxLines: 1,
-        keyboardType: isNumeric ? TextInputType.number : TextInputType.text,
-        textInputAction: TextInputAction.next, // جميع الحقول تستخدم next
+        keyboardType: isNumericField
+            ? TextInputType.numberWithOptions(decimal: true)
+            : TextInputType.text,
+        textInputAction: TextInputAction.next,
+
+        // ===== التعديل الجديد: فلترة الإدخال =====
+        inputFormatters: isNumericField
+            ? [
+                PositiveDecimalInputFormatter(),
+                // تقييد عدد المنازل العشرية إذا لزم الأمر
+                FilteringTextInputFormatter.deny(
+                    RegExp(r'\.\d{3,}')), // لا تسمح بأكثر من منزلتين عشريتين
+              ]
+            : null,
+
         onTap: () {
-          // عند النقر على الحقل، قم بالتمرير لضمان ظهوره
           _scrollToField(rowIndex, colIndex);
         },
-        // ===== التعديل: تغيير سلوك Enter للحقل السابع =====
         onSubmitted: (value) {
-          // إذا كان الحقل الحالي هو "السعر" (المؤشر 7)
-          if (colIndex == 7) {
-            // افتح مربع اختيار "نقدي أو دين"
+          if (colIndex == 0) {
+            FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][1]);
+          } else if (colIndex == 7) {
             _showCashOrDebtDialog(rowIndex);
-          }
-          // إذا كان الحقل الحالي هو "الفوارغ" (المؤشر 10)
-          else if (colIndex == 10) {
+          } else if (colIndex == 10) {
             _addNewRow();
             if (rowControllers.length > 0) {
               final newRowIndex = rowControllers.length - 1;
               FocusScope.of(context)
-                  .requestFocus(rowFocusNodes[newRowIndex][0]);
+                  .requestFocus(rowFocusNodes[newRowIndex][1]);
             }
-          }
-          // للحقول الأخرى (0-6، 8-9) استمر في التنقل
-          else if (colIndex < 10) {
+          } else if (colIndex < 10) {
             FocusScope.of(context)
                 .requestFocus(rowFocusNodes[rowIndex][colIndex + 1]);
           }
@@ -354,17 +455,52 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
             }
           }
 
-          // ===== تم التعديل: إضافة المؤشر 6 (الصافي) إلى الشرط =====
-          // إذا كان حقل حسابي (العدد، العبوة، القائم، الصافي، السعر)
+          // ===== التعديل الجديد: فلترة الإدخال الفوري =====
+          if (isNumericField) {
+            // حذف أي حرف غير رقم أو نقطة
+            if (value.isNotEmpty) {
+              String filteredValue = '';
+              bool hasDecimalPoint = false;
+
+              for (int i = 0; i < value.length; i++) {
+                final char = value[i];
+
+                // التحقق من أن الحرف رقم
+                if (char.codeUnitAt(0) >= 48 && char.codeUnitAt(0) <= 57) {
+                  filteredValue += char;
+                }
+                // التحقق من أن الحرف نقطة عشرية ولم تكن موجودة من قبل
+                else if (char == '.' && !hasDecimalPoint) {
+                  filteredValue += char;
+                  hasDecimalPoint = true;
+                }
+              }
+
+              // تحديث قيمة المتحكم إذا تغيرت
+              if (filteredValue != value) {
+                controller.value = controller.value.copyWith(
+                  text: filteredValue,
+                  selection:
+                      TextSelection.collapsed(offset: filteredValue.length),
+                );
+              }
+            }
+
+            // التحقق من عدم وجود علامة سالب
+            if (value.contains('-')) {
+              final cleanValue = value.replaceAll('-', '');
+              controller.text = cleanValue;
+            }
+          }
+
           if (colIndex == 3 ||
               colIndex == 4 ||
               colIndex == 5 ||
-              colIndex == 6 || // <-- تمت إضافة هذا السطر
+              colIndex == 6 ||
               colIndex == 7) {
             _calculateRowValues(rowIndex);
             _calculateAllTotals();
           }
-          // ========================================================
         },
       ),
     );
@@ -398,23 +534,22 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
   // دالة للتمرير إلى الحقل المحدد
   void _scrollToField(int rowIndex, int colIndex) {
-    final RenderBox? renderBox =
-        _tableKey.currentContext?.findRenderObject() as RenderBox?;
-    if (renderBox == null) return;
-
+    const double headerHeight =
+        32.0; // نفس الارتفاع المحدد في _StickyTableHeaderDelegate
     const double rowHeight = 25.0;
-    final double verticalPosition = (rowIndex + 1) * rowHeight;
+    final double verticalPosition = (rowIndex * rowHeight);
     const double columnWidth = 60.0;
     final double horizontalPosition = colIndex * columnWidth;
 
-    final double verticalScrollOffset =
-        verticalPosition - (MediaQuery.of(context).size.height * 0.3);
+    // التمرير العمودي
+    final double verticalScrollOffset = verticalPosition;
     _verticalScrollController.animateTo(
-      verticalScrollOffset,
+      verticalScrollOffset + headerHeight, // إضافة ارتفاع الرأس
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeInOut,
     );
 
+    // التمرير الأفقي
     _horizontalScrollController.animateTo(
       horizontalPosition,
       duration: const Duration(milliseconds: 300),
@@ -555,73 +690,61 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-            'يومية مشتريات رقم /${serialNumber}/ ليوم $dayName تاريخ ${widget.selectedDate} البائع : ${widget.sellerName}',
-            style: const TextStyle(fontWeight: FontWeight.bold)),
+          'يومية مشتريات رقم /${serialNumber}/ ليوم $dayName تاريخ ${widget.selectedDate} لمحل ${widget.storeName} البائع ${widget.sellerName}',
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 14,
+          ),
+        ),
         centerTitle: true,
         backgroundColor: Colors.red[700],
         foregroundColor: Colors.white,
       ),
-      body: Directionality(
-        textDirection: TextDirection.rtl,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return SingleChildScrollView(
-              child: Container(
-                padding: EdgeInsets.only(
-                  bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-                ),
-                constraints: BoxConstraints(
-                  minHeight: constraints.maxHeight,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      height: constraints.maxHeight -
-                          MediaQuery.of(context).viewInsets.bottom,
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Expanded(
-                            flex: 8,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                border: Border.all(color: Colors.grey),
-                              ),
-                              child: _buildCompactTable(
-                                  constraints.maxHeight * 0.7),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        ),
-      ),
+      body: _buildTableWithStickyHeader(),
     );
   }
 
-  Widget _buildCompactTable(double maxHeight) {
-    return SingleChildScrollView(
-      key: _tableKey,
-      scrollDirection: Axis.horizontal,
-      controller: _horizontalScrollController,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.vertical,
+  // بناء الواجهة مع رأس جدول مثبت
+  Widget _buildTableWithStickyHeader() {
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: CustomScrollView(
         controller: _verticalScrollController,
-        child: SizedBox(
-          width: MediaQuery.of(context).size.width * 0.97,
-          child: Table(
-            defaultColumnWidth: const FlexColumnWidth(),
-            border: TableBorder.all(color: Colors.grey, width: 0.5),
-            children: tableRows,
+        slivers: [
+          // الجزء العلوي المثبت (رأس الجدول)
+          SliverPersistentHeader(
+            pinned: true, // تثبيت الرأس
+            floating: false,
+            delegate: _StickyTableHeaderDelegate(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.grey[200],
+                  border: Border.all(color: Colors.grey),
+                ),
+                child: _buildTableHeader(),
+              ),
+            ),
           ),
-        ),
+
+          // محتوى الجدول (البيانات)
+          SliverToBoxAdapter(
+            child: Container(
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey),
+              ),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                controller: _horizontalScrollController,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minWidth: MediaQuery.of(context).size.width,
+                  ),
+                  child: _buildTableContent(),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

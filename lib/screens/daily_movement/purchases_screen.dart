@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../models/purchase_model.dart';
+import '../../services/purchase_storage_service.dart';
 
 // أضف هذا الكود في بداية ملف purchases_screen.dart (قبل تعريف الـ class)
 class PositiveDecimalInputFormatter extends TextInputFormatter {
@@ -74,6 +76,9 @@ class PurchasesScreen extends StatefulWidget {
 }
 
 class _PurchasesScreenState extends State<PurchasesScreen> {
+  // خدمة التخزين
+  final PurchaseStorageService _storageService = PurchaseStorageService();
+
   // بيانات الحقول
   String dayInfo = '';
   String date = '';
@@ -101,7 +106,9 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   // متحكمات للتمرير
   final ScrollController _verticalScrollController = ScrollController();
   final ScrollController _horizontalScrollController = ScrollController();
- 
+
+  // حالة الحفظ
+  bool _isSaving = false;
 
   @override
   void initState() {
@@ -110,8 +117,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     _extractDayName(widget.selectedDate);
     // تعيين التاريخ المحدد
     date = widget.selectedDate;
-    // تعيين الرقم الافتراضي
-    serialNumber = '1';
 
     // تهيئة المتحكمات الخاصة بصف المجموع
     totalCountController = TextEditingController();
@@ -121,12 +126,9 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
     _resetTotalValues();
 
-    // إضافة الصف الأول عند التهيئة
-    _addNewRow();
+    // عرض نافذة اختيار السجل
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (rowFocusNodes.isNotEmpty && rowFocusNodes[0].length > 1) {
-        FocusScope.of(context).requestFocus(rowFocusNodes[0][1]);
-      }
+      _showRecordSelectionDialog();
     });
   }
 
@@ -699,6 +701,35 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
         centerTitle: true,
         backgroundColor: Colors.red[700],
         foregroundColor: Colors.white,
+        actions: [
+          // زر المشاركة
+          IconButton(
+            icon: const Icon(Icons.share),
+            tooltip: 'مشاركة الملف',
+            onPressed: _shareFile,
+          ),
+          // زر الحفظ
+          IconButton(
+            icon: _isSaving
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
+                : const Icon(Icons.save),
+            tooltip: 'حفظ السجل',
+            onPressed: _isSaving ? null : _saveCurrentRecord,
+          ),
+          // زر فتح سجل آخر
+          IconButton(
+            icon: const Icon(Icons.folder_open),
+            tooltip: 'فتح سجل',
+            onPressed: _showRecordSelectionDialog,
+          ),
+        ],
       ),
       body: _buildTableWithStickyHeader(),
     );
@@ -895,6 +926,358 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           _scrollToField(newRowIndex, 0);
         }
       });
+    }
+  }
+
+  // عرض نافذة اختيار السجلات
+  Future<void> _showRecordSelectionDialog() async {
+    final availableRecords =
+        await _storageService.getAvailableRecords(widget.selectedDate);
+
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text(
+            'اختر رقم السجل',
+            style: TextStyle(fontWeight: FontWeight.bold),
+            textAlign: TextAlign.center,
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (availableRecords.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(16.0),
+                    child: Text(
+                      'لا توجد سجلات محفوظة لهذا التاريخ',
+                      style: TextStyle(color: Colors.grey),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                if (availableRecords.isNotEmpty)
+                  ...availableRecords.map((recordNum) {
+                    return Card(
+                      elevation: 2,
+                      margin: const EdgeInsets.symmetric(vertical: 4),
+                      child: ListTile(
+                        leading:
+                            const Icon(Icons.description, color: Colors.blue),
+                        title: Text(
+                          'سجل رقم $recordNum',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.delete, color: Colors.red),
+                              onPressed: () async {
+                                final confirm = await showDialog<bool>(
+                                  context: context,
+                                  builder: (context) => AlertDialog(
+                                    title: const Text('تأكيد الحذف'),
+                                    content: Text(
+                                        'هل تريد حذف السجل رقم $recordNum؟'),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.pop(context, false),
+                                        child: const Text('إلغاء'),
+                                      ),
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.pop(context, true),
+                                        child: const Text('حذف',
+                                            style:
+                                                TextStyle(color: Colors.red)),
+                                      ),
+                                    ],
+                                  ),
+                                );
+
+                                if (confirm == true) {
+                                  await _storageService.deletePurchaseDocument(
+                                    widget.selectedDate,
+                                    recordNum,
+                                  );
+                                  Navigator.pop(context);
+                                  _showRecordSelectionDialog();
+                                }
+                              },
+                            ),
+                          ],
+                        ),
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          _loadRecord(recordNum);
+                        },
+                      ),
+                    );
+                  }).toList(),
+                const Divider(),
+                ElevatedButton.icon(
+                  onPressed: () async {
+                    final nextNumber = await _storageService
+                        .getNextRecordNumber(widget.selectedDate);
+                    if (mounted) {
+                      Navigator.of(context).pop();
+                      _createNewRecord(nextNumber);
+                    }
+                  },
+                  icon: const Icon(Icons.add_circle_outline),
+                  label: const Text('سجل جديد'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green[600],
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 24, vertical: 12),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // إنشاء سجل جديد
+  void _createNewRecord(String recordNumber) {
+    setState(() {
+      serialNumber = recordNumber;
+      // مسح جميع البيانات
+      rowControllers.clear();
+      rowFocusNodes.clear();
+      cashOrDebtValues.clear();
+      emptiesValues.clear();
+      _resetTotalValues();
+      // إضافة صف جديد
+      _addNewRow();
+    });
+
+    // تركيز على الحقل الأول
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (rowFocusNodes.isNotEmpty && rowFocusNodes[0].length > 1) {
+        FocusScope.of(context).requestFocus(rowFocusNodes[0][1]);
+      }
+    });
+  }
+
+  // تحميل سجل موجود
+  Future<void> _loadRecord(String recordNumber) async {
+    final document = await _storageService.loadPurchaseDocument(
+      widget.selectedDate,
+      recordNumber,
+    );
+
+    if (document == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('فشل تحميل السجل'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
+    setState(() {
+      serialNumber = recordNumber;
+
+      // مسح البيانات القديمة
+      for (var row in rowControllers) {
+        for (var controller in row) {
+          controller.dispose();
+        }
+      }
+      for (var row in rowFocusNodes) {
+        for (var node in row) {
+          node.dispose();
+        }
+      }
+
+      rowControllers.clear();
+      rowFocusNodes.clear();
+      cashOrDebtValues.clear();
+      emptiesValues.clear();
+
+      // تحميل البيانات الجديدة
+      for (var purchase in document.purchases) {
+        List<TextEditingController> newControllers = [
+          TextEditingController(text: purchase.serialNumber),
+          TextEditingController(text: purchase.material),
+          TextEditingController(text: purchase.affiliation),
+          TextEditingController(text: purchase.count),
+          TextEditingController(text: purchase.packaging),
+          TextEditingController(text: purchase.standing),
+          TextEditingController(text: purchase.net),
+          TextEditingController(text: purchase.price),
+          TextEditingController(text: purchase.total),
+          TextEditingController(),
+          TextEditingController(),
+        ];
+
+        List<FocusNode> newFocusNodes =
+            List.generate(11, (index) => FocusNode());
+
+        // إضافة المستمعين
+        newControllers[3].addListener(() {
+          _calculateRowValues(rowControllers.length - 1);
+          _calculateAllTotals();
+        });
+        newControllers[4].addListener(() {
+          _calculateRowValues(rowControllers.length - 1);
+          _calculateAllTotals();
+        });
+        newControllers[5].addListener(() {
+          _calculateRowValues(rowControllers.length - 1);
+          _calculateAllTotals();
+        });
+        newControllers[6].addListener(() {
+          _calculateRowValues(rowControllers.length - 1);
+          _calculateAllTotals();
+        });
+        newControllers[7].addListener(() {
+          _calculateRowValues(rowControllers.length - 1);
+          _calculateAllTotals();
+        });
+
+        rowControllers.add(newControllers);
+        rowFocusNodes.add(newFocusNodes);
+        cashOrDebtValues.add(purchase.cashOrDebt);
+        emptiesValues.add(purchase.empties);
+      }
+
+      // تحديث المجاميع
+      _calculateAllTotals();
+      _buildTableRows();
+    });
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('تم تحميل السجل رقم $recordNumber'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+  }
+
+  // حفظ السجل الحالي
+  Future<void> _saveCurrentRecord() async {
+    if (_isSaving) return;
+
+    setState(() {
+      _isSaving = true;
+    });
+
+    // إنشاء قائمة المشتريات
+    final purchases = <Purchase>[];
+    for (int i = 0; i < rowControllers.length; i++) {
+      final controllers = rowControllers[i];
+      purchases.add(Purchase(
+        serialNumber: controllers[0].text,
+        material: controllers[1].text,
+        affiliation: controllers[2].text,
+        count: controllers[3].text,
+        packaging: controllers[4].text,
+        standing: controllers[5].text,
+        net: controllers[6].text,
+        price: controllers[7].text,
+        total: controllers[8].text,
+        cashOrDebt: cashOrDebtValues[i],
+        empties: emptiesValues[i],
+      ));
+    }
+
+    // إنشاء المستند
+    final document = PurchaseDocument(
+      recordNumber: serialNumber,
+      date: widget.selectedDate,
+      sellerName: widget.sellerName,
+      storeName: widget.storeName,
+      dayName: dayName,
+      purchases: purchases,
+      totals: {
+        'totalCount': totalCountController.text,
+        'totalBase': totalBaseController.text,
+        'totalNet': totalNetController.text,
+        'totalGrand': totalGrandController.text,
+      },
+    );
+
+    // حفظ المستند
+    final success = await _storageService.savePurchaseDocument(document);
+
+    setState(() {
+      _isSaving = false;
+    });
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(success ? 'تم الحفظ بنجاح' : 'فشل الحفظ'),
+          backgroundColor: success ? Colors.green : Colors.red,
+        ),
+      );
+    }
+  }
+
+  // مشاركة الملف
+  Future<void> _shareFile() async {
+    final filePath = await _storageService.getFilePath(
+      widget.selectedDate,
+      serialNumber,
+    );
+
+    if (filePath == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('الرجاء حفظ السجل أولاً'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
+    if (mounted) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('مسار الملف'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('يمكنك نسخ المسار أدناه:'),
+              const SizedBox(height: 8),
+              SelectableText(
+                filePath,
+                style: const TextStyle(fontSize: 12, color: Colors.blue),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'يمكنك نقل الملف إلى الحاسوب عبر USB أو البلوتوث',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('موافق'),
+            ),
+          ],
+        ),
+      );
     }
   }
 }

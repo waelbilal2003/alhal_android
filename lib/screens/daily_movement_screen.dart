@@ -3,6 +3,7 @@ import '../services/store_db_service.dart'; // استيراد خدمة قاعد�
 import 'seller_management_screen.dart'; // استيراد الشاشة الجديدة
 import 'daily_movement/yield_screen.dart' as DailyMovementYield;
 import 'daily_movement/purchases_screen.dart';
+import 'daily_movement/sales_screen.dart';
 
 class DailyMovementScreen extends StatefulWidget {
   final String selectedDate;
@@ -91,7 +92,17 @@ class _DailyMovementScreenState extends State<DailyMovementScreen> {
                     _buildMenuButton(context,
                         icon: Icons.point_of_sale,
                         label: 'المبيعات',
-                        color: Colors.orange[700]!),
+                        color: Colors.orange[700]!, onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => SalesScreen(
+                              sellerName: widget.sellerName, // تخزين اسم البائع
+                              selectedDate:
+                                  widget.selectedDate, // تخزين التاريخ
+                              storeName: _storeName),
+                        ),
+                      );
+                    }),
                     _buildMenuButton(context,
                         icon: Icons.shopping_cart,
                         label: 'المشتريات',

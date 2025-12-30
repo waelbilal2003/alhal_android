@@ -91,7 +91,7 @@ class _SalesScreenState extends State<SalesScreen> {
   List<List<FocusNode>> rowFocusNodes = [];
   List<String> cashOrDebtValues = []; // تخزين قيمة "نقدي او دين" لكل صف
   List<String> emptiesValues = []; // تخزين قيمة "الفوارغ" لكل صف
-  List<String?> customerNames = []; // تخزين أسماء الزبائن
+  List<String> customerNames = []; // تخزين أسماء الزبائن (عندما يكون دين)
 
   // متحكمات صف المجموع
   late TextEditingController totalCountController;
@@ -109,6 +109,9 @@ class _SalesScreenState extends State<SalesScreen> {
 
   // حالة الحفظ
   bool _isSaving = false;
+
+  // متغير لتتبع التغييرات غير المحفوظة
+  bool _hasUnsavedChanges = false;
 
   @override
   void initState() {
@@ -134,6 +137,11 @@ class _SalesScreenState extends State<SalesScreen> {
 
   @override
   void dispose() {
+    // الحفظ التلقائي قبل الخروج إذا كان هناك تغييرات غير محفوظة
+    if (_hasUnsavedChanges && rowControllers.isNotEmpty) {
+      _saveCurrentRecord(silent: true);
+    }
+
     // تنظيف جميع المتحكمين
     for (var row in rowControllers) {
       for (var controller in row) {
@@ -182,24 +190,45 @@ class _SalesScreenState extends State<SalesScreen> {
       // تعيين المسلسل تلقائياً
       newControllers[0].text = (rowControllers.length + 1).toString();
 
-      // إضافة المستمعين لحقول الحساب (العدد، العبوة، القائم، الصافي، السعر)
+      // إضافة المستمعين لحقول الحساب مع تعيين علامة التغيير
+      newControllers[1].addListener(() {
+        _hasUnsavedChanges = true;
+      });
+
+      newControllers[2].addListener(() {
+        _hasUnsavedChanges = true;
+      });
+
+      newControllers[3].addListener(() {
+        _hasUnsavedChanges = true;
+      });
+
       newControllers[4].addListener(() {
+        _hasUnsavedChanges = true;
         _calculateRowValues(rowControllers.length);
         _calculateAllTotals();
       });
+
       newControllers[5].addListener(() {
+        _hasUnsavedChanges = true;
         _calculateRowValues(rowControllers.length);
         _calculateAllTotals();
       });
+
       newControllers[6].addListener(() {
+        _hasUnsavedChanges = true;
         _calculateRowValues(rowControllers.length);
         _calculateAllTotals();
       });
+
       newControllers[7].addListener(() {
+        _hasUnsavedChanges = true;
         _calculateRowValues(rowControllers.length);
         _calculateAllTotals();
       });
+
       newControllers[8].addListener(() {
+        _hasUnsavedChanges = true;
         _calculateRowValues(rowControllers.length);
         _calculateAllTotals();
       });
@@ -208,7 +237,7 @@ class _SalesScreenState extends State<SalesScreen> {
       rowFocusNodes.add(newFocusNodes);
       cashOrDebtValues.add(''); // قيمة افتراضية
       emptiesValues.add(''); // قيمة افتراضية
-      customerNames.add(null); // قيمة افتراضية لاسم الزبون
+      customerNames.add(''); // قيمة افتراضية لاسم الزبون
 
       // إعادة بناء صفوف الجدول
       _buildTableRows();
@@ -346,7 +375,7 @@ class _SalesScreenState extends State<SalesScreen> {
             _buildTableCell(
                 rowControllers[i][8], rowFocusNodes[i][8], true, i, 8),
             _buildTotalValueCell(rowControllers[i][9]),
-            _buildCashOrDebtCell(i, 10),
+            _buildCashOrDebtCell(i, 10), // تم التعديل هنا
             _buildEmptiesCell(i, 11),
           ],
         ),
@@ -588,8 +617,16 @@ class _SalesScreenState extends State<SalesScreen> {
     );
   }
 
-  // خلية خاصة لـ "نقدي او دين"
+  // ===== خلية معدلة لـ "نقدي او دين" - قابلة للكتابة =====
   Widget _buildCashOrDebtCell(int rowIndex, int colIndex) {
+    // إذا كان القيمة "دين" ونص الزبون موجوداً، نعرضه
+    final displayText = cashOrDebtValues[rowIndex] == 'دين' &&
+            customerNames[rowIndex].isNotEmpty
+        ? 'دين - ${customerNames[rowIndex]}'
+        : cashOrDebtValues[rowIndex].isEmpty
+            ? 'اختر'
+            : cashOrDebtValues[rowIndex];
+
     return Container(
       padding: const EdgeInsets.all(1),
       constraints: const BoxConstraints(minHeight: 25),
@@ -609,20 +646,20 @@ class _SalesScreenState extends State<SalesScreen> {
             children: [
               Expanded(
                 child: Text(
-                  cashOrDebtValues[rowIndex].isEmpty
-                      ? 'اختر'
-                      : cashOrDebtValues[rowIndex],
+                  displayText,
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: cashOrDebtValues[rowIndex] == 'دين' ? 10 : 11,
                     color: cashOrDebtValues[rowIndex].isEmpty
                         ? Colors.grey
-                        : Colors.black,
+                        : cashOrDebtValues[rowIndex] == 'نقدي'
+                            ? Colors.green
+                            : Colors.red,
                     fontWeight: cashOrDebtValues[rowIndex].isEmpty
                         ? FontWeight.normal
                         : FontWeight.bold,
                   ),
                   textAlign: TextAlign.center,
-                  maxLines: 1,
+                  maxLines: 2, // سماح بسطرين للتفاف النص
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -690,49 +727,109 @@ class _SalesScreenState extends State<SalesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          'يومية مبيعات رقم /${serialNumber}/ ليوم $dayName تاريخ ${widget.selectedDate} لمحل ${widget.storeName} البائع ${widget.sellerName}',
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 14,
+    return WillPopScope(
+      onWillPop: () async {
+        if (_hasUnsavedChanges && rowControllers.isNotEmpty) {
+          final shouldSave = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('حفظ التغييرات'),
+              content: const Text('هل تريد حفظ التغييرات قبل الخروج؟'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('خروج بدون حفظ'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('حفظ والخروج'),
+                ),
+              ],
+            ),
+          );
+
+          if (shouldSave == true) {
+            await _saveCurrentRecord();
+          }
+        }
+        return true;
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(
+            'يومية مبيعات رقم /${serialNumber}/ ليوم $dayName تاريخ ${widget.selectedDate} لمحل ${widget.storeName} البائع ${widget.sellerName}',
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+            ),
           ),
-        ),
-        centerTitle: true,
-        backgroundColor: Colors.orange[700],
-        foregroundColor: Colors.white,
-        actions: [
-          // زر المشاركة
-          IconButton(
-            icon: const Icon(Icons.share),
-            tooltip: 'مشاركة الملف',
-            onPressed: _shareFile,
-          ),
-          // زر الحفظ
-          IconButton(
-            icon: _isSaving
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+          centerTitle: true,
+          backgroundColor: Colors.orange[700],
+          foregroundColor: Colors.white,
+          actions: [
+            // زر المشاركة
+            IconButton(
+              icon: const Icon(Icons.share),
+              tooltip: 'مشاركة الملف',
+              onPressed: _shareFile,
+            ),
+            // زر الحفظ مع إشارة التغييرات غير المحفوظة
+            IconButton(
+              icon: _isSaving
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : Stack(
+                      children: [
+                        const Icon(Icons.save),
+                        if (_hasUnsavedChanges)
+                          Positioned(
+                            right: 0,
+                            top: 0,
+                            child: Container(
+                              padding: const EdgeInsets.all(2),
+                              decoration: BoxDecoration(
+                                color: Colors.red,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              constraints: const BoxConstraints(
+                                minWidth: 12,
+                                minHeight: 12,
+                              ),
+                              child: const SizedBox(
+                                width: 8,
+                                height: 8,
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
-                  )
-                : const Icon(Icons.save),
-            tooltip: 'حفظ السجل',
-            onPressed: _isSaving ? null : _saveCurrentRecord,
-          ),
-          // زر فتح سجل آخر
-          IconButton(
-            icon: const Icon(Icons.folder_open),
-            tooltip: 'فتح سجل',
-            onPressed: _showRecordSelectionDialog,
-          ),
-        ],
+              tooltip: _hasUnsavedChanges
+                  ? 'هناك تغييرات غير محفوظة - انقر للحفظ'
+                  : 'حفظ سجل المبيعات',
+              onPressed: _isSaving
+                  ? null
+                  : () {
+                      _saveCurrentRecord();
+                      _hasUnsavedChanges =
+                          false; // إعادة تعيين بعد النقر على الحفظ
+                    },
+            ),
+            // زر فتح سجل آخر
+            IconButton(
+              icon: const Icon(Icons.folder_open),
+              tooltip: 'فتح سجل',
+              onPressed: _showRecordSelectionDialog,
+            ),
+          ],
+        ),
+        body: _buildTableWithStickyHeader(),
       ),
-      body: _buildTableWithStickyHeader(),
     );
   }
 
@@ -799,49 +896,6 @@ class _SalesScreenState extends State<SalesScreen> {
     );
   }
 
-  // ===== دالة جديدة: عرض نافذة إدخال اسم الزبون =====
-  Future<void> _showCustomerNameDialog(int rowIndex) async {
-    final TextEditingController customerController = TextEditingController();
-
-    await showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('أدخل اسم الزبون'),
-          content: TextField(
-            controller: customerController,
-            decoration: const InputDecoration(
-              hintText: 'اسم الزبون',
-              border: OutlineInputBorder(),
-            ),
-            autofocus: true,
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: const Text('إلغاء'),
-            ),
-            TextButton(
-              onPressed: () {
-                if (customerController.text.trim().isNotEmpty) {
-                  setState(() {
-                    customerNames[rowIndex] = customerController.text.trim();
-                  });
-                  Navigator.of(context).pop();
-                  // بعد إدخال اسم الزبون، انتقل إلى اختيار الفوارغ
-                  _showEmptiesDialog(rowIndex);
-                }
-              },
-              child: const Text('حفظ'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
   void _showCashOrDebtDialog(int rowIndex) {
     showDialog(
       context: context,
@@ -860,35 +914,35 @@ class _SalesScreenState extends State<SalesScreen> {
                     onChanged: (String? value) {
                       setState(() {
                         cashOrDebtValues[rowIndex] = value!;
-
-                        // ===== التعديل الجديد: إذا كان دين، أطلب اسم الزبون =====
-                        if (value == 'دين') {
-                          Navigator.of(context).pop();
-                          _showCustomerNameDialog(rowIndex);
-                          return;
-                        }
+                        _hasUnsavedChanges = true; // تحديث علامة التغيير
 
                         // إذا كان نقدي، انتقل مباشرة إلى اختيار الفوارغ
-                        Navigator.of(context).pop();
-                        _showEmptiesDialog(rowIndex);
+                        if (value == 'نقدي') {
+                          Navigator.of(context).pop();
+                          _showEmptiesDialog(rowIndex);
+                        } else {
+                          // إذا كان دين، أعد فتح الصف للكتابة
+                          Navigator.of(context).pop();
+                          _showCustomerInputDialog(rowIndex);
+                        }
                       });
                     },
                   ),
                   onTap: () {
                     setState(() {
                       cashOrDebtValues[rowIndex] = option;
+                      _hasUnsavedChanges = true; // تحديث علامة التغيير
                     });
 
-                    // ===== التعديل الجديد: إذا كان دين، أطلب اسم الزبون =====
-                    if (option == 'دين') {
-                      Navigator.of(context).pop();
-                      _showCustomerNameDialog(rowIndex);
-                      return;
-                    }
-
                     // إذا كان نقدي، انتقل مباشرة إلى اختيار الفوارغ
-                    Navigator.of(context).pop();
-                    _showEmptiesDialog(rowIndex);
+                    if (option == 'نقدي') {
+                      Navigator.of(context).pop();
+                      _showEmptiesDialog(rowIndex);
+                    } else {
+                      // إذا كان دين، أعد فتح الصف للكتابة
+                      Navigator.of(context).pop();
+                      _showCustomerInputDialog(rowIndex);
+                    }
                   },
                 );
               }).toList(),
@@ -900,6 +954,64 @@ class _SalesScreenState extends State<SalesScreen> {
                 Navigator.of(context).pop();
               },
               child: const Text('إلغاء'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // ===== دالة جديدة: عرض حقل الكتابة للزبون =====
+  Future<void> _showCustomerInputDialog(int rowIndex) async {
+    final TextEditingController customerController = TextEditingController(
+      text: customerNames[rowIndex],
+    );
+
+    await showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('أدخل اسم الزبون (دين)'),
+          content: TextField(
+            controller: customerController,
+            decoration: const InputDecoration(
+              hintText: 'اسم الزبون',
+              border: OutlineInputBorder(),
+              labelText: 'الاسم',
+            ),
+            autofocus: true,
+            maxLines: 2,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (value) {
+              if (value.trim().isNotEmpty) {
+                setState(() {
+                  customerNames[rowIndex] = value.trim();
+                  _hasUnsavedChanges = true; // تحديث علامة التغيير
+                });
+                Navigator.of(context).pop();
+                _showEmptiesDialog(rowIndex);
+              }
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: const Text('تخطي'),
+            ),
+            TextButton(
+              onPressed: () {
+                if (customerController.text.trim().isNotEmpty) {
+                  setState(() {
+                    customerNames[rowIndex] = customerController.text.trim();
+                    _hasUnsavedChanges = true; // تحديث علامة التغيير
+                  });
+                  Navigator.of(context).pop();
+                  _showEmptiesDialog(rowIndex);
+                }
+              },
+              child: const Text('حفظ'),
             ),
           ],
         );
@@ -925,6 +1037,7 @@ class _SalesScreenState extends State<SalesScreen> {
                     onChanged: (String? value) {
                       setState(() {
                         emptiesValues[rowIndex] = value!;
+                        _hasUnsavedChanges = true; // تحديث علامة التغيير
                       });
                       Navigator.of(context).pop();
                       _addRowAfterEmptiesSelection(rowIndex);
@@ -933,6 +1046,7 @@ class _SalesScreenState extends State<SalesScreen> {
                   onTap: () {
                     setState(() {
                       emptiesValues[rowIndex] = option;
+                      _hasUnsavedChanges = true; // تحديث علامة التغيير
                     });
                     Navigator.of(context).pop();
                     _addRowAfterEmptiesSelection(rowIndex);
@@ -1109,6 +1223,7 @@ class _SalesScreenState extends State<SalesScreen> {
       emptiesValues.clear();
       customerNames.clear();
       _resetTotalValues();
+      _hasUnsavedChanges = false; // إعادة تعيين علامة التغيير
       // إضافة صف جديد
       _addNewRow();
     });
@@ -1181,24 +1296,45 @@ class _SalesScreenState extends State<SalesScreen> {
         List<FocusNode> newFocusNodes =
             List.generate(12, (index) => FocusNode());
 
-        // إضافة المستمعين
+        // إضافة المستمعين مع تعيين علامة التغيير
+        newControllers[1].addListener(() {
+          _hasUnsavedChanges = true;
+        });
+
+        newControllers[2].addListener(() {
+          _hasUnsavedChanges = true;
+        });
+
+        newControllers[3].addListener(() {
+          _hasUnsavedChanges = true;
+        });
+
         newControllers[4].addListener(() {
+          _hasUnsavedChanges = true;
           _calculateRowValues(rowControllers.length - 1);
           _calculateAllTotals();
         });
+
         newControllers[5].addListener(() {
+          _hasUnsavedChanges = true;
           _calculateRowValues(rowControllers.length - 1);
           _calculateAllTotals();
         });
+
         newControllers[6].addListener(() {
+          _hasUnsavedChanges = true;
           _calculateRowValues(rowControllers.length - 1);
           _calculateAllTotals();
         });
+
         newControllers[7].addListener(() {
+          _hasUnsavedChanges = true;
           _calculateRowValues(rowControllers.length - 1);
           _calculateAllTotals();
         });
+
         newControllers[8].addListener(() {
+          _hasUnsavedChanges = true;
           _calculateRowValues(rowControllers.length - 1);
           _calculateAllTotals();
         });
@@ -1207,12 +1343,13 @@ class _SalesScreenState extends State<SalesScreen> {
         rowFocusNodes.add(newFocusNodes);
         cashOrDebtValues.add(sale.cashOrDebt);
         emptiesValues.add(sale.empties);
-        customerNames.add(sale.customerName);
+        customerNames.add(sale.customerName ?? '');
       }
 
       // تحديث المجاميع
       _calculateAllTotals();
       _buildTableRows();
+      _hasUnsavedChanges = false; // إعادة تعيين علامة التغيير بعد التحميل
     });
 
     if (mounted) {
@@ -1226,8 +1363,21 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   // حفظ السجل الحالي
-  Future<void> _saveCurrentRecord() async {
+  Future<void> _saveCurrentRecord({bool silent = false}) async {
     if (_isSaving) return;
+
+    // التحقق من وجود بيانات للحفظ
+    if (rowControllers.isEmpty) {
+      if (!silent && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('لا توجد بيانات للحفظ'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
 
     setState(() {
       _isSaving = true;
@@ -1250,8 +1400,35 @@ class _SalesScreenState extends State<SalesScreen> {
         total: controllers[9].text,
         cashOrDebt: cashOrDebtValues[i],
         empties: emptiesValues[i],
-        customerName: customerNames[i], // اسم الزبون
+        customerName: cashOrDebtValues[i] == 'دين' ? customerNames[i] : null,
       ));
+    }
+
+    // التحقق من وجود بيانات صحيحة
+    bool hasValidData = false;
+    for (var sale in sales) {
+      if (sale.material.isNotEmpty ||
+          sale.count.isNotEmpty ||
+          sale.price.isNotEmpty) {
+        hasValidData = true;
+        break;
+      }
+    }
+
+    if (!hasValidData && !silent) {
+      setState(() {
+        _isSaving = false;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('لا توجد بيانات للحفظ'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
     }
 
     // إنشاء المستند
@@ -1273,11 +1450,15 @@ class _SalesScreenState extends State<SalesScreen> {
     // حفظ المستند
     final success = await _storageService.saveSalesDocument(document);
 
+    if (success) {
+      _hasUnsavedChanges = false; // إعادة تعيين العلم بعد الحفظ الناجح
+    }
+
     setState(() {
       _isSaving = false;
     });
 
-    if (mounted) {
+    if (!silent && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(success ? 'تم حفظ سجل المبيعات بنجاح' : 'فشل الحفظ'),

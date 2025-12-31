@@ -129,18 +129,16 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
     _resetTotalValues();
 
-    // عرض نافذة اختيار السجل
+    // ===== التعديل الأول: فتح سجل جديد تلقائياً بدون نافذة اختيار =====
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _showRecordSelectionDialog();
+      _createNewRecordAutomatically();
     });
   }
 
   @override
   void dispose() {
-    // الحفظ التلقائي قبل الخروج إذا كان هناك تغييرات غير محفوظة
-    if (_hasUnsavedChanges && rowControllers.isNotEmpty) {
-      _saveCurrentRecord(silent: true);
-    }
+    // ===== التعديل الثاني: الحفظ التلقائي بدون استعلام =====
+    _saveCurrentRecord(silent: true);
 
     // تنظيف جميع المتحكمين
     for (var row in rowControllers) {
@@ -167,6 +165,15 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     _horizontalScrollController.dispose();
 
     super.dispose();
+  }
+
+  // ===== التعديل الأول: دالة لإنشاء سجل جديد تلقائياً =====
+  Future<void> _createNewRecordAutomatically() async {
+    final nextNumber =
+        await _storageService.getNextRecordNumber(widget.selectedDate);
+    if (mounted) {
+      _createNewRecord(nextNumber);
+    }
   }
 
   // إعادة تعيين قيم المجموع
@@ -714,109 +721,85 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: () async {
-        if (_hasUnsavedChanges && rowControllers.isNotEmpty) {
-          final shouldSave = await showDialog<bool>(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: const Text('حفظ التغييرات'),
-              content: const Text('هل تريد حفظ التغييرات قبل الخروج؟'),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  child: const Text('خروج بدون حفظ'),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.pop(context, true),
-                  child: const Text('حفظ والخروج'),
-                ),
-              ],
-            ),
-          );
-
-          if (shouldSave == true) {
-            await _saveCurrentRecord();
-          }
-        }
-        return true;
-      },
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text(
-            'يومية مشتريات رقم /${serialNumber}/ ليوم $dayName تاريخ ${widget.selectedDate} لمحل ${widget.storeName} البائع ${widget.sellerName}',
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 14,
-            ),
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(
+          'يومية مشتريات رقم /${serialNumber}/ ليوم $dayName تاريخ ${widget.selectedDate} لمحل ${widget.storeName} البائع ${widget.sellerName}',
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 14,
           ),
-          centerTitle: true,
-          backgroundColor: Colors.red[700],
-          foregroundColor: Colors.white,
-          actions: [
-            // زر المشاركة
-            IconButton(
-              icon: const Icon(Icons.share),
-              tooltip: 'مشاركة الملف',
-              onPressed: _shareFile,
-            ),
-            // زر الحفظ مع إشارة التغييرات غير المحفوظة
-            IconButton(
-              icon: _isSaving
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      ),
-                    )
-                  : Stack(
-                      children: [
-                        const Icon(Icons.save),
-                        if (_hasUnsavedChanges)
-                          Positioned(
-                            right: 0,
-                            top: 0,
-                            child: Container(
-                              padding: const EdgeInsets.all(2),
-                              decoration: BoxDecoration(
-                                color: Colors.red,
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              constraints: const BoxConstraints(
-                                minWidth: 12,
-                                minHeight: 12,
-                              ),
-                              child: const SizedBox(
-                                width: 8,
-                                height: 8,
-                              ),
+        ),
+        centerTitle: true,
+        backgroundColor: Colors.red[700],
+        foregroundColor: Colors.white,
+        actions: [
+          // زر المشاركة
+          IconButton(
+            icon: const Icon(Icons.share),
+            tooltip: 'مشاركة الملف',
+            onPressed: _shareFile,
+          ),
+          // زر الحفظ مع إشارة التغييرات غير المحفوظة
+          IconButton(
+            icon: _isSaving
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
+                : Stack(
+                    children: [
+                      const Icon(Icons.save),
+                      if (_hasUnsavedChanges)
+                        Positioned(
+                          right: 0,
+                          top: 0,
+                          child: Container(
+                            padding: const EdgeInsets.all(2),
+                            decoration: BoxDecoration(
+                              color: Colors.red,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            constraints: const BoxConstraints(
+                              minWidth: 12,
+                              minHeight: 12,
+                            ),
+                            child: const SizedBox(
+                              width: 8,
+                              height: 8,
                             ),
                           ),
-                      ],
-                    ),
-              tooltip: _hasUnsavedChanges
-                  ? 'هناك تغييرات غير محفوظة - انقر للحفظ'
-                  : 'حفظ السجل',
-              onPressed: _isSaving
-                  ? null
-                  : () {
-                      _saveCurrentRecord();
-                      _hasUnsavedChanges =
-                          false; // إعادة تعيين بعد النقر على الحفظ
-                    },
-            ),
-            // زر فتح سجل آخر
-            IconButton(
-              icon: const Icon(Icons.folder_open),
-              tooltip: 'فتح سجل',
-              onPressed: _showRecordSelectionDialog,
-            ),
-          ],
-        ),
-        body: _buildTableWithStickyHeader(),
+                        ),
+                    ],
+                  ),
+            tooltip: _hasUnsavedChanges
+                ? 'هناك تغييرات غير محفوظة - انقر للحفظ'
+                : 'حفظ السجل',
+            onPressed: _isSaving
+                ? null
+                : () {
+                    _saveCurrentRecord();
+                    _hasUnsavedChanges =
+                        false; // إعادة تعيين بعد النقر على الحفظ
+                  },
+          ),
+          // زر فتح سجل آخر
+          IconButton(
+            icon: const Icon(Icons.folder_open),
+            tooltip: 'فتح سجل',
+            onPressed: () async {
+              // ===== التعديل الثالث: الحفظ التلقائي قبل فتح نافذة السجلات =====
+              await _saveCurrentRecord(silent: true);
+              _showRecordSelectionDialog();
+            },
+          ),
+        ],
       ),
+      body: _buildTableWithStickyHeader(),
     );
   }
 
@@ -1101,7 +1084,8 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                             ),
                           ],
                         ),
-                        onTap: () {
+                        onTap: () async {
+                          // ===== التعديل الثالث: الحفظ التلقائي قبل فتح السجل الجديد =====
                           Navigator.of(context).pop();
                           _loadRecord(recordNum);
                         },

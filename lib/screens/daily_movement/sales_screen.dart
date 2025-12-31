@@ -403,6 +403,24 @@ class _SalesScreenState extends State<SalesScreen> {
         }
       }
 
+      // التحقق من قاعدة القائم والصافي عند تغيير أي منهما
+      if (colIndex == 6 || colIndex == 7) {
+        final controllers = rowControllers[rowIndex];
+        double standing = double.tryParse(controllers[6].text) ?? 0;
+        double net = double.tryParse(controllers[7].text) ?? 0;
+
+        if (standing == 0 && net > 0) {
+          // إذا كان القائم صفر، يجب أن يكون الصافي صفر
+          controllers[7].text = '0.00';
+          _showInlineWarning(
+              rowIndex, 'إذا كان القائم صفر، يجب أن يكون الصافي صفر');
+        } else if (standing < net) {
+          // إذا كان الصافي أكبر من القائم، نجعل الصافي يساوي القائم
+          controllers[7].text = standing.toStringAsFixed(2);
+          _showInlineWarning(rowIndex, 'الصافي لا يمكن أن يكون أكبر من القائم');
+        }
+      }
+
       if (colIndex == 4 ||
           colIndex == 5 ||
           colIndex == 6 ||
@@ -412,6 +430,20 @@ class _SalesScreenState extends State<SalesScreen> {
         _calculateAllTotals();
       }
     });
+  }
+
+// إضافة دالة لعرض تحذير في منتصف الشاشة
+  void _showInlineWarning(int rowIndex, String message) {
+    // إظهار رسالة مؤقتة في منتصف الشاشة
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: Colors.orange,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
   }
 
   Widget _buildEmptyCell() {
@@ -647,6 +679,61 @@ class _SalesScreenState extends State<SalesScreen> {
   Future<void> _saveCurrentRecord({bool silent = false}) async {
     if (_isSaving) return;
 
+    // التحقق من أن السجل غير فارغ
+    bool isEmptyRecord = true;
+    for (var controllers in rowControllers) {
+      if (controllers[1].text.isNotEmpty || // المادة
+          controllers[4].text.isNotEmpty || // العدد
+          controllers[8].text.isNotEmpty) {
+        // السعر
+        isEmptyRecord = false;
+        break;
+      }
+    }
+
+    if (isEmptyRecord) {
+      if (!silent && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('لا يمكن حفظ سجل فارغ'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
+    // التحقق من قاعدة القائم والصافي
+    bool hasInvalidNetValue = false;
+    for (int i = 0; i < rowControllers.length; i++) {
+      final controllers = rowControllers[i];
+      double standing = double.tryParse(controllers[6].text) ?? 0;
+      double net = double.tryParse(controllers[7].text) ?? 0;
+
+      if (standing < net) {
+        hasInvalidNetValue = true;
+        // تصحيح القيمة تلقائياً
+        controllers[7].text = standing.toStringAsFixed(2);
+        _calculateRowValues(i);
+      } else if (standing == 0 && net > 0) {
+        hasInvalidNetValue = true;
+        controllers[7].text = '0.00';
+        _calculateRowValues(i);
+      }
+    }
+
+    // إذا كانت هناك قيم غير صحيحة، نطلب تأكيد
+    if (hasInvalidNetValue && !silent && mounted) {
+      bool confirmed = await _showNetValueWarning();
+      if (!confirmed) {
+        setState(() => _isSaving = false);
+        return;
+      }
+    }
+
+    // إعادة حساب المجاميع بعد التصحيح
+    _calculateAllTotals();
+
     if (rowControllers.isEmpty) {
       if (!silent && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -661,10 +748,10 @@ class _SalesScreenState extends State<SalesScreen> {
 
     setState(() => _isSaving = true);
 
-    final sales = <Sale>[];
+    final salesList = <Sale>[];
     for (int i = 0; i < rowControllers.length; i++) {
       final controllers = rowControllers[i];
-      sales.add(Sale(
+      salesList.add(Sale(
         serialNumber: controllers[0].text,
         material: controllers[1].text,
         affiliation: controllers[2].text,
@@ -681,36 +768,13 @@ class _SalesScreenState extends State<SalesScreen> {
       ));
     }
 
-    bool hasValidData = false;
-    for (var sale in sales) {
-      if (sale.material.isNotEmpty ||
-          sale.count.isNotEmpty ||
-          sale.price.isNotEmpty) {
-        hasValidData = true;
-        break;
-      }
-    }
-
-    if (!hasValidData && !silent) {
-      setState(() => _isSaving = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('لا توجد بيانات للحفظ'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
-      return;
-    }
-
     final document = SalesDocument(
       recordNumber: serialNumber,
       date: widget.selectedDate,
       sellerName: widget.sellerName,
       storeName: widget.storeName,
       dayName: dayName,
-      sales: sales,
+      sales: salesList, // ✅ الآن معرف
       totals: {
         'totalCount': totalCountController.text,
         'totalBase': totalBaseController.text,
@@ -718,7 +782,6 @@ class _SalesScreenState extends State<SalesScreen> {
         'totalGrand': totalGrandController.text,
       },
     );
-
     final success = await _storageService.saveSalesDocument(document);
 
     if (success) {
@@ -735,6 +798,28 @@ class _SalesScreenState extends State<SalesScreen> {
         ),
       );
     }
+  }
+
+// إضافة دالة لعرض تحذير القيم غير الصحيحة
+  Future<bool> _showNetValueWarning() async {
+    return await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            title: const Text('تنبيه'),
+            content: const Text(
+              'تم تصحيح بعض القيم في حقل الصافي لأنها كانت أكبر من القائم.\n\nتذكر: يجب أن يكون القائم دائماً أكبر من أو يساوي الصافي.',
+              textAlign: TextAlign.center,
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('موافق'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
   }
 
   Future<void> _showRecordSelectionDialog() async {

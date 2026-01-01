@@ -26,8 +26,8 @@ void showCashOrDebtDialog({
                   onChanged: (String? value) {
                     if (value != null) {
                       onSelected(value);
+                      Navigator.of(context).pop();
                     }
-                    Navigator.of(context).pop();
                   },
                 ),
                 onTap: () {
@@ -60,44 +60,55 @@ void showEmptiesDialog({
   required ValueChanged<String> onSelected,
   required VoidCallback onCancel,
 }) {
+  String tempValue = currentValue;
   showDialog(
     context: context,
     builder: (BuildContext context) {
-      return AlertDialog(
-        title: const Text('اختر حالة الفوارغ'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: options.map((option) {
-              return ListTile(
-                title: Text(option),
-                leading: Radio<String>(
-                  value: option,
-                  groupValue: currentValue,
-                  onChanged: (String? value) {
-                    if (value != null) {
-                      onSelected(value);
-                    }
-                    Navigator.of(context).pop();
-                  },
-                ),
-                onTap: () {
-                  onSelected(option);
+      return StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            title: const Text('اختر حالة الفوارغ'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: options.map((option) {
+                  return ListTile(
+                    title: Text(option),
+                    leading: Radio<String>(
+                      value: option,
+                      groupValue: tempValue,
+                      onChanged: (String? value) {
+                        if (value != null) {
+                          setState(() => tempValue = value);
+                          onSelected(value);
+                          Future.delayed(const Duration(milliseconds: 200), () {
+                            if (context.mounted) Navigator.of(context).pop();
+                          });
+                        }
+                      },
+                    ),
+                    onTap: () {
+                      setState(() => tempValue = option);
+                      onSelected(option);
+                      Future.delayed(const Duration(milliseconds: 200), () {
+                        if (context.mounted) Navigator.of(context).pop();
+                      });
+                    },
+                  );
+                }).toList(),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  onCancel();
                   Navigator.of(context).pop();
                 },
-              );
-            }).toList(),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              onCancel();
-              Navigator.of(context).pop();
-            },
-            child: const Text('إلغاء'),
-          ),
-        ],
+                child: const Text('إلغاء'),
+              ),
+            ],
+          );
+        },
       );
     },
   );

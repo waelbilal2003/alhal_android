@@ -109,29 +109,70 @@ Widget buildCashOrDebtCell({
     );
   }
 
+  // إذا كانت شاشة المشتريات والقيمة "دين"
+  if (!isSalesScreen && cashOrDebtValue == 'دين') {
+    return Container(
+      padding: const EdgeInsets.all(1),
+      constraints: const BoxConstraints(minHeight: 25),
+      child: InkWell(
+        onTap: () {
+          onTap();
+          scrollToField(rowIndex, colIndex);
+        },
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: Colors.red,
+              width: 0.5,
+            ),
+            borderRadius: BorderRadius.circular(2),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+          child: const Center(
+            child: Text(
+              'دين',
+              style: TextStyle(
+                fontSize: 11,
+                color: Colors.red,
+                fontWeight: FontWeight.bold,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   // إذا كانت القيمة "نقدي"
   if (cashOrDebtValue == 'نقدي') {
     return Container(
       padding: const EdgeInsets.all(1),
       constraints: const BoxConstraints(minHeight: 25),
-      child: Container(
-        decoration: BoxDecoration(
-          border: Border.all(
-            color: Colors.green,
-            width: 0.5,
-          ),
-          borderRadius: BorderRadius.circular(2),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
-        child: Center(
-          child: Text(
-            'نقدي',
-            style: TextStyle(
-              fontSize: isSalesScreen ? 9 : 11,
+      child: InkWell(
+        onTap: () {
+          onTap();
+          scrollToField(rowIndex, colIndex);
+        },
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border.all(
               color: Colors.green,
-              fontWeight: FontWeight.bold,
+              width: 0.5,
             ),
-            textAlign: TextAlign.center,
+            borderRadius: BorderRadius.circular(2),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+          child: Center(
+            child: Text(
+              'نقدي',
+              style: TextStyle(
+                fontSize: isSalesScreen ? 9 : 11,
+                color: Colors.green,
+                fontWeight: FontWeight.bold,
+              ),
+              textAlign: TextAlign.center,
+            ),
           ),
         ),
       ),

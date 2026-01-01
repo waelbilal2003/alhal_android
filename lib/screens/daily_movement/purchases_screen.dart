@@ -448,18 +448,27 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   void _showCashOrDebtDialog(int rowIndex) {
     CommonDialogs.showCashOrDebtDialog(
       context: context,
-      currentValue: cashOrDebtValues[rowIndex],
+      currentValue: cashOrDebtValues[rowIndex], // القيمة الحالية فقط
       options: cashOrDebtOptions,
       onSelected: (value) {
         setState(() {
           cashOrDebtValues[rowIndex] = value;
           _hasUnsavedChanges = true;
+
+          // إضافة هذا الشرط فقط: إذا كانت القيمة "نقدي" نفتح نافذة الفوارغ مباشرة
+          if (value == 'نقدي') {
+            // تأخير بسيط لضمان إغلاق النافذة الحالية أولاً
+            Future.delayed(const Duration(milliseconds: 100), () {
+              if (mounted) {
+                _showEmptiesDialog(rowIndex);
+              }
+            });
+          }
         });
-        if (value == 'نقدي') {
-          _showEmptiesDialog(rowIndex);
-        }
       },
-      onCancel: () {},
+      onCancel: () {
+        // لا نقوم بأي شيء عند الإلغاء
+      },
     );
   }
 

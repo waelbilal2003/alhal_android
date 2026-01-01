@@ -502,7 +502,7 @@ class _SalesScreenState extends State<SalesScreen> {
   void _showCashOrDebtDialog(int rowIndex) {
     CommonDialogs.showCashOrDebtDialog(
       context: context,
-      currentValue: cashOrDebtValues[rowIndex],
+      currentValue: cashOrDebtValues[rowIndex], // القيمة الحالية فقط
       options: cashOrDebtOptions,
       onSelected: (value) {
         setState(() {
@@ -511,20 +511,27 @@ class _SalesScreenState extends State<SalesScreen> {
 
           if (value == 'نقدي') {
             customerNames[rowIndex] = '';
+
+            // تأخير بسيط لضمان إغلاق النافذة الحالية أولاً
+            Future.delayed(const Duration(milliseconds: 100), () {
+              if (mounted) {
+                _showEmptiesDialog(rowIndex);
+              }
+            });
+          } else {
+            // إذا كان "دين"، ننتقل إلى حقل اسم الزبون بعد تأخير بسيط
+            Future.delayed(const Duration(milliseconds: 100), () {
+              if (mounted && rowIndex < rowFocusNodes.length) {
+                FocusScope.of(context)
+                    .requestFocus(rowFocusNodes[rowIndex][10]);
+              }
+            });
           }
         });
-
-        if (value == 'نقدي') {
-          _showEmptiesDialog(rowIndex);
-        } else {
-          Future.delayed(const Duration(milliseconds: 50), () {
-            if (mounted && rowIndex < rowFocusNodes.length) {
-              FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][10]);
-            }
-          });
-        }
       },
-      onCancel: () {},
+      onCancel: () {
+        // لا نقوم بأي شيء عند الإلغاء
+      },
     );
   }
 

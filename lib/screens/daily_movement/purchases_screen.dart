@@ -53,6 +53,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   // حالة الحفظ
   bool _isSaving = false;
   bool _hasUnsavedChanges = false;
+  String? _recordCreator; // منشئ السجل الحالي
 
   @override
   void initState() {
@@ -614,6 +615,19 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   Future<void> _saveCurrentRecord({bool silent = false}) async {
     if (_isSaving) return;
 
+    // نظام الصلاحيات: التحقق من أن المستخدم الحالي هو منشئ السجل
+    if (_recordCreator != null && _recordCreator != widget.sellerName) {
+      if (!silent && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('هذا السجل ليس سجلك، لا يمكنك التعديل عليه'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
     // التحقق من أن السجل غير فارغ
     bool isEmptyRecord = true;
     for (var controllers in rowControllers) {
@@ -861,6 +875,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   void _createNewRecord(String recordNumber) {
     setState(() {
       serialNumber = recordNumber;
+      _recordCreator = widget.sellerName; // تعيين المنشئ عند إنشاء سجل جديد
       rowControllers.clear();
       rowFocusNodes.clear();
       cashOrDebtValues.clear();
@@ -897,6 +912,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
     setState(() {
       serialNumber = recordNumber;
+      _recordCreator = document.sellerName; // تعيين المنشئ عند تحميل السجل
 
       for (var row in rowControllers) {
         for (var controller in row) {

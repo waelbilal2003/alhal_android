@@ -131,6 +131,7 @@ class _DailyMovementScreenState extends State<DailyMovementScreen> {
                             // استخدام الـ alias
                             sellerName: widget.sellerName,
                             password: '******',
+                            selectedDate: widget.selectedDate,
                           ),
                         ),
                       );

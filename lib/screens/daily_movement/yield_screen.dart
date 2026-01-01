@@ -1,13 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import '../../services/purchase_storage_service.dart';
 
 class YieldScreen extends StatefulWidget {
   final String sellerName;
   final String password;
+  final String? selectedDate;
 
-  const YieldScreen(
-      {super.key, required this.sellerName, required this.password});
+  const YieldScreen({
+    super.key,
+    required this.sellerName,
+    required this.password,
+    this.selectedDate,
+  });
 
   @override
   State<YieldScreen> createState() => _YieldScreenState();
@@ -71,6 +77,36 @@ class _YieldScreenState extends State<YieldScreen> {
     _cashPurchasesController.addListener(() => setState(_calculateYield));
     _paymentsController.addListener(() => setState(_calculateYield));
     _collectedController.addListener(() => setState(_calculateYield));
+
+    // تحميل المشتريات النقدية تلقائياً إذا توفر التاريخ
+    if (widget.selectedDate != null) {
+      _loadCashPurchases();
+    }
+  }
+
+  Future<void> _loadCashPurchases() async {
+    if (widget.selectedDate == null) return;
+
+    final purchaseStorage = PurchaseStorageService();
+    final records =
+        await purchaseStorage.getAvailableRecords(widget.selectedDate!);
+    double totalCashPurchases = 0;
+
+    for (var recordNum in records) {
+      final doc = await purchaseStorage.loadPurchaseDocument(
+          widget.selectedDate!, recordNum);
+      if (doc != null) {
+        for (var purchase in doc.purchases) {
+          if (purchase.cashOrDebt == 'نقدي') {
+            totalCashPurchases += double.tryParse(purchase.total) ?? 0;
+          }
+        }
+      }
+    }
+
+    setState(() {
+      _cashPurchasesController.text = totalCashPurchases.toStringAsFixed(2);
+    });
   }
 
   Future<void> _checkIfLoggedIn() async {
@@ -461,6 +497,8 @@ class _YieldScreenState extends State<YieldScreen> {
 
   // تم تغيير اسم الدالة لتجنب التعارض
   Widget _buildYieldInputField(String label, TextEditingController controller) {
+    final bool isReadOnly = label == 'مشتريات نقدية';
+
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(8),
@@ -474,11 +512,13 @@ class _YieldScreenState extends State<YieldScreen> {
       ),
       child: TextField(
         controller: controller,
+        readOnly: isReadOnly,
         textAlign: TextAlign.center,
         keyboardType: TextInputType.number,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w600,
+          color: isReadOnly ? Colors.teal[700] : Colors.black,
         ),
         decoration: InputDecoration(
           labelText: label,
@@ -488,7 +528,7 @@ class _YieldScreenState extends State<YieldScreen> {
             fontWeight: FontWeight.bold,
           ),
           filled: true,
-          fillColor: Colors.white,
+          fillColor: isReadOnly ? Colors.grey[100] : Colors.white,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(8),
             borderSide: BorderSide(color: Colors.grey[300]!),

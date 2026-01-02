@@ -132,17 +132,34 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
 
       newControllers[0].text = (rowControllers.length + 1).toString();
 
-      // إضافة مستمعات للتغيرات
-      newControllers[1].addListener(() => _hasUnsavedChanges = true);
-      newControllers[2].addListener(() => _hasUnsavedChanges = true);
+      // إضافة مستمعات للتغيرات للحقول النصية
+      newControllers[1].addListener(() => _hasUnsavedChanges = true); // المادة
+      newControllers[2]
+          .addListener(() => _hasUnsavedChanges = true); // العائدية
+      newControllers[4]
+          .addListener(() => _hasUnsavedChanges = true); // العبوة (نصي)
 
-      // المستمعات للحقول الرقمية
-      for (int i = 3; i < 8; i++) {
-        newControllers[i].addListener(() {
-          _hasUnsavedChanges = true;
-          _calculateAllTotals();
-        });
-      }
+      // المستمعات للحقول الرقمية فقط
+      newControllers[3].addListener(() {
+        // العدد
+        _hasUnsavedChanges = true;
+        _calculateAllTotals();
+      });
+      newControllers[5].addListener(() {
+        // القائم
+        _hasUnsavedChanges = true;
+        _calculateAllTotals();
+      });
+      newControllers[6].addListener(() {
+        // الدفعة
+        _hasUnsavedChanges = true;
+        _calculateAllTotals();
+      });
+      newControllers[7].addListener(() {
+        // الحمولة
+        _hasUnsavedChanges = true;
+        _calculateAllTotals();
+      });
 
       rowControllers.add(newControllers);
       rowFocusNodes.add(newFocusNodes);
@@ -158,11 +175,13 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
 
       for (var controllers in rowControllers) {
         try {
-          totalCount += double.tryParse(controllers[3].text) ?? 0;
-          totalStanding += double.tryParse(controllers[5].text) ?? 0;
-          totalPayment += double.tryParse(controllers[6].text) ?? 0;
-          totalLoad += double.tryParse(controllers[7].text) ?? 0;
-        } catch (e) {}
+          totalCount += double.tryParse(controllers[3].text) ?? 0; // العدد
+          totalStanding += double.tryParse(controllers[5].text) ?? 0; // القائم
+          totalPayment += double.tryParse(controllers[6].text) ?? 0; // الدفعة
+          totalLoad += double.tryParse(controllers[7].text) ?? 0; // الحمولة
+        } catch (e) {
+          // تجاهل الأخطاء في التحويل
+        }
       }
 
       totalCountController.text = totalCount.toStringAsFixed(0);
@@ -262,7 +281,9 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
   Widget _buildTableCell(TextEditingController controller, FocusNode focusNode,
       int rowIndex, int colIndex) {
     bool isSerialField = colIndex == 0;
-    bool isNumericField = colIndex >= 3; // كل الحقول من العدد وما بعدها رقمية
+    // تعديل: حقل العبوة (المؤشر 4) ليس رقمية، فقط الحقول 3،5،6،7 رقمية
+    bool isNumericField =
+        colIndex == 3 || colIndex == 5 || colIndex == 6 || colIndex == 7;
 
     return TableBuilder.buildTableCell(
       controller: controller,
@@ -310,7 +331,8 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
         }
       }
 
-      if (colIndex >= 3) {
+      // الحقول الرقمية فقط التي تؤثر في الحسابات
+      if (colIndex == 3 || colIndex == 5 || colIndex == 6 || colIndex == 7) {
         _calculateAllTotals();
       }
     });
@@ -344,7 +366,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
           ),
         ),
         centerTitle: true,
-        backgroundColor: Colors.blue[700], // لون مختلف للتمييز
+        backgroundColor: Colors.blue[700],
         foregroundColor: Colors.white,
         actions: [
           IconButton(
@@ -748,13 +770,25 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
 
         newControllers[1].addListener(() => _hasUnsavedChanges = true);
         newControllers[2].addListener(() => _hasUnsavedChanges = true);
+        newControllers[4].addListener(() => _hasUnsavedChanges = true);
 
-        for (int i = 3; i < 8; i++) {
-          newControllers[i].addListener(() {
-            _hasUnsavedChanges = true;
-            _calculateAllTotals();
-          });
-        }
+        // المستمعات للحقول الرقمية فقط
+        newControllers[3].addListener(() {
+          _hasUnsavedChanges = true;
+          _calculateAllTotals();
+        });
+        newControllers[5].addListener(() {
+          _hasUnsavedChanges = true;
+          _calculateAllTotals();
+        });
+        newControllers[6].addListener(() {
+          _hasUnsavedChanges = true;
+          _calculateAllTotals();
+        });
+        newControllers[7].addListener(() {
+          _hasUnsavedChanges = true;
+          _calculateAllTotals();
+        });
 
         rowControllers.add(newControllers);
         rowFocusNodes.add(newFocusNodes);

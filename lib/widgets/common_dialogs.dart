@@ -52,6 +52,65 @@ void showCashOrDebtDialog({
   );
 }
 
+// أضف هذه الدالة في ملف common_dialogs.dart
+Future<void> showAccountTypeDialog({
+  required BuildContext context,
+  required String currentValue,
+  required List<String> options,
+  required Function(String) onSelected,
+  required Function() onCancel,
+}) {
+  return showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (BuildContext context) {
+      return AlertDialog(
+        title: const Text(
+          'اختر نوع الحساب',
+          style: TextStyle(fontWeight: FontWeight.bold),
+          textAlign: TextAlign.center,
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: options.map((option) {
+              return Card(
+                margin: const EdgeInsets.symmetric(vertical: 4),
+                child: ListTile(
+                  title: Text(
+                    option,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontWeight: option == currentValue
+                          ? FontWeight.bold
+                          : FontWeight.normal,
+                      color:
+                          option == currentValue ? Colors.blue : Colors.black,
+                    ),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    onSelected(option);
+                  },
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              onCancel();
+            },
+            child: const Text('إلغاء'),
+          ),
+        ],
+      );
+    },
+  );
+}
+
 // نافذة اختيار الفوارغ
 void showEmptiesDialog({
   required BuildContext context,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../../services/purchase_storage_service.dart';
+import '../../services/box_storage_service.dart'; // إضافة استيراد خدمة الصندوق
 
 class YieldScreen extends StatefulWidget {
   final String sellerName;
@@ -30,12 +31,12 @@ class _YieldScreenState extends State<YieldScreen> {
   // متغيرات التحكم بشاشة تسجيل الدخول
   bool _isLoggedIn = false;
   bool _isLoading = false;
-  String? _errorMessage; // تم التعديل ليقبل null
+  String? _errorMessage;
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final TextEditingController _sellerNameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  late FocusNode _loginSellerNameFocus; // تم التعديل
-  late FocusNode _loginPasswordFocus; // تم التعديل
+  late FocusNode _loginSellerNameFocus;
+  late FocusNode _loginPasswordFocus;
 
   double _yield = 0;
   String _status = '';
@@ -81,6 +82,7 @@ class _YieldScreenState extends State<YieldScreen> {
     // تحميل المشتريات النقدية تلقائياً إذا توفر التاريخ
     if (widget.selectedDate != null) {
       _loadCashPurchases();
+      _loadBoxData(); // تحميل بيانات الصندوق
     }
   }
 
@@ -106,6 +108,31 @@ class _YieldScreenState extends State<YieldScreen> {
 
     setState(() {
       _cashPurchasesController.text = totalCashPurchases.toStringAsFixed(2);
+    });
+  }
+
+  Future<void> _loadBoxData() async {
+    if (widget.selectedDate == null) return;
+
+    final boxStorage = BoxStorageService();
+
+    // حساب إجمالي المقبوضات من الصندوق
+    final totalReceived =
+        await boxStorage.getTotalReceived(widget.selectedDate!);
+
+    // حساب إجمالي المدفوعات من الصندوق
+    final totalPaid = await boxStorage.getTotalPaid(widget.selectedDate!);
+
+    // TODO: حساب إجمالي حمولة ودفعة من شاشة الاستلام
+    // final totalShipment = await shipmentService.getTotalShipment(widget.selectedDate!);
+    // final totalDelivery = await shipmentService.getTotalDelivery(widget.selectedDate!);
+
+    // حساب إجمالي المدفوعات (من الصندوق + من الاستلام)
+    final totalPayments = totalPaid; // + totalShipment + totalDelivery;
+
+    setState(() {
+      _receiptsController.text = totalReceived.toStringAsFixed(2);
+      _paymentsController.text = totalPayments.toStringAsFixed(2);
     });
   }
 
@@ -358,14 +385,14 @@ class _YieldScreenState extends State<YieldScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Expanded(
-                          child: _buildYieldInputField(
+                          child: _buildReadOnlyField(
                             'مبيعات نقدية',
                             _cashSalesController,
                           ),
                         ),
                         const SizedBox(width: 16),
                         Expanded(
-                          child: _buildYieldInputField(
+                          child: _buildReadOnlyField(
                             'مقبوضات',
                             _receiptsController,
                           ),
@@ -386,7 +413,7 @@ class _YieldScreenState extends State<YieldScreen> {
                         ),
                         const SizedBox(width: 16),
                         Expanded(
-                          child: _buildYieldInputField(
+                          child: _buildReadOnlyField(
                             'مدفوعات',
                             _paymentsController,
                           ),
@@ -401,38 +428,10 @@ class _YieldScreenState extends State<YieldScreen> {
                       children: [
                         // حقل الناتج (الغلة) - تصميم مشابه لحقل الإدخال
                         Expanded(
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.grey[100],
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.grey[300]!),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'الغلة',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey[700],
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  _yield.toStringAsFixed(2),
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.teal,
-                                  ),
-                                ),
-                              ],
-                            ),
+                          child: _buildReadOnlyField(
+                            'الغلة',
+                            TextEditingController(
+                                text: _yield.toStringAsFixed(2)),
                           ),
                         ),
                         const SizedBox(width: 16),
@@ -489,6 +488,59 @@ class _YieldScreenState extends State<YieldScreen> {
                 ),
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // دالة جديدة لحقول القراءة فقط
+  Widget _buildReadOnlyField(String label, TextEditingController controller) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 1,
+            offset: const Offset(0, 0.54),
+          ),
+        ],
+      ),
+      child: TextField(
+        controller: controller,
+        readOnly: true,
+        textAlign: TextAlign.center,
+        keyboardType: TextInputType.number,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: Colors.teal[700],
+        ),
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: TextStyle(
+            fontSize: 12,
+            color: Colors.grey[700],
+            fontWeight: FontWeight.bold,
+          ),
+          filled: true,
+          fillColor: Colors.grey[100],
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(color: Colors.grey[300]!),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(color: Colors.grey[300]!),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(color: Colors.teal[400]!, width: 2),
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 1,
           ),
         ),
       ),

@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../models/purchase_model.dart';
-import '../../services/purchase_storage_service.dart';
+import '../../models/receipt_model.dart';
+import '../../services/receipt_storage_service.dart';
 import '../../widgets/table_builder.dart' as TableBuilder;
 import '../../widgets/table_components.dart' as TableComponents;
 import '../../widgets/common_dialogs.dart' as CommonDialogs;
 
-class PurchasesScreen extends StatefulWidget {
+class ReceiptScreen extends StatefulWidget {
   final String sellerName;
   final String selectedDate;
   final String storeName;
 
-  const PurchasesScreen({
+  const ReceiptScreen({
     Key? key,
     required this.sellerName,
     required this.selectedDate,
@@ -19,12 +19,12 @@ class PurchasesScreen extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  _PurchasesScreenState createState() => _PurchasesScreenState();
+  _ReceiptScreenState createState() => _ReceiptScreenState();
 }
 
-class _PurchasesScreenState extends State<PurchasesScreen> {
+class _ReceiptScreenState extends State<ReceiptScreen> {
   // خدمة التخزين
-  final PurchaseStorageService _storageService = PurchaseStorageService();
+  final ReceiptStorageService _storageService = ReceiptStorageService();
 
   // بيانات الحقول
   String serialNumber = '';
@@ -33,18 +33,12 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   // قائمة لتخزين صفوف الجدول
   List<List<TextEditingController>> rowControllers = [];
   List<List<FocusNode>> rowFocusNodes = [];
-  List<String> cashOrDebtValues = [];
-  List<String> emptiesValues = [];
 
   // متحكمات صف المجموع
   late TextEditingController totalCountController;
-  late TextEditingController totalBaseController;
-  late TextEditingController totalNetController;
-  late TextEditingController totalGrandController;
-
-  // قوائم الخيارات
-  final List<String> cashOrDebtOptions = ['نقدي', 'دين'];
-  final List<String> emptiesOptions = ['مع فوارغ', 'بدون فوارغ'];
+  late TextEditingController totalStandingController;
+  late TextEditingController totalPaymentController;
+  late TextEditingController totalLoadController;
 
   // متحكمات للتمرير
   final ScrollController _verticalScrollController = ScrollController();
@@ -61,9 +55,9 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     dayName = _extractDayName(widget.selectedDate);
 
     totalCountController = TextEditingController();
-    totalBaseController = TextEditingController();
-    totalNetController = TextEditingController();
-    totalGrandController = TextEditingController();
+    totalStandingController = TextEditingController();
+    totalPaymentController = TextEditingController();
+    totalLoadController = TextEditingController();
 
     _resetTotalValues();
 
@@ -89,9 +83,9 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     }
 
     totalCountController.dispose();
-    totalBaseController.dispose();
-    totalNetController.dispose();
-    totalGrandController.dispose();
+    totalStandingController.dispose();
+    totalPaymentController.dispose();
+    totalLoadController.dispose();
 
     _verticalScrollController.dispose();
     _horizontalScrollController.dispose();
@@ -123,100 +117,58 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
   void _resetTotalValues() {
     totalCountController.text = '0';
-    totalBaseController.text = '0.00';
-    totalNetController.text = '0.00';
-    totalGrandController.text = '0.00';
+    totalStandingController.text = '0.00';
+    totalPaymentController.text = '0.00';
+    totalLoadController.text = '0.00';
   }
 
   void _addNewRow() {
     setState(() {
+      // 8 حقول: (مسلسل، المادة، العائدية، العدد، العبوة، القائم، الدفعة، الحمولة)
       List<TextEditingController> newControllers =
-          List.generate(11, (index) => TextEditingController());
+          List.generate(8, (index) => TextEditingController());
 
-      List<FocusNode> newFocusNodes = List.generate(11, (index) => FocusNode());
+      List<FocusNode> newFocusNodes = List.generate(8, (index) => FocusNode());
 
       newControllers[0].text = (rowControllers.length + 1).toString();
 
+      // إضافة مستمعات للتغيرات
       newControllers[1].addListener(() => _hasUnsavedChanges = true);
       newControllers[2].addListener(() => _hasUnsavedChanges = true);
 
-      newControllers[3].addListener(() {
-        _hasUnsavedChanges = true;
-        _calculateRowValues(rowControllers.length);
-        _calculateAllTotals();
-      });
-
-      newControllers[4].addListener(() {
-        _hasUnsavedChanges = true;
-        _calculateRowValues(rowControllers.length);
-        _calculateAllTotals();
-      });
-
-      newControllers[5].addListener(() {
-        _hasUnsavedChanges = true;
-        _calculateRowValues(rowControllers.length);
-        _calculateAllTotals();
-      });
-
-      newControllers[6].addListener(() {
-        _hasUnsavedChanges = true;
-        _calculateRowValues(rowControllers.length);
-        _calculateAllTotals();
-      });
-
-      newControllers[7].addListener(() {
-        _hasUnsavedChanges = true;
-        _calculateRowValues(rowControllers.length);
-        _calculateAllTotals();
-      });
+      // المستمعات للحقول الرقمية
+      for (int i = 3; i < 8; i++) {
+        newControllers[i].addListener(() {
+          _hasUnsavedChanges = true;
+          _calculateAllTotals();
+        });
+      }
 
       rowControllers.add(newControllers);
       rowFocusNodes.add(newFocusNodes);
-      cashOrDebtValues.add('');
-      emptiesValues.add('');
-    });
-  }
-
-  void _calculateRowValues(int rowIndex) {
-    if (rowIndex >= rowControllers.length) return;
-
-    final controllers = rowControllers[rowIndex];
-
-    setState(() {
-      try {
-        double count = (double.tryParse(controllers[3].text) ?? 0).abs();
-        double net = (double.tryParse(controllers[6].text) ?? 0).abs();
-        double price = (double.tryParse(controllers[7].text) ?? 0).abs();
-
-        double baseValue = net > 0 ? net : count;
-        double total = baseValue * price;
-        controllers[8].text = total.toStringAsFixed(2);
-      } catch (e) {
-        controllers[8].text = '';
-      }
     });
   }
 
   void _calculateAllTotals() {
     setState(() {
       double totalCount = 0;
-      double totalBase = 0;
-      double totalNet = 0;
-      double totalGrand = 0;
+      double totalStanding = 0;
+      double totalPayment = 0;
+      double totalLoad = 0;
 
       for (var controllers in rowControllers) {
         try {
           totalCount += double.tryParse(controllers[3].text) ?? 0;
-          totalBase += double.tryParse(controllers[5].text) ?? 0;
-          totalNet += double.tryParse(controllers[6].text) ?? 0;
-          totalGrand += double.tryParse(controllers[8].text) ?? 0;
+          totalStanding += double.tryParse(controllers[5].text) ?? 0;
+          totalPayment += double.tryParse(controllers[6].text) ?? 0;
+          totalLoad += double.tryParse(controllers[7].text) ?? 0;
         } catch (e) {}
       }
 
       totalCountController.text = totalCount.toStringAsFixed(0);
-      totalBaseController.text = totalBase.toStringAsFixed(2);
-      totalNetController.text = totalNet.toStringAsFixed(2);
-      totalGrandController.text = totalGrand.toStringAsFixed(2);
+      totalStandingController.text = totalStanding.toStringAsFixed(2);
+      totalPaymentController.text = totalPayment.toStringAsFixed(2);
+      totalLoadController.text = totalLoad.toStringAsFixed(2);
     });
   }
 
@@ -254,11 +206,8 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
             TableComponents.buildTableHeaderCell('العدد'),
             TableComponents.buildTableHeaderCell('العبوة'),
             TableComponents.buildTableHeaderCell('القائم'),
-            TableComponents.buildTableHeaderCell('الصافي'),
-            TableComponents.buildTableHeaderCell('السعر'),
-            TableComponents.buildTableHeaderCell('الإجمالي'),
-            TableComponents.buildTableHeaderCell('نقدي او دين'),
-            TableComponents.buildTableHeaderCell('الفوارغ'),
+            TableComponents.buildTableHeaderCell('الدفعة'),
+            TableComponents.buildTableHeaderCell('الحمولة'),
           ],
         ),
       ],
@@ -280,9 +229,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
             _buildTableCell(rowControllers[i][5], rowFocusNodes[i][5], i, 5),
             _buildTableCell(rowControllers[i][6], rowFocusNodes[i][6], i, 6),
             _buildTableCell(rowControllers[i][7], rowFocusNodes[i][7], i, 7),
-            TableComponents.buildTotalValueCell(rowControllers[i][8]),
-            _buildCashOrDebtCell(i, 9),
-            _buildEmptiesCell(i, 10),
           ],
         ),
       );
@@ -298,12 +244,9 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
             _buildEmptyCell(),
             TableComponents.buildTotalCell(totalCountController),
             _buildEmptyCell(),
-            TableComponents.buildTotalCell(totalBaseController),
-            TableComponents.buildTotalCell(totalNetController),
-            _buildEmptyCell(),
-            TableComponents.buildTotalCell(totalGrandController),
-            _buildEmptyCell(),
-            _buildEmptyCell(),
+            TableComponents.buildTotalCell(totalStandingController),
+            TableComponents.buildTotalCell(totalPaymentController),
+            TableComponents.buildTotalCell(totalLoadController),
           ],
         ),
       );
@@ -319,8 +262,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   Widget _buildTableCell(TextEditingController controller, FocusNode focusNode,
       int rowIndex, int colIndex) {
     bool isSerialField = colIndex == 0;
-    bool isNumericField =
-        colIndex == 3 || colIndex == 5 || colIndex == 6 || colIndex == 7;
+    bool isNumericField = colIndex >= 3; // كل الحقول من العدد وما بعدها رقمية
 
     return TableBuilder.buildTableCell(
       controller: controller,
@@ -344,57 +286,31 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   }
 
   void _handleFieldSubmitted(String value, int rowIndex, int colIndex) {
-    if (colIndex == 0) {
-      FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][1]);
-    } else if (colIndex == 7) {
-      _showCashOrDebtDialog(rowIndex);
-    } else if (colIndex == 10) {
+    if (colIndex == 7) {
+      // إذا وصلنا لآخر حقل (الحمولة)، نضيف سطر جديد
       _addNewRow();
       if (rowControllers.isNotEmpty) {
         final newRowIndex = rowControllers.length - 1;
         FocusScope.of(context).requestFocus(rowFocusNodes[newRowIndex][1]);
       }
-    } else if (colIndex < 10) {
+    } else if (colIndex < 7) {
       FocusScope.of(context)
           .requestFocus(rowFocusNodes[rowIndex][colIndex + 1]);
     }
   }
 
-  // إضافة التحقق عند تغيير الحقول
   void _handleFieldChanged(String value, int rowIndex, int colIndex) {
     setState(() {
       _hasUnsavedChanges = true;
 
       if (colIndex == 0) {
+        // تحديث الأرقام التسلسلية
         for (int i = 0; i < rowControllers.length; i++) {
           rowControllers[i][0].text = (i + 1).toString();
         }
       }
 
-      // التحقق من قاعدة القائم والصافي عند تغيير أي منهما
-      if (colIndex == 5 || colIndex == 6) {
-        final controllers = rowControllers[rowIndex];
-        double standing = double.tryParse(controllers[5].text) ?? 0;
-        double net = double.tryParse(controllers[6].text) ?? 0;
-
-        if (standing == 0 && net > 0) {
-          // إذا كان القائم صفر، يجب أن يكون الصافي صفر
-          controllers[6].text = '0.00';
-          _showInlineWarning(
-              rowIndex, 'إذا كان القائم صفر، يجب أن يكون الصافي صفر');
-        } else if (standing < net) {
-          // إذا كان الصافي أكبر من القائم، نجعل الصافي يساوي القائم
-          controllers[6].text = standing.toStringAsFixed(2);
-          _showInlineWarning(rowIndex, 'الصافي لا يمكن أن يكون أكبر من القائم');
-        }
-      }
-
-      if (colIndex == 3 ||
-          colIndex == 4 ||
-          colIndex == 5 ||
-          colIndex == 6 ||
-          colIndex == 7) {
-        _calculateRowValues(rowIndex);
+      if (colIndex >= 3) {
         _calculateAllTotals();
       }
     });
@@ -416,104 +332,19 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     );
   }
 
-  Widget _buildCashOrDebtCell(int rowIndex, int colIndex) {
-    return TableBuilder.buildCashOrDebtCell(
-      rowIndex: rowIndex,
-      colIndex: colIndex,
-      cashOrDebtValue: cashOrDebtValues[rowIndex],
-      customerName: '',
-      customerController: TextEditingController(),
-      focusNode: rowFocusNodes[rowIndex][colIndex],
-      hasUnsavedChanges: _hasUnsavedChanges,
-      setHasUnsavedChanges: (value) =>
-          setState(() => _hasUnsavedChanges = value),
-      onTap: () => _showCashOrDebtDialog(rowIndex),
-      scrollToField: _scrollToField,
-      onCustomerNameChanged: (value) {},
-      onCustomerSubmitted: (value, rIndex, cIndex) {},
-      isSalesScreen: false,
-    );
-  }
-
-  Widget _buildEmptiesCell(int rowIndex, int colIndex) {
-    return TableComponents.buildEmptiesCell(
-      value: emptiesValues[rowIndex],
-      onTap: () => _showEmptiesDialog(rowIndex),
-      rowIndex: rowIndex,
-      colIndex: colIndex,
-      scrollToField: _scrollToField,
-    );
-  }
-
-  void _showCashOrDebtDialog(int rowIndex) {
-    CommonDialogs.showCashOrDebtDialog(
-      context: context,
-      currentValue: cashOrDebtValues[rowIndex],
-      options: cashOrDebtOptions,
-      onSelected: (value) {
-        setState(() {
-          cashOrDebtValues[rowIndex] = value;
-          _hasUnsavedChanges = true;
-
-          // تعديل: فتح نافذة الفوارغ مباشرة في كلتا الحالتين (نقدي أو دين)
-          if (value == 'نقدي' || value == 'دين') {
-            // تأخير بسيط لضمان إغلاق النافذة الحالية أولاً
-            Future.delayed(const Duration(milliseconds: 100), () {
-              if (mounted) {
-                _showEmptiesDialog(rowIndex);
-              }
-            });
-          }
-        });
-      },
-      onCancel: () {
-        // لا نقوم بأي شيء عند الإلغاء
-      },
-    );
-  }
-
-  void _showEmptiesDialog(int rowIndex) {
-    CommonDialogs.showEmptiesDialog(
-      context: context,
-      currentValue: emptiesValues[rowIndex],
-      options: emptiesOptions,
-      onSelected: (value) {
-        setState(() {
-          emptiesValues[rowIndex] = value;
-          _hasUnsavedChanges = true;
-        });
-        _addRowAfterEmptiesSelection(rowIndex);
-      },
-      onCancel: () {},
-    );
-  }
-
-  void _addRowAfterEmptiesSelection(int rowIndex) {
-    _addNewRow();
-    if (rowControllers.isNotEmpty) {
-      final newRowIndex = rowControllers.length - 1;
-      Future.delayed(const Duration(milliseconds: 100), () {
-        if (mounted) {
-          FocusScope.of(context).requestFocus(rowFocusNodes[newRowIndex][0]);
-          _scrollToField(newRowIndex, 0);
-        }
-      });
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          'يومية مشتريات رقم /$serialNumber/ ليوم $dayName تاريخ ${widget.selectedDate} لمحل ${widget.storeName} البائع ${widget.sellerName}',
+          'يومية استلام رقم /$serialNumber/ ليوم $dayName تاريخ ${widget.selectedDate} لمحل ${widget.storeName} البائع ${widget.sellerName}',
           style: const TextStyle(
             fontWeight: FontWeight.bold,
             fontSize: 14,
           ),
         ),
         centerTitle: true,
-        backgroundColor: Colors.red[700],
+        backgroundColor: Colors.blue[700], // لون مختلف للتمييز
         foregroundColor: Colors.white,
         actions: [
           IconButton(
@@ -624,7 +455,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   Future<void> _saveCurrentRecord({bool silent = false}) async {
     if (_isSaving) return;
 
-    // نظام الصلاحيات: التحقق من أن المستخدم الحالي هو منشئ السجل
+    // نظام الصلاحيات
     if (_recordCreator != null && _recordCreator != widget.sellerName) {
       if (!silent && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -641,9 +472,8 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     bool isEmptyRecord = true;
     for (var controllers in rowControllers) {
       if (controllers[1].text.isNotEmpty || // المادة
-          controllers[3].text.isNotEmpty || // العدد
-          controllers[7].text.isNotEmpty) {
-        // السعر
+          controllers[3].text.isNotEmpty) {
+        // العدد
         isEmptyRecord = false;
         break;
       }
@@ -661,37 +491,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       return;
     }
 
-    // التحقق من قاعدة القائم والصافي
-    bool hasInvalidNetValue = false;
-    for (int i = 0; i < rowControllers.length; i++) {
-      final controllers = rowControllers[i];
-      double standing = double.tryParse(controllers[5].text) ?? 0;
-      double net = double.tryParse(controllers[6].text) ?? 0;
-
-      if (standing < net) {
-        hasInvalidNetValue = true;
-        // تصحيح القيمة تلقائياً
-        controllers[6].text = standing.toStringAsFixed(2);
-        _calculateRowValues(i);
-      } else if (standing == 0 && net > 0) {
-        hasInvalidNetValue = true;
-        controllers[6].text = '0.00';
-        _calculateRowValues(i);
-      }
-    }
-
-    // إذا كانت هناك قيم غير صحيحة، نطلب تأكيد
-    if (hasInvalidNetValue && !silent && mounted) {
-      bool confirmed = await _showNetValueWarning();
-      if (!confirmed) {
-        setState(() => _isSaving = false);
-        return;
-      }
-    }
-
-    // إعادة حساب المجاميع بعد التصحيح
-    _calculateAllTotals();
-
     if (rowControllers.isEmpty) {
       if (!silent && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -705,40 +504,37 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     }
 
     setState(() => _isSaving = true);
-    final purchasesList = <Purchase>[];
+    final receiptsList = <Receipt>[];
     for (int i = 0; i < rowControllers.length; i++) {
       final controllers = rowControllers[i];
-      purchasesList.add(Purchase(
+      receiptsList.add(Receipt(
         serialNumber: controllers[0].text,
         material: controllers[1].text,
         affiliation: controllers[2].text,
         count: controllers[3].text,
         packaging: controllers[4].text,
         standing: controllers[5].text,
-        net: controllers[6].text,
-        price: controllers[7].text,
-        total: controllers[8].text,
-        cashOrDebt: cashOrDebtValues[i],
-        empties: emptiesValues[i],
+        payment: controllers[6].text,
+        load: controllers[7].text,
       ));
     }
 
-    final document = PurchaseDocument(
+    final document = ReceiptDocument(
       recordNumber: serialNumber,
       date: widget.selectedDate,
       sellerName: widget.sellerName,
       storeName: widget.storeName,
       dayName: dayName,
-      purchases: purchasesList, // ✅ الآن معرف
+      receipts: receiptsList,
       totals: {
         'totalCount': totalCountController.text,
-        'totalBase': totalBaseController.text,
-        'totalNet': totalNetController.text,
-        'totalGrand': totalGrandController.text,
+        'totalStanding': totalStandingController.text,
+        'totalPayment': totalPaymentController.text,
+        'totalLoad': totalLoadController.text,
       },
     );
 
-    final success = await _storageService.savePurchaseDocument(document);
+    final success = await _storageService.saveReceiptDocument(document);
 
     if (success) {
       setState(() => _hasUnsavedChanges = false);
@@ -810,7 +606,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                                 );
 
                                 if (confirm == true) {
-                                  await _storageService.deletePurchaseDocument(
+                                  await _storageService.deleteReceiptDocument(
                                     widget.selectedDate,
                                     recordNum,
                                   );
@@ -884,11 +680,9 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   void _createNewRecord(String recordNumber) {
     setState(() {
       serialNumber = recordNumber;
-      _recordCreator = widget.sellerName; // تعيين المنشئ عند إنشاء سجل جديد
+      _recordCreator = widget.sellerName;
       rowControllers.clear();
       rowFocusNodes.clear();
-      cashOrDebtValues.clear();
-      emptiesValues.clear();
       _resetTotalValues();
       _hasUnsavedChanges = false;
       _addNewRow();
@@ -902,7 +696,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   }
 
   Future<void> _loadRecord(String recordNumber) async {
-    final document = await _storageService.loadPurchaseDocument(
+    final document = await _storageService.loadReceiptDocument(
       widget.selectedDate,
       recordNumber,
     );
@@ -921,7 +715,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
     setState(() {
       serialNumber = recordNumber;
-      _recordCreator = document.sellerName; // تعيين المنشئ عند تحميل السجل
+      _recordCreator = document.sellerName;
 
       for (var row in rowControllers) {
         for (var controller in row) {
@@ -936,59 +730,34 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
       rowControllers.clear();
       rowFocusNodes.clear();
-      cashOrDebtValues.clear();
-      emptiesValues.clear();
 
-      for (var purchase in document.purchases) {
+      for (var receipt in document.receipts) {
         List<TextEditingController> newControllers = [
-          TextEditingController(text: purchase.serialNumber),
-          TextEditingController(text: purchase.material),
-          TextEditingController(text: purchase.affiliation),
-          TextEditingController(text: purchase.count),
-          TextEditingController(text: purchase.packaging),
-          TextEditingController(text: purchase.standing),
-          TextEditingController(text: purchase.net),
-          TextEditingController(text: purchase.price),
-          TextEditingController(text: purchase.total),
-          TextEditingController(),
-          TextEditingController(),
+          TextEditingController(text: receipt.serialNumber),
+          TextEditingController(text: receipt.material),
+          TextEditingController(text: receipt.affiliation),
+          TextEditingController(text: receipt.count),
+          TextEditingController(text: receipt.packaging),
+          TextEditingController(text: receipt.standing),
+          TextEditingController(text: receipt.payment),
+          TextEditingController(text: receipt.load),
         ];
 
         List<FocusNode> newFocusNodes =
-            List.generate(11, (index) => FocusNode());
+            List.generate(8, (index) => FocusNode());
 
         newControllers[1].addListener(() => _hasUnsavedChanges = true);
         newControllers[2].addListener(() => _hasUnsavedChanges = true);
-        newControllers[3].addListener(() {
-          _hasUnsavedChanges = true;
-          _calculateRowValues(rowControllers.length - 1);
-          _calculateAllTotals();
-        });
-        newControllers[4].addListener(() {
-          _hasUnsavedChanges = true;
-          _calculateRowValues(rowControllers.length - 1);
-          _calculateAllTotals();
-        });
-        newControllers[5].addListener(() {
-          _hasUnsavedChanges = true;
-          _calculateRowValues(rowControllers.length - 1);
-          _calculateAllTotals();
-        });
-        newControllers[6].addListener(() {
-          _hasUnsavedChanges = true;
-          _calculateRowValues(rowControllers.length - 1);
-          _calculateAllTotals();
-        });
-        newControllers[7].addListener(() {
-          _hasUnsavedChanges = true;
-          _calculateRowValues(rowControllers.length - 1);
-          _calculateAllTotals();
-        });
+
+        for (int i = 3; i < 8; i++) {
+          newControllers[i].addListener(() {
+            _hasUnsavedChanges = true;
+            _calculateAllTotals();
+          });
+        }
 
         rowControllers.add(newControllers);
         rowFocusNodes.add(newFocusNodes);
-        cashOrDebtValues.add(purchase.cashOrDebt);
-        emptiesValues.add(purchase.empties);
       }
 
       _calculateAllTotals();
@@ -1000,42 +769,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
         SnackBar(
           content: Text('تم تحميل السجل رقم $recordNumber'),
           backgroundColor: Colors.green,
-        ),
-      );
-    }
-  }
-
-  // إضافة دالة لعرض تحذير القيم غير الصحيحة
-  Future<bool> _showNetValueWarning() async {
-    return await showDialog<bool>(
-          context: context,
-          barrierDismissible: false,
-          builder: (context) => AlertDialog(
-            title: const Text('تنبيه'),
-            content: const Text(
-              'تم تصحيح بعض القيم في حقل الصافي لأنها كانت أكبر من القائم.\n\nتذكر: يجب أن يكون القائم دائماً أكبر من أو يساوي الصافي.',
-              textAlign: TextAlign.center,
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('موافق'),
-              ),
-            ],
-          ),
-        ) ??
-        false;
-  }
-
-// إضافة دالة لعرض تحذير في منتصف الشاشة
-  void _showInlineWarning(int rowIndex, String message) {
-    // إظهار رسالة مؤقتة في منتصف الشاشة
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: Colors.orange,
-          duration: const Duration(seconds: 2),
         ),
       );
     }

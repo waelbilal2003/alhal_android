@@ -213,7 +213,7 @@ class _BoxScreenState extends State<BoxScreen> {
             _buildTableCell(rowControllers[i][0], rowFocusNodes[i][0], i, 0),
             _buildReceivedCell(rowControllers[i][1], rowFocusNodes[i][1], i, 1),
             _buildPaidCell(rowControllers[i][2], rowFocusNodes[i][2], i, 2),
-            _buildAccountCell(i, 3),
+            _buildAccountCell(i, 3), // هذا هو الحقل المعدل
             _buildNotesCell(rowControllers[i][4], rowFocusNodes[i][4], i, 4),
           ],
         ),
@@ -347,89 +347,190 @@ class _BoxScreenState extends State<BoxScreen> {
     );
   }
 
+  // هذه هي الدالة المعدلة لتكون مشابهة لـ purchases_screen ولكن مع إضافة إمكانية الكتابة
   Widget _buildAccountCell(int rowIndex, int colIndex) {
     final String accountType = accountTypeValues[rowIndex];
-    final String accountName = rowControllers[rowIndex][3].text;
-    final bool hasAccountType = accountType.isNotEmpty;
+    final TextEditingController accountNameController =
+        rowControllers[rowIndex][3];
+    final FocusNode accountNameFocusNode = rowFocusNodes[rowIndex][3];
 
-    String displayText = '';
-    if (hasAccountType) {
-      switch (accountType) {
-        case 'زبون':
-          displayText = 'الزبون: $accountName';
-          break;
-        case 'مورد':
-          displayText = 'المورد: $accountName';
-          break;
-        case 'مصروف':
-          displayText = 'المصروف: $accountName';
-          break;
-      }
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(1),
-      constraints: const BoxConstraints(minHeight: 25),
-      child: GestureDetector(
-        onTap: () => _showAccountTypeDialog(rowIndex),
-        child: Container(
-          width: double.infinity,
-          height: double.infinity,
-          color: Colors.white,
-          child: Stack(
-            children: [
-              if (hasAccountType)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 2),
-                  child: TextField(
-                    controller: rowControllers[rowIndex][3],
-                    focusNode: rowFocusNodes[rowIndex][3],
-                    textAlign: TextAlign.right,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.black,
+    // إذا كان نوع الحساب محدداً، نعرض حقل كتابة
+    if (accountType.isNotEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(1),
+        constraints: const BoxConstraints(minHeight: 25),
+        child: Row(
+          children: [
+            // زر الاختيار (مشابه لـ purchases_screen)
+            Expanded(
+              flex: 2,
+              child: InkWell(
+                onTap: () {
+                  _showAccountTypeDialog(rowIndex);
+                  _scrollToField(rowIndex, colIndex);
+                },
+                child: Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                      color: _getAccountTypeColor(accountType),
+                      width: 0.5,
                     ),
-                    decoration: InputDecoration(
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 2, vertical: 1),
-                      border: InputBorder.none,
-                      hintText: displayText,
-                      prefixText: accountType == 'زبون'
-                          ? 'الزبون: '
-                          : accountType == 'مورد'
-                              ? 'المورد: '
-                              : 'المصروف: ',
-                      prefixStyle: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.teal,
-                      ),
-                    ),
-                    onSubmitted: (value) {
-                      FocusScope.of(context)
-                          .requestFocus(rowFocusNodes[rowIndex][4]);
-                    },
-                    onChanged: (value) {
-                      _hasUnsavedChanges = true;
-                    },
+                    borderRadius: BorderRadius.circular(2),
                   ),
-                )
-              else
-                Center(
-                  child: Text(
-                    'اختر',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[600],
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  child: Center(
+                    child: Text(
+                      accountType,
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: _getAccountTypeColor(accountType),
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ),
+              ),
+            ),
+            const SizedBox(width: 4),
+            // حقل كتابة اسم الحساب (لجميع الخيارات)
+            Expanded(
+              flex: 5,
+              child: TextField(
+                controller: accountNameController,
+                focusNode: accountNameFocusNode,
+                textAlign: TextAlign.right,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black,
+                ),
+                decoration: InputDecoration(
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+                  border: const OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.grey, width: 0.5),
+                  ),
+                  hintText: _getAccountHintText(accountType),
+                  hintStyle: const TextStyle(
+                    fontSize: 10,
+                    color: Colors.grey,
+                  ),
+                ),
+                onSubmitted: (value) {
+                  // عند الانتهاء من الكتابة، انتقل إلى الملاحظات
+                  FocusScope.of(context)
+                      .requestFocus(rowFocusNodes[rowIndex][4]);
+                },
+                onChanged: (value) {
+                  _hasUnsavedChanges = true;
+                },
+                onTap: () {
+                  _scrollToField(rowIndex, colIndex);
+                },
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // إذا لم يتم تحديد نوع الحساب بعد، نعرض خلية اختيار فقط
+    return Container(
+      padding: const EdgeInsets.all(1),
+      constraints: const BoxConstraints(minHeight: 25),
+      child: InkWell(
+        onTap: () {
+          _showAccountTypeDialog(rowIndex);
+          _scrollToField(rowIndex, colIndex);
+        },
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey[300]!),
+            borderRadius: BorderRadius.circular(3),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Text(
+                  'اختر',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey[600],
+                    fontWeight: FontWeight.normal,
+                  ),
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Icon(
+                Icons.arrow_drop_down,
+                size: 16,
+                color: Colors.grey[600],
+              ),
             ],
           ),
         ),
       ),
     );
+  }
+
+  // دالة للحصول على لون نوع الحساب
+  Color _getAccountTypeColor(String accountType) {
+    switch (accountType) {
+      case 'زبون':
+        return Colors.green;
+      case 'مورد':
+        return Colors.blue;
+      case 'مصروف':
+        return Colors.orange;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  // دالة للحصول على نص التلميح بناءً على نوع الحساب
+  String _getAccountHintText(String accountType) {
+    switch (accountType) {
+      case 'زبون':
+        return 'اسم الزبون';
+      case 'مورد':
+        return 'اسم المورد';
+      case 'مصروف':
+        return 'نوع المصروف';
+      default:
+        return '...';
+    }
+  }
+
+  // تعديل دالة معالجة الإرسال
+  void _handleFieldSubmitted(String value, int rowIndex, int colIndex) {
+    if (colIndex == 0) {
+      FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][1]);
+    } else if (colIndex == 1) {
+      if (value.isNotEmpty) {
+        _showAccountTypeDialog(rowIndex);
+      } else {
+        FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][2]);
+      }
+    } else if (colIndex == 2) {
+      _showAccountTypeDialog(rowIndex);
+    } else if (colIndex == 3) {
+      // إذا كان حقل اسم الحساب، انتقل إلى الملاحظات
+      FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][4]);
+    } else if (colIndex == 4) {
+      _addNewRow();
+      if (rowControllers.isNotEmpty) {
+        final newRowIndex = rowControllers.length - 1;
+        FocusScope.of(context).requestFocus(rowFocusNodes[newRowIndex][1]);
+      }
+    }
   }
 
   Widget _buildNotesCell(TextEditingController controller, FocusNode focusNode,
@@ -466,47 +567,7 @@ class _BoxScreenState extends State<BoxScreen> {
     );
   }
 
-  void _handleFieldSubmitted(String value, int rowIndex, int colIndex) {
-    if (colIndex == 0) {
-      FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][1]);
-    } else if (colIndex == 1) {
-      if (value.isNotEmpty) {
-        _showAccountTypeDialog(rowIndex);
-      } else {
-        FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][2]);
-      }
-    } else if (colIndex == 2) {
-      _showAccountTypeDialog(rowIndex);
-    } else if (colIndex == 3) {
-      FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][4]);
-    } else if (colIndex == 4) {
-      _addNewRow();
-      if (rowControllers.isNotEmpty) {
-        final newRowIndex = rowControllers.length - 1;
-        FocusScope.of(context).requestFocus(rowFocusNodes[newRowIndex][1]);
-      }
-    }
-  }
-
-  void _handleFieldChanged(String value, int rowIndex, int colIndex) {
-    setState(() {
-      _hasUnsavedChanges = true;
-
-      if (colIndex == 0) {
-        for (int i = 0; i < rowControllers.length; i++) {
-          rowControllers[i][0].text = (i + 1).toString();
-        }
-      }
-
-      // التحقق من عدم السماح بالكتابة في كلا الحقلين
-      if (colIndex == 1 && value.isNotEmpty) {
-        rowControllers[rowIndex][2].text = '';
-      } else if (colIndex == 2 && value.isNotEmpty) {
-        rowControllers[rowIndex][1].text = '';
-      }
-    });
-  }
-
+  // تعديل دالة إظهار دايلوج نوع الحساب
   void _showAccountTypeDialog(int rowIndex) {
     CommonDialogs.showAccountTypeDialog(
       context: context,
@@ -517,13 +578,15 @@ class _BoxScreenState extends State<BoxScreen> {
           accountTypeValues[rowIndex] = value;
           _hasUnsavedChanges = true;
 
-          // تأخير بسيط ثم التركيز على حقل اسم الحساب
-          Future.delayed(const Duration(milliseconds: 100), () {
-            if (mounted) {
-              FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][3]);
-              _scrollToField(rowIndex, 3);
-            }
-          });
+          // إذا تم اختيار نوع الحساب، ركز على حقل اسم الحساب للكتابة
+          if (value.isNotEmpty) {
+            Future.delayed(const Duration(milliseconds: 150), () {
+              if (mounted) {
+                FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][3]);
+                _scrollToField(rowIndex, 3);
+              }
+            });
+          }
         });
       },
       onCancel: () {
@@ -535,6 +598,31 @@ class _BoxScreenState extends State<BoxScreen> {
         }
       },
     );
+  }
+
+  // تعديل دالة handleFieldChanged لإضافة دعم لاسم الحساب
+  void _handleFieldChanged(String value, int rowIndex, int colIndex) {
+    setState(() {
+      _hasUnsavedChanges = true;
+
+      if (colIndex == 0) {
+        for (int i = 0; i < rowControllers.length; i++) {
+          rowControllers[i][0].text = (i + 1).toString();
+        }
+      }
+
+      // التحقق من عدم السماح بالكتابة في كلا الحقلين (المقبوض والمدفوع)
+      if (colIndex == 1 && value.isNotEmpty) {
+        rowControllers[rowIndex][2].text = '';
+      } else if (colIndex == 2 && value.isNotEmpty) {
+        rowControllers[rowIndex][1].text = '';
+      }
+
+      // إذا كان التغيير في حقل اسم الحساب (colIndex == 3)
+      if (colIndex == 3) {
+        _hasUnsavedChanges = true;
+      }
+    });
   }
 
   @override

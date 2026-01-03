@@ -256,4 +256,51 @@ class SalesStorageService {
       return null;
     }
   }
+
+// دالة جديدة: حساب إجمالي المبيعات النقدية ليوم محدد
+  Future<double> getTotalCashSales(String date) async {
+    double totalCashSales = 0;
+
+    try {
+      final records = await getAvailableRecords(date);
+
+      for (var recordNum in records) {
+        final doc = await loadSalesDocument(date, recordNum);
+        if (doc != null) {
+          for (var sale in doc.sales) {
+            // حساب فقط المبيعات النقدية (لا تشمل المبيعات بالدين)
+            if (sale.cashOrDebt == 'نقدي') {
+              totalCashSales += double.tryParse(sale.total) ?? 0;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      print('Error calculating cash sales: $e');
+    }
+
+    return totalCashSales;
+  }
+
+  // دالة جديدة: حساب إجمالي جميع المبيعات (نقدي ودين)
+  Future<double> getTotalSales(String date) async {
+    double totalSales = 0;
+
+    try {
+      final records = await getAvailableRecords(date);
+
+      for (var recordNum in records) {
+        final doc = await loadSalesDocument(date, recordNum);
+        if (doc != null) {
+          for (var sale in doc.sales) {
+            totalSales += double.tryParse(sale.total) ?? 0;
+          }
+        }
+      }
+    } catch (e) {
+      print('Error calculating total sales: $e');
+    }
+
+    return totalSales;
+  }
 }

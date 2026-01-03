@@ -35,6 +35,10 @@ class _BoxScreenState extends State<BoxScreen> {
   List<List<FocusNode>> rowFocusNodes = [];
   List<String> accountTypeValues = [];
 
+  // متحكمات المجموع
+  late TextEditingController totalReceivedController;
+  late TextEditingController totalPaidController;
+
   // قوائم الخيارات
   final List<String> accountTypeOptions = ['زبون', 'مورد', 'مصروف'];
 
@@ -51,6 +55,11 @@ class _BoxScreenState extends State<BoxScreen> {
   void initState() {
     super.initState();
     dayName = _extractDayName(widget.selectedDate);
+
+    // تهيئة متحكمات المجموع
+    totalReceivedController = TextEditingController();
+    totalPaidController = TextEditingController();
+    _resetTotalValues();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _createNewRecordAutomatically();
@@ -72,6 +81,9 @@ class _BoxScreenState extends State<BoxScreen> {
         node.dispose();
       }
     }
+
+    totalReceivedController.dispose();
+    totalPaidController.dispose();
 
     _verticalScrollController.dispose();
     _horizontalScrollController.dispose();
@@ -108,6 +120,7 @@ class _BoxScreenState extends State<BoxScreen> {
       rowControllers.clear();
       rowFocusNodes.clear();
       accountTypeValues.clear();
+      _resetTotalValues();
       _hasUnsavedChanges = false;
       _addNewRow(); // إضافة الصف الأول
     });
@@ -117,6 +130,11 @@ class _BoxScreenState extends State<BoxScreen> {
         FocusScope.of(context).requestFocus(rowFocusNodes[0][1]);
       }
     });
+  }
+
+  void _resetTotalValues() {
+    totalReceivedController.text = '0.00';
+    totalPaidController.text = '0.00';
   }
 
   void _addNewRow() {
@@ -137,6 +155,7 @@ class _BoxScreenState extends State<BoxScreen> {
             newControllers[2].text = '';
           });
         }
+        _calculateAllTotals();
       });
 
       newControllers[2].addListener(() {
@@ -147,6 +166,7 @@ class _BoxScreenState extends State<BoxScreen> {
             newControllers[1].text = '';
           });
         }
+        _calculateAllTotals();
       });
 
       newControllers[3].addListener(() => _hasUnsavedChanges = true);
@@ -155,6 +175,23 @@ class _BoxScreenState extends State<BoxScreen> {
       rowControllers.add(newControllers);
       rowFocusNodes.add(newFocusNodes);
       accountTypeValues.add('');
+    });
+  }
+
+  void _calculateAllTotals() {
+    setState(() {
+      double totalReceived = 0;
+      double totalPaid = 0;
+
+      for (var controllers in rowControllers) {
+        try {
+          totalReceived += double.tryParse(controllers[1].text) ?? 0;
+          totalPaid += double.tryParse(controllers[2].text) ?? 0;
+        } catch (e) {}
+      }
+
+      totalReceivedController.text = totalReceived.toStringAsFixed(2);
+      totalPaidController.text = totalPaid.toStringAsFixed(2);
     });
   }
 
@@ -213,8 +250,24 @@ class _BoxScreenState extends State<BoxScreen> {
             _buildTableCell(rowControllers[i][0], rowFocusNodes[i][0], i, 0),
             _buildReceivedCell(rowControllers[i][1], rowFocusNodes[i][1], i, 1),
             _buildPaidCell(rowControllers[i][2], rowFocusNodes[i][2], i, 2),
-            _buildAccountCell(i, 3), // هذا هو الحقل المعدل
+            _buildAccountCell(i, 3),
             _buildNotesCell(rowControllers[i][4], rowFocusNodes[i][4], i, 4),
+          ],
+        ),
+      );
+    }
+
+    // إضافة صف المجموع (مشابه لـ purchases_screen)
+    if (rowControllers.length >= 1) {
+      contentRows.add(
+        TableRow(
+          decoration: BoxDecoration(color: Colors.yellow[50]),
+          children: [
+            _buildEmptyCell(), // مسلسل
+            TableComponents.buildTotalCell(totalReceivedController), // مقبوض
+            TableComponents.buildTotalCell(totalPaidController), // مدفوع
+            _buildEmptyCell(), // الحساب
+            _buildEmptyCell(), // ملاحظات
           ],
         ),
       );
@@ -298,6 +351,7 @@ class _BoxScreenState extends State<BoxScreen> {
               rowControllers[rowIndex][2].text = '';
             });
           }
+          _calculateAllTotals();
         },
       ),
     );
@@ -342,12 +396,12 @@ class _BoxScreenState extends State<BoxScreen> {
               rowControllers[rowIndex][1].text = '';
             });
           }
+          _calculateAllTotals();
         },
       ),
     );
   }
 
-  // هذه هي الدالة المعدلة لتكون مشابهة لـ purchases_screen ولكن مع إضافة إمكانية الكتابة
   Widget _buildAccountCell(int rowIndex, int colIndex) {
     final String accountType = accountTypeValues[rowIndex];
     final TextEditingController accountNameController =
@@ -481,56 +535,20 @@ class _BoxScreenState extends State<BoxScreen> {
     );
   }
 
-  // دالة للحصول على لون نوع الحساب
-  Color _getAccountTypeColor(String accountType) {
-    switch (accountType) {
-      case 'زبون':
-        return Colors.green;
-      case 'مورد':
-        return Colors.blue;
-      case 'مصروف':
-        return Colors.orange;
-      default:
-        return Colors.grey;
-    }
-  }
-
-  // دالة للحصول على نص التلميح بناءً على نوع الحساب
-  String _getAccountHintText(String accountType) {
-    switch (accountType) {
-      case 'زبون':
-        return 'اسم الزبون';
-      case 'مورد':
-        return 'اسم المورد';
-      case 'مصروف':
-        return 'نوع المصروف';
-      default:
-        return '...';
-    }
-  }
-
-  // تعديل دالة معالجة الإرسال
-  void _handleFieldSubmitted(String value, int rowIndex, int colIndex) {
-    if (colIndex == 0) {
-      FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][1]);
-    } else if (colIndex == 1) {
-      if (value.isNotEmpty) {
-        _showAccountTypeDialog(rowIndex);
-      } else {
-        FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][2]);
-      }
-    } else if (colIndex == 2) {
-      _showAccountTypeDialog(rowIndex);
-    } else if (colIndex == 3) {
-      // إذا كان حقل اسم الحساب، انتقل إلى الملاحظات
-      FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][4]);
-    } else if (colIndex == 4) {
-      _addNewRow();
-      if (rowControllers.isNotEmpty) {
-        final newRowIndex = rowControllers.length - 1;
-        FocusScope.of(context).requestFocus(rowFocusNodes[newRowIndex][1]);
-      }
-    }
+  Widget _buildEmptyCell() {
+    return Container(
+      padding: const EdgeInsets.all(1),
+      constraints: const BoxConstraints(minHeight: 25),
+      child: TextField(
+        controller: TextEditingController()..text = '',
+        focusNode: FocusNode(),
+        enabled: false,
+        decoration: const InputDecoration(
+          contentPadding: EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+          border: InputBorder.none,
+        ),
+      ),
+    );
   }
 
   Widget _buildNotesCell(TextEditingController controller, FocusNode focusNode,
@@ -567,40 +585,54 @@ class _BoxScreenState extends State<BoxScreen> {
     );
   }
 
-  // تعديل دالة إظهار دايلوج نوع الحساب
-  void _showAccountTypeDialog(int rowIndex) {
-    CommonDialogs.showAccountTypeDialog(
-      context: context,
-      currentValue: accountTypeValues[rowIndex],
-      options: accountTypeOptions,
-      onSelected: (value) {
-        setState(() {
-          accountTypeValues[rowIndex] = value;
-          _hasUnsavedChanges = true;
-
-          // إذا تم اختيار نوع الحساب، ركز على حقل اسم الحساب للكتابة
-          if (value.isNotEmpty) {
-            Future.delayed(const Duration(milliseconds: 150), () {
-              if (mounted) {
-                FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][3]);
-                _scrollToField(rowIndex, 3);
-              }
-            });
-          }
-        });
-      },
-      onCancel: () {
-        // إذا تم الإلغاء، نرجع التركيز إلى حقل المقبوض/المدفوع
-        if (rowControllers[rowIndex][1].text.isNotEmpty) {
-          FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][1]);
-        } else if (rowControllers[rowIndex][2].text.isNotEmpty) {
-          FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][2]);
-        }
-      },
-    );
+  Color _getAccountTypeColor(String accountType) {
+    switch (accountType) {
+      case 'زبون':
+        return Colors.green;
+      case 'مورد':
+        return Colors.blue;
+      case 'مصروف':
+        return Colors.orange;
+      default:
+        return Colors.grey;
+    }
   }
 
-  // تعديل دالة handleFieldChanged لإضافة دعم لاسم الحساب
+  String _getAccountHintText(String accountType) {
+    switch (accountType) {
+      case 'زبون':
+        return 'اسم الزبون';
+      case 'مورد':
+        return 'اسم المورد';
+      case 'مصروف':
+        return 'نوع المصروف';
+      default:
+        return '...';
+    }
+  }
+
+  void _handleFieldSubmitted(String value, int rowIndex, int colIndex) {
+    if (colIndex == 0) {
+      FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][1]);
+    } else if (colIndex == 1) {
+      if (value.isNotEmpty) {
+        _showAccountTypeDialog(rowIndex);
+      } else {
+        FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][2]);
+      }
+    } else if (colIndex == 2) {
+      _showAccountTypeDialog(rowIndex);
+    } else if (colIndex == 3) {
+      FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][4]);
+    } else if (colIndex == 4) {
+      _addNewRow();
+      if (rowControllers.isNotEmpty) {
+        final newRowIndex = rowControllers.length - 1;
+        FocusScope.of(context).requestFocus(rowFocusNodes[newRowIndex][1]);
+      }
+    }
+  }
+
   void _handleFieldChanged(String value, int rowIndex, int colIndex) {
     setState(() {
       _hasUnsavedChanges = true;
@@ -614,15 +646,89 @@ class _BoxScreenState extends State<BoxScreen> {
       // التحقق من عدم السماح بالكتابة في كلا الحقلين (المقبوض والمدفوع)
       if (colIndex == 1 && value.isNotEmpty) {
         rowControllers[rowIndex][2].text = '';
+        _calculateAllTotals();
       } else if (colIndex == 2 && value.isNotEmpty) {
         rowControllers[rowIndex][1].text = '';
+        _calculateAllTotals();
       }
 
-      // إذا كان التغيير في حقل اسم الحساب (colIndex == 3)
       if (colIndex == 3) {
         _hasUnsavedChanges = true;
       }
     });
+  }
+
+  void _showAccountTypeDialog(int rowIndex) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text(
+            'اختر نوع الحساب',
+            style: TextStyle(fontWeight: FontWeight.bold),
+            textAlign: TextAlign.center,
+          ),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 8.0, // المسافة الأفقية بين العناصر
+              runSpacing: 8.0, // المسافة العمودية بين الأسطر
+              children: accountTypeOptions.map((option) {
+                return ChoiceChip(
+                  label: Text(option),
+                  selected: option == accountTypeValues[rowIndex],
+                  selectedColor: _getAccountTypeColor(option),
+                  backgroundColor: Colors.grey[200],
+                  onSelected: (bool selected) {
+                    if (selected) {
+                      Navigator.pop(context);
+                      _onAccountTypeSelected(option, rowIndex);
+                    }
+                  },
+                );
+              }).toList(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _onAccountTypeCancelled(rowIndex);
+              },
+              child: const Text('إلغاء'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _onAccountTypeSelected(String value, int rowIndex) {
+    setState(() {
+      accountTypeValues[rowIndex] = value;
+      _hasUnsavedChanges = true;
+
+      // إذا تم اختيار نوع الحساب، ركز على حقل اسم الحساب للكتابة
+      if (value.isNotEmpty) {
+        Future.delayed(const Duration(milliseconds: 150), () {
+          if (mounted) {
+            FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][3]);
+            _scrollToField(rowIndex, 3);
+          }
+        });
+      }
+    });
+  }
+
+  void _onAccountTypeCancelled(int rowIndex) {
+    // إذا تم الإلغاء، نرجع التركيز إلى حقل المقبوض/المدفوع
+    if (rowControllers[rowIndex][1].text.isNotEmpty) {
+      FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][1]);
+    } else if (rowControllers[rowIndex][2].text.isNotEmpty) {
+      FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][2]);
+    }
   }
 
   @override
@@ -850,6 +956,9 @@ class _BoxScreenState extends State<BoxScreen> {
     }
   }
 
+  // باقي الدوال (_showRecordSelectionDialog, _shareFile, _loadRecord) تبقى كما هي
+  // ... (نفس الدوال الموجودة في الكود الأصلي)
+
   Future<void> _showRecordSelectionDialog() async {
     final availableRecords =
         await _storageService.getAvailableRecords(widget.selectedDate);
@@ -1029,6 +1138,7 @@ class _BoxScreenState extends State<BoxScreen> {
           if (newControllers[1].text.isNotEmpty) {
             newControllers[2].text = '';
           }
+          _calculateAllTotals();
         });
 
         newControllers[2].addListener(() {
@@ -1036,6 +1146,7 @@ class _BoxScreenState extends State<BoxScreen> {
           if (newControllers[2].text.isNotEmpty) {
             newControllers[1].text = '';
           }
+          _calculateAllTotals();
         });
 
         newControllers[3].addListener(() => _hasUnsavedChanges = true);
@@ -1051,6 +1162,7 @@ class _BoxScreenState extends State<BoxScreen> {
         _addNewRow();
       }
 
+      _calculateAllTotals();
       _hasUnsavedChanges = false;
     });
 

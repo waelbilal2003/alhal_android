@@ -256,4 +256,47 @@ class ReceiptStorageService {
       return null;
     }
   }
+
+  // دالة جديدة: حساب إجمالي الدفعة من شاشة الاستلام
+  Future<double> getTotalPayment(String date) async {
+    double totalPayment = 0;
+
+    try {
+      final records = await getAvailableRecords(date);
+
+      for (var recordNum in records) {
+        final doc = await loadReceiptDocument(date, recordNum);
+        if (doc != null) {
+          // إذا كان totals غير nullable، نستخدمه مباشرة
+          totalPayment +=
+              double.tryParse(doc.totals['totalPayment'] ?? '0') ?? 0;
+        }
+      }
+    } catch (e) {
+      print('Error calculating total payment: $e');
+    }
+
+    return totalPayment;
+  }
+
+// دالة جديدة: حساب إجمالي الحمولة من شاشة الاستلام
+  Future<double> getTotalLoad(String date) async {
+    double totalLoad = 0;
+
+    try {
+      final records = await getAvailableRecords(date);
+
+      for (var recordNum in records) {
+        final doc = await loadReceiptDocument(date, recordNum);
+        if (doc != null) {
+          // إذا كان totals غير nullable، نستخدمه مباشرة
+          totalLoad += double.tryParse(doc.totals['totalLoad'] ?? '0') ?? 0;
+        }
+      }
+    } catch (e) {
+      print('Error calculating total load: $e');
+    }
+
+    return totalLoad;
+  }
 }

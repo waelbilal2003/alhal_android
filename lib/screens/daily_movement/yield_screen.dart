@@ -1,8 +1,11 @@
+// yield_screen.dart (محدث)
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../../services/purchase_storage_service.dart';
-import '../../services/box_storage_service.dart'; // إضافة استيراد خدمة الصندوق
+import '../../services/box_storage_service.dart';
+import '../../services/receipt_storage_service.dart';
+import '../../services/sales_storage_service.dart'; // إضافة لشاشة المبيعات
 
 class YieldScreen extends StatefulWidget {
   final String sellerName;
@@ -79,10 +82,12 @@ class _YieldScreenState extends State<YieldScreen> {
     _paymentsController.addListener(() => setState(_calculateYield));
     _collectedController.addListener(() => setState(_calculateYield));
 
-    // تحميل المشتريات النقدية تلقائياً إذا توفر التاريخ
+    // تحميل البيانات تلقائياً إذا توفر التاريخ
     if (widget.selectedDate != null) {
       _loadCashPurchases();
+      _loadCashSales(); // تحميل المبيعات النقدية
       _loadBoxData(); // تحميل بيانات الصندوق
+      _loadReceiptData(); // تحميل بيانات الاستلام
     }
   }
 
@@ -111,6 +116,32 @@ class _YieldScreenState extends State<YieldScreen> {
     });
   }
 
+  Future<void> _loadCashSales() async {
+    if (widget.selectedDate == null) return;
+
+    final salesStorage = SalesStorageService();
+    final records =
+        await salesStorage.getAvailableRecords(widget.selectedDate!);
+    double totalCashSales = 0;
+
+    for (var recordNum in records) {
+      final doc =
+          await salesStorage.loadSalesDocument(widget.selectedDate!, recordNum);
+      if (doc != null) {
+        for (var sale in doc.sales) {
+          // حساب فقط المبيعات النقدية (لا تشمل المبيعات بالدين)
+          if (sale.cashOrDebt == 'نقدي') {
+            totalCashSales += double.tryParse(sale.total) ?? 0;
+          }
+        }
+      }
+    }
+
+    setState(() {
+      _cashSalesController.text = totalCashSales.toStringAsFixed(2);
+    });
+  }
+
   Future<void> _loadBoxData() async {
     if (widget.selectedDate == null) return;
 
@@ -123,15 +154,42 @@ class _YieldScreenState extends State<YieldScreen> {
     // حساب إجمالي المدفوعات من الصندوق
     final totalPaid = await boxStorage.getTotalPaid(widget.selectedDate!);
 
-    // TODO: حساب إجمالي حمولة ودفعة من شاشة الاستلام
-    // final totalShipment = await shipmentService.getTotalShipment(widget.selectedDate!);
-    // final totalDelivery = await shipmentService.getTotalDelivery(widget.selectedDate!);
-
-    // حساب إجمالي المدفوعات (من الصندوق + من الاستلام)
-    final totalPayments = totalPaid; // + totalShipment + totalDelivery;
-
     setState(() {
       _receiptsController.text = totalReceived.toStringAsFixed(2);
+      // سنضيف مدفوعات الاستلام لاحقاً
+      _paymentsController.text = totalPaid.toStringAsFixed(2);
+    });
+  }
+
+  Future<void> _loadReceiptData() async {
+    if (widget.selectedDate == null) return;
+
+    final receiptStorage = ReceiptStorageService();
+    final records =
+        await receiptStorage.getAvailableRecords(widget.selectedDate!);
+    double totalPaymentFromReceipt = 0;
+    double totalLoadFromReceipt = 0;
+
+    for (var recordNum in records) {
+      final doc = await receiptStorage.loadReceiptDocument(
+          widget.selectedDate!, recordNum);
+
+      // استخدام الوصول الآمن بدون تحقق صريح
+      final totals = doc?.totals; // null-aware access
+      if (totals != null) {
+        totalPaymentFromReceipt +=
+            double.tryParse(totals['totalPayment'] ?? '0') ?? 0;
+        totalLoadFromReceipt +=
+            double.tryParse(totals['totalLoad'] ?? '0') ?? 0;
+      }
+    }
+
+    final double currentPayments =
+        double.tryParse(_paymentsController.text) ?? 0;
+    final double totalPayments =
+        currentPayments + totalPaymentFromReceipt + totalLoadFromReceipt;
+
+    setState(() {
       _paymentsController.text = totalPayments.toStringAsFixed(2);
     });
   }
@@ -144,7 +202,16 @@ class _YieldScreenState extends State<YieldScreen> {
     if (loggedIn && savedSellerName.isNotEmpty) {
       setState(() {
         _isLoggedIn = true;
+        _sellerNameController.text = savedSellerName;
       });
+
+      // إذا تم تسجيل الدخول، تحميل البيانات
+      if (widget.selectedDate != null) {
+        _loadCashPurchases();
+        _loadCashSales();
+        _loadBoxData();
+        _loadReceiptData();
+      }
     }
   }
 
@@ -152,7 +219,7 @@ class _YieldScreenState extends State<YieldScreen> {
     if (_formKey.currentState?.validate() ?? false) {
       setState(() {
         _isLoading = true;
-        _errorMessage = null; // تم التعديل
+        _errorMessage = null;
       });
 
       try {
@@ -176,6 +243,14 @@ class _YieldScreenState extends State<YieldScreen> {
             _isLoggedIn = true;
             _isLoading = false;
           });
+
+          // بعد تسجيل الدخول، تحميل البيانات
+          if (widget.selectedDate != null) {
+            _loadCashPurchases();
+            _loadCashSales();
+            _loadBoxData();
+            _loadReceiptData();
+          }
         } else {
           setState(() {
             _errorMessage = 'اسم البائع أو كلمة المرور غير صحيحة';
@@ -201,10 +276,17 @@ class _YieldScreenState extends State<YieldScreen> {
       _sellerNameController.clear();
       _passwordController.clear();
       _errorMessage = null;
+      _cashSalesController.text = '0.00';
+      _cashPurchasesController.text = '0.00';
+      _receiptsController.text = '0.00';
+      _paymentsController.text = '0.00';
+      _collectedController.text = '';
+      _yield = 0;
+      _status = '';
     });
   }
 
-  // --- واجهة تسجيل الدخول الجديدة (نسخ من login_screen.dart) ---
+  // --- واجهة تسجيل الدخول ---
   Widget _buildLoginScreen() {
     return Form(
       key: _formKey,
@@ -235,7 +317,7 @@ class _YieldScreenState extends State<YieldScreen> {
                     focusNode: _loginSellerNameFocus,
                     nextFocusNode: _loginPasswordFocus,
                     isLastInRow: false,
-                    errorText: _errorMessage, // تمرير رسالة الخطأ هنا
+                    errorText: _errorMessage,
                   ),
                 ),
               ),
@@ -281,7 +363,6 @@ class _YieldScreenState extends State<YieldScreen> {
     );
   }
 
-  // --- دالة بناء حقل الإدخال الجديدة (نسخ من login_screen.dart) ---
   Widget _buildInputField(
     TextEditingController controller,
     String hint,
@@ -297,7 +378,7 @@ class _YieldScreenState extends State<YieldScreen> {
       textAlign: TextAlign.center,
       focusNode: focusNode,
       textDirection: TextDirection.rtl,
-      style: const TextStyle(color: Colors.white), // لضمان لون النص
+      style: const TextStyle(color: Colors.white),
       decoration: InputDecoration(
         hintText: hint,
         hintStyle: const TextStyle(color: Colors.white70),
@@ -337,6 +418,18 @@ class _YieldScreenState extends State<YieldScreen> {
         backgroundColor: Colors.teal[600],
         foregroundColor: Colors.white,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              if (widget.selectedDate != null) {
+                _loadCashPurchases();
+                _loadCashSales();
+                _loadBoxData();
+                _loadReceiptData();
+              }
+            },
+            tooltip: 'تحديث البيانات',
+          ),
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: _logout,
@@ -388,6 +481,7 @@ class _YieldScreenState extends State<YieldScreen> {
                           child: _buildReadOnlyField(
                             'مبيعات نقدية',
                             _cashSalesController,
+                            icon: Icons.shopping_cart,
                           ),
                         ),
                         const SizedBox(width: 16),
@@ -395,6 +489,7 @@ class _YieldScreenState extends State<YieldScreen> {
                           child: _buildReadOnlyField(
                             'مقبوضات',
                             _receiptsController,
+                            icon: Icons.account_balance_wallet,
                           ),
                         ),
                       ],
@@ -406,9 +501,10 @@ class _YieldScreenState extends State<YieldScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Expanded(
-                          child: _buildYieldInputField(
+                          child: _buildReadOnlyField(
                             'مشتريات نقدية',
                             _cashPurchasesController,
+                            icon: Icons.shopping_bag,
                           ),
                         ),
                         const SizedBox(width: 16),
@@ -416,6 +512,8 @@ class _YieldScreenState extends State<YieldScreen> {
                           child: _buildReadOnlyField(
                             'مدفوعات',
                             _paymentsController,
+                            icon: Icons.payment,
+                            infoText: 'مدفوعات الصندوق + دفعة وحمولة الاستلام',
                           ),
                         ),
                       ],
@@ -428,10 +526,11 @@ class _YieldScreenState extends State<YieldScreen> {
                       children: [
                         // حقل الناتج (الغلة) - تصميم مشابه لحقل الإدخال
                         Expanded(
-                          child: _buildReadOnlyField(
+                          child: _buildYieldResultField(
                             'الغلة',
                             TextEditingController(
                                 text: _yield.toStringAsFixed(2)),
+                            icon: Icons.calculate,
                           ),
                         ),
                         const SizedBox(width: 16),
@@ -439,6 +538,7 @@ class _YieldScreenState extends State<YieldScreen> {
                           child: _buildYieldInputField(
                             'المقبوض منه',
                             _collectedController,
+                            icon: Icons.money,
                           ),
                         ),
                       ],
@@ -467,18 +567,63 @@ class _YieldScreenState extends State<YieldScreen> {
                                   : Colors.grey[300]!,
                         ),
                       ),
-                      child: Text(
-                        _status.isNotEmpty ? _status : 'لا يوجد فرق',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: _status.contains('زيادة')
-                              ? Colors.green[800]
-                              : _status.contains('نقص')
-                                  ? Colors.red[800]
-                                  : Colors.grey[600],
-                        ),
-                        textAlign: TextAlign.center,
+                      child: Column(
+                        children: [
+                          Text(
+                            _status.isNotEmpty ? _status : 'لا يوجد فرق',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: _status.contains('زيادة')
+                                  ? Colors.green[800]
+                                  : _status.contains('نقص')
+                                      ? Colors.red[800]
+                                      : Colors.grey[600],
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          if (_status.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8.0),
+                              child: Text(
+                                _status.contains('زيادة')
+                                    ? 'المقبوض أكبر من الغلة الحقيقية'
+                                    : 'المقبوض أقل من الغلة الحقيقية',
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.grey,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+
+                    // معلومات عن الحقول
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 16.0, horizontal: 8.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildInfoItem(
+                            'مبيعات نقدية',
+                            'إجمالي المبيعات النقدية من شاشة المبيعات (لا تشمل المبيعات بالدين)',
+                          ),
+                          _buildInfoItem(
+                            'مشتريات نقدية',
+                            'إجمالي المشتريات النقدية من شاشة المشتريات',
+                          ),
+                          _buildInfoItem(
+                            'مقبوضات',
+                            'إجمالي المقبوضات من شاشة الصندوق',
+                          ),
+                          _buildInfoItem(
+                            'مدفوعات',
+                            'إجمالي المدفوعات من شاشة الصندوق + إجمالي الدفعة والحمولة من شاشة الاستلام',
+                          ),
+                        ],
                       ),
                     ),
 
@@ -494,8 +639,136 @@ class _YieldScreenState extends State<YieldScreen> {
     );
   }
 
-  // دالة جديدة لحقول القراءة فقط
-  Widget _buildReadOnlyField(String label, TextEditingController controller) {
+  Widget _buildInfoItem(String title, String description) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            margin: const EdgeInsets.only(top: 6, right: 8),
+            decoration: BoxDecoration(
+              color: Colors.teal,
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.teal,
+                  ),
+                ),
+                Text(
+                  description,
+                  style: const TextStyle(
+                    fontSize: 10,
+                    color: Colors.grey,
+                  ),
+                  textAlign: TextAlign.start,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReadOnlyField(
+    String label,
+    TextEditingController controller, {
+    IconData? icon,
+    String? infoText,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 1,
+            offset: const Offset(0, 0.54),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (infoText != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4.0, right: 8.0),
+              child: Text(
+                infoText,
+                style: const TextStyle(
+                  fontSize: 9,
+                  color: Colors.grey,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          TextField(
+            controller: controller,
+            readOnly: true,
+            textAlign: TextAlign.center,
+            keyboardType: TextInputType.number,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: Colors.teal[700],
+            ),
+            decoration: InputDecoration(
+              labelText: label,
+              labelStyle: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[700],
+                fontWeight: FontWeight.bold,
+              ),
+              prefixIcon: icon != null
+                  ? Icon(
+                      icon,
+                      size: 18,
+                      color: Colors.teal[600],
+                    )
+                  : null,
+              filled: true,
+              fillColor: Colors.grey[100],
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(color: Colors.grey[300]!),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(color: Colors.grey[300]!),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(color: Colors.teal[400]!, width: 2),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 1,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildYieldResultField(
+    String label,
+    TextEditingController controller, {
+    IconData? icon,
+  }) {
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(8),
@@ -511,11 +784,10 @@ class _YieldScreenState extends State<YieldScreen> {
         controller: controller,
         readOnly: true,
         textAlign: TextAlign.center,
-        keyboardType: TextInputType.number,
         style: TextStyle(
           fontSize: 12,
-          fontWeight: FontWeight.w600,
-          color: Colors.teal[700],
+          fontWeight: FontWeight.w800,
+          color: Colors.teal[900],
         ),
         decoration: InputDecoration(
           labelText: label,
@@ -524,19 +796,26 @@ class _YieldScreenState extends State<YieldScreen> {
             color: Colors.grey[700],
             fontWeight: FontWeight.bold,
           ),
+          prefixIcon: icon != null
+              ? Icon(
+                  icon,
+                  size: 18,
+                  color: Colors.teal[700],
+                )
+              : null,
           filled: true,
-          fillColor: Colors.grey[100],
+          fillColor: Colors.teal[50],
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide(color: Colors.grey[300]!),
+            borderSide: BorderSide(color: Colors.teal[300]!),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide(color: Colors.grey[300]!),
+            borderSide: BorderSide(color: Colors.teal[300]!),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide(color: Colors.teal[400]!, width: 2),
+            borderSide: BorderSide(color: Colors.teal[500]!, width: 2),
           ),
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 16,
@@ -547,10 +826,11 @@ class _YieldScreenState extends State<YieldScreen> {
     );
   }
 
-  // تم تغيير اسم الدالة لتجنب التعارض
-  Widget _buildYieldInputField(String label, TextEditingController controller) {
-    final bool isReadOnly = label == 'مشتريات نقدية';
-
+  Widget _buildYieldInputField(
+    String label,
+    TextEditingController controller, {
+    IconData? icon,
+  }) {
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(8),
@@ -564,13 +844,12 @@ class _YieldScreenState extends State<YieldScreen> {
       ),
       child: TextField(
         controller: controller,
-        readOnly: isReadOnly,
         textAlign: TextAlign.center,
         keyboardType: TextInputType.number,
         style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w600,
-          color: isReadOnly ? Colors.teal[700] : Colors.black,
+          color: Colors.black,
         ),
         decoration: InputDecoration(
           labelText: label,
@@ -579,8 +858,15 @@ class _YieldScreenState extends State<YieldScreen> {
             color: Colors.grey[700],
             fontWeight: FontWeight.bold,
           ),
+          prefixIcon: icon != null
+              ? Icon(
+                  icon,
+                  size: 18,
+                  color: Colors.teal[600],
+                )
+              : null,
           filled: true,
-          fillColor: isReadOnly ? Colors.grey[100] : Colors.white,
+          fillColor: Colors.white,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(8),
             borderSide: BorderSide(color: Colors.grey[300]!),
@@ -598,6 +884,11 @@ class _YieldScreenState extends State<YieldScreen> {
             vertical: 1,
           ),
         ),
+        onChanged: (value) {
+          setState(() {
+            _calculateYield();
+          });
+        },
       ),
     );
   }
@@ -622,10 +913,8 @@ class _YieldScreenState extends State<YieldScreen> {
 
     // بناء واجهة المستخدم بناءً على حالة تسجيل الدخول
     if (!_isLoggedIn) {
-      // عرض شاشة تسجيل الدخول كاملة مع الخلفية
       return Scaffold(
         body: Container(
-          // استخدام نفس التدرج اللوني والتوسيط من login_screen
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: [Colors.teal[400]!, Colors.teal[700]!],
@@ -642,7 +931,6 @@ class _YieldScreenState extends State<YieldScreen> {
         ),
       );
     } else {
-      // عرض شاشة الغلة
       return _buildYieldScreen();
     }
   }

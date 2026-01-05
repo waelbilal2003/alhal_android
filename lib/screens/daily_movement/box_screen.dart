@@ -798,7 +798,7 @@ class _BoxScreenState extends State<BoxScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.folder_open),
-            tooltip: 'فتح سجل',
+            tooltip: 'فتح يومية',
             onPressed: () async {
               await _saveCurrentRecord(silent: true);
               await _showRecordSelectionDialog();
@@ -984,7 +984,7 @@ class _BoxScreenState extends State<BoxScreen> {
                   const Padding(
                     padding: EdgeInsets.all(16.0),
                     child: Text(
-                      'لا توجد سجلات محفوظة لهذا التاريخ',
+                      'لا توجد يومية محفوظة لهذا التاريخ',
                       style: TextStyle(color: Colors.grey),
                       textAlign: TextAlign.center,
                     ),
@@ -998,7 +998,7 @@ class _BoxScreenState extends State<BoxScreen> {
                         leading:
                             const Icon(Icons.description, color: Colors.blue),
                         title: Text(
-                          'سجل رقم $recordNum',
+                          'اليومية رقم $recordNum',
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                         trailing: Row(
@@ -1043,7 +1043,7 @@ class _BoxScreenState extends State<BoxScreen> {
                     }
                   },
                   icon: const Icon(Icons.add_circle_outline),
-                  label: const Text('سجل جديد'),
+                  label: const Text('يومية قديمة'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green[600],
                     foregroundColor: Colors.white,

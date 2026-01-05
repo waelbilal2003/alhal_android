@@ -6,8 +6,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("dev.flutter.flutter-gradle-plugin")
-    // ✨ تم تصحيح تطبيق الـ plugin
-    id("com.google.gms.google-services") version "4.4.1" 
+    // ✅ تمت إزالة Google Services plugin
 }
 
 // تعريف keystoreProperties للعمل المحلي فقط
@@ -118,10 +117,5 @@ flutter {
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
-    implementation(platform("com.google.firebase:firebase-bom:33.0.0"))
-    implementation("com.google.firebase:firebase-analytics")
-    implementation("com.google.firebase:firebase-messaging")
+    // ✅ تمت إزالة جميع dependencies المتعلقة بـ Firebase
 }
-
-// ✨ تم حذف السطر الأخير لأن الـ plugin تم تطبيقه في الأعلى
-// apply(plugin = "com.google.gms.google-services")

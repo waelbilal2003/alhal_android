@@ -411,7 +411,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
                   ),
             tooltip: _hasUnsavedChanges
                 ? 'هناك تغييرات غير محفوظة - انقر للحفظ'
-                : 'حفظ السجل',
+                : 'حفظ اليومية',
             onPressed: _isSaving
                 ? null
                 : () {
@@ -421,7 +421,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.folder_open),
-            tooltip: 'فتح سجل',
+            tooltip: 'فتح يومية',
             onPressed: () async {
               await _saveCurrentRecord(silent: true);
               await _showRecordSelectionDialog();
@@ -587,7 +587,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
       builder: (BuildContext context) {
         return AlertDialog(
           title: const Text(
-            'اختر رقم السجل',
+            'يومية سابقة',
             style: TextStyle(fontWeight: FontWeight.bold),
             textAlign: TextAlign.center,
           ),
@@ -599,7 +599,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
                   const Padding(
                     padding: EdgeInsets.all(16.0),
                     child: Text(
-                      'لا توجد سجلات محفوظة لهذا التاريخ',
+                      'لا توجد يومية محفوظة لهذا التاريخ',
                       style: TextStyle(color: Colors.grey),
                       textAlign: TextAlign.center,
                     ),
@@ -613,7 +613,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
                         leading:
                             const Icon(Icons.description, color: Colors.blue),
                         title: Text(
-                          'سجل رقم $recordNum',
+                          'اليومية رقم $recordNum',
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                         trailing: Row(
@@ -658,7 +658,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
                     }
                   },
                   icon: const Icon(Icons.add_circle_outline),
-                  label: const Text('سجل جديد'),
+                  label: const Text('يومية جديدة'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green[600],
                     foregroundColor: Colors.white,

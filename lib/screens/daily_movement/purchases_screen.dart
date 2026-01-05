@@ -995,15 +995,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       _calculateAllTotals();
       _hasUnsavedChanges = false;
     });
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('تم تحميل السجل رقم $recordNumber'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    }
   }
 
   // إضافة دالة لعرض تحذير القيم غير الصحيحة

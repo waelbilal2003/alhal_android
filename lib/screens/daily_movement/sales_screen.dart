@@ -1087,15 +1087,6 @@ class _SalesScreenState extends State<SalesScreen> {
       _calculateAllTotals();
       _hasUnsavedChanges = false;
     });
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('تم تحميل سجل المبيعات رقم $recordNumber'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    }
   }
 }
 

@@ -736,7 +736,7 @@ class _BoxScreenState extends State<BoxScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          'يومية الصندوق رقم /$serialNumber/ ليوم $dayName تاريخ ${widget.selectedDate}',
+          'يومية الصندوق رقم /$serialNumber/ ليوم $dayName تاريخ ${widget.selectedDate} لمحل ${widget.storeName} البائع ${widget.sellerName}',
           style: const TextStyle(
             fontWeight: FontWeight.bold,
             fontSize: 14,
@@ -1171,15 +1171,6 @@ class _BoxScreenState extends State<BoxScreen> {
       _calculateAllTotals();
       _hasUnsavedChanges = false;
     });
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('تم تحميل السجل رقم $recordNumber'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    }
   }
 }
 

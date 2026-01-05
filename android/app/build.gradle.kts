@@ -1,40 +1,113 @@
+import java.util.Properties
+import java.io.FileInputStream
+import java.util.Base64
+
 plugins {
     id("com.android.application")
-    id("kotlin-android")
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id("org.jetbrains.kotlin.android")
     id("dev.flutter.flutter-gradle-plugin")
+    // ✨ تم تصحيح تطبيق الـ plugin
+    id("com.google.gms.google-services") version "4.4.1" 
+}
+
+// تعريف keystoreProperties للعمل المحلي فقط
+val keystoreProperties = Properties()
+val keystorePropertiesFile = rootProject.file("key.properties")
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
 
 android {
-    namespace = "com.marketledger.market_ledger"
+    namespace = "sy.alhalmarket.syrian_arab"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
 
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_11.toString()
+        jvmTarget = "11"
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.marketledger.market_ledger"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        applicationId = "sy.alhalmarket.syrian_arab"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
-        versionCode = flutter.versionCode
-        versionName = flutter.versionName
+        
+        // ✨ تحقق من رقم الإصدار قبل البناء
+        val versionNameFromFile = flutter.versionName
+        val versionCodeFromFile = flutter.versionCode?.toInt() ?: 1
+
+        println("🔢 Building version: $versionNameFromFile (Code: $versionCodeFromFile)")
+
+        versionCode = versionCodeFromFile
+        versionName = versionNameFromFile
+        
+        multiDexEnabled = true
+    }
+
+    // ✨ تم نقل كود إعادة التسمية إلى المكان الصحيح
+    applicationVariants.all {
+        val variant = this
+        variant.outputs
+            .map { it as com.android.build.gradle.internal.api.BaseVariantOutputImpl }
+            .forEach { output ->
+                // استخراج اسم المعمارية (arm64-v8a, armeabi-v7a, etc.)
+                val abi = output.outputFile.name.split("-")[1]
+                // ✨ تم تحسين اسم الملف ليكون أوضح وأقصر
+                val outputFileName = "minex-${abi}.apk"
+                output.outputFileName = outputFileName
+            }
+    }
+    
+    // ✅ الكود الجديد الذي يعتمد على GitHub Secrets
+    signingConfigs {
+        create("release") {
+            // التحقق مما إذا كنا في بيئة CI/CD (GitHub Actions)
+            val isCi = System.getenv("CI") != null
+
+            if (isCi) {
+                println("🔑 Running in CI environment. Setting up keystore from GitHub Secrets.")
+
+                // 1. فك تشفير وإنشاء ملف minex.jks مؤقت
+                val keystoreBase64 = System.getenv("KEYSTORE_BASE64")
+                if (keystoreBase64 == null) {
+                    throw GradleException("❌ KEYSTORE_BASE64 secret not found in GitHub Actions.")
+                }
+                val keystoreFile = file("minex.jks")
+                keystoreFile.writeBytes(Base64.getDecoder().decode(keystoreBase64))
+                storeFile = keystoreFile
+
+                // 2. قراءة باقي البيانات من الـ Secrets
+                keyAlias = System.getenv("KEY_ALIAS") ?: throw GradleException("❌ KEY_ALIAS secret not found.")
+                keyPassword = System.getenv("KEY_PASSWORD") ?: throw GradleException("❌ KEY_PASSWORD secret not found.")
+                storePassword = System.getenv("STORE_PASSWORD") ?: throw GradleException("❌ STORE_PASSWORD secret not found.")
+
+                println("✅ Keystore created and signing configured successfully from GitHub Secrets.")
+
+            } else {
+                // هذا الجزء يعمل فقط على جهازك المحلي
+                println("🔑 Running locally. Setting up keystore from key.properties file.")
+                keyAlias = keystoreProperties["keyAlias"] as? String
+                keyPassword = keystoreProperties["keyPassword"] as? String
+                storeFile = keystoreProperties["storeFile"]?.let { file(it) }
+                storePassword = keystoreProperties["storePassword"] as? String
+            }
+        }
     }
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
+            isMinifyEnabled = false
+            isShrinkResources = false
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
 }
@@ -42,3 +115,13 @@ android {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
+    implementation(platform("com.google.firebase:firebase-bom:33.0.0"))
+    implementation("com.google.firebase:firebase-analytics")
+    implementation("com.google.firebase:firebase-messaging")
+}
+
+// ✨ تم حذف السطر الأخير لأن الـ plugin تم تطبيقه في الأعلى
+// apply(plugin = "com.google.gms.google-services")

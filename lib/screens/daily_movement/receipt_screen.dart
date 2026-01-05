@@ -798,15 +798,6 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
       _calculateAllTotals();
       _hasUnsavedChanges = false;
     });
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('تم تحميل السجل رقم $recordNumber'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    }
   }
 }
 

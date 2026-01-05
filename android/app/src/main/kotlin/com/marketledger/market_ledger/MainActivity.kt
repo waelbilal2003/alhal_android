@@ -1,4 +1,4 @@
-package com.marketledger.market_ledger
+package sy.alhalmarket.syrian_arab
 
 import io.flutter.embedding.android.FlutterActivity
 

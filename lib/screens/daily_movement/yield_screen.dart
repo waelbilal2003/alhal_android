@@ -210,9 +210,12 @@ class _YieldScreenState extends State<YieldScreen> {
       }
     }
 
-    // المعادلة الصحيحة: دفعة + حمولة + مدفوع(صندوق) = مدفوعات
+    // الإصلاح: حساب إجمالي المدفوعات = مدفوعات الصندوق + دفعة الاستلام + حمولة الاستلام
     final double currentPaymentsFromBox =
         double.tryParse(_paymentsController.text) ?? 0;
+
+    // يجب إزالة totalLoadFromReceipt من هنا لأنها مضافوة مسبقاً في الحسابات
+    // والصحيح هو: totalPayments = دفعات الصندوق + دفعة الاستلام + حمولة الاستلام
     final double totalPayments =
         currentPaymentsFromBox + totalPaymentFromReceipt + totalLoadFromReceipt;
 

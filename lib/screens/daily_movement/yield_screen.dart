@@ -187,35 +187,29 @@ class _YieldScreenState extends State<YieldScreen> {
     if (widget.selectedDate == null) return;
 
     final receiptStorage = ReceiptStorageService();
-    final records =
-        await receiptStorage.getAvailableRecords(widget.selectedDate!);
+    final currentSellerName = _sellerNameController.text;
+
+    // طريقة أفضل: اجمع فقط سجلات البائع الحالي
     double totalPaymentFromReceipt = 0;
     double totalLoadFromReceipt = 0;
 
-    // الحصول على اسم البائع الحالي
-    final currentSellerName = _sellerNameController.text;
+    final records =
+        await receiptStorage.getAvailableRecords(widget.selectedDate!);
 
     for (var recordNum in records) {
       final doc = await receiptStorage.loadReceiptDocument(
           widget.selectedDate!, recordNum);
 
-      if (doc != null) {
-        for (var receipt in doc.receipts) {
-          // إظهار فقط سجلات البائع الحالي
-          if (receipt.sellerName == currentSellerName) {
-            totalPaymentFromReceipt += double.tryParse(receipt.payment) ?? 0;
-            totalLoadFromReceipt += double.tryParse(receipt.load) ?? 0;
-          }
-        }
+      if (doc != null && doc.sellerName == currentSellerName) {
+        totalPaymentFromReceipt +=
+            double.tryParse(doc.totals['totalPayment'] ?? '0') ?? 0;
+        totalLoadFromReceipt +=
+            double.tryParse(doc.totals['totalLoad'] ?? '0') ?? 0;
       }
     }
 
-    // الإصلاح: حساب إجمالي المدفوعات = مدفوعات الصندوق + دفعة الاستلام + حمولة الاستلام
     final double currentPaymentsFromBox =
         double.tryParse(_paymentsController.text) ?? 0;
-
-    // يجب إزالة totalLoadFromReceipt من هنا لأنها مضافوة مسبقاً في الحسابات
-    // والصحيح هو: totalPayments = دفعات الصندوق + دفعة الاستلام + حمولة الاستلام
     final double totalPayments =
         currentPaymentsFromBox + totalPaymentFromReceipt + totalLoadFromReceipt;
 

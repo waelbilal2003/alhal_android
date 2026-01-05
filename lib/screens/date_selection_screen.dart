@@ -20,13 +20,11 @@ class DateSelectionScreen extends StatefulWidget {
 class _DateSelectionScreenState extends State<DateSelectionScreen> {
   DateTime _selectedDate = DateTime.now();
 
-  // دالة لتحديث التاريخ بأمان مع التحقق من صحة الأيام في الشهر
   void _updateDate({int? year, int? month, int? day}) {
     final currentYear = year ?? _selectedDate.year;
     final currentMonth = month ?? _selectedDate.month;
     var currentDay = day ?? _selectedDate.day;
 
-    // التحقق من أن اليوم المحدد لا يتجاوز عدد أيام الشهر الجديد
     final daysInMonth = DateUtils.getDaysInMonth(currentYear, currentMonth);
     if (currentDay > daysInMonth) {
       currentDay = daysInMonth;
@@ -37,7 +35,6 @@ class _DateSelectionScreenState extends State<DateSelectionScreen> {
     });
   }
 
-  // --- تعديل تصميم منتقي التاريخ ليتكيف مع حجم الشاشة ---
   Widget _buildCompactPicker(
     String label,
     int currentValue,
@@ -118,102 +115,110 @@ class _DateSelectionScreenState extends State<DateSelectionScreen> {
     );
   }
 
+  // دالة للتعامل مع زر الرجوع
+  Future<bool> _onWillPop() async {
+    Navigator.of(context).pop();
+    return false;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'اختيار التاريخ',
-          style: TextStyle(fontWeight: FontWeight.bold),
+    return WillPopScope(
+      onWillPop: _onWillPop,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text(
+            'اختيار التاريخ',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          backgroundColor: Colors.teal[600],
+          foregroundColor: Colors.white,
+          centerTitle: true,
         ),
-        backgroundColor: Colors.teal[600],
-        foregroundColor: Colors.white,
-        centerTitle: true,
-      ),
-      body: Directionality(
-        textDirection: TextDirection.rtl,
-        child: Column(
-          children: [
-            // عرض التاريخ الحالي في أعلى يمين الشاشة
-            Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Align(
-                alignment: Alignment.topRight,
-                child: Text(
-                  '${_selectedDate.year}/${_selectedDate.month}/${_selectedDate.day}',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black54,
+        body: Directionality(
+          textDirection: TextDirection.rtl,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Align(
+                  alignment: Alignment.topRight,
+                  child: Text(
+                    '${_selectedDate.year}/${_selectedDate.month}/${_selectedDate.day}',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black54,
+                    ),
                   ),
                 ),
               ),
-            ),
-            Expanded(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _buildCompactPicker(
-                    'اليوم',
-                    _selectedDate.day,
-                    () => _updateDate(day: _selectedDate.day + 1),
-                    () => _updateDate(day: _selectedDate.day - 1),
-                  ),
-                  _buildCompactPicker(
-                    'الشهر',
-                    _selectedDate.month,
-                    () => _updateDate(month: _selectedDate.month + 1),
-                    () => _updateDate(month: _selectedDate.month - 1),
-                    isMonth: true,
-                  ),
-                  _buildCompactPicker(
-                    'السنة',
-                    _selectedDate.year,
-                    () => _updateDate(year: _selectedDate.year + 1),
-                    () => _updateDate(year: _selectedDate.year - 1),
-                  ),
-                ],
+              Expanded(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _buildCompactPicker(
+                      'اليوم',
+                      _selectedDate.day,
+                      () => _updateDate(day: _selectedDate.day + 1),
+                      () => _updateDate(day: _selectedDate.day - 1),
+                    ),
+                    _buildCompactPicker(
+                      'الشهر',
+                      _selectedDate.month,
+                      () => _updateDate(month: _selectedDate.month + 1),
+                      () => _updateDate(month: _selectedDate.month - 1),
+                      isMonth: true,
+                    ),
+                    _buildCompactPicker(
+                      'السنة',
+                      _selectedDate.year,
+                      () => _updateDate(year: _selectedDate.year + 1),
+                      () => _updateDate(year: _selectedDate.year - 1),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            // زر الدخول أسفل الشاشة
-            Padding(
-              padding: const EdgeInsets.only(bottom: 16.0),
-              child: Center(
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => DailyMovementScreen(
-                          selectedDate:
-                              '${_selectedDate.year}/${_selectedDate.month}/${_selectedDate.day}',
-                          storeType: widget.storeType,
-                          sellerName: widget.sellerName ?? 'غير معروف',
+              Padding(
+                padding: const EdgeInsets.only(bottom: 16.0),
+                child: Center(
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => DailyMovementScreen(
+                            selectedDate:
+                                '${_selectedDate.year}/${_selectedDate.month}/${_selectedDate.day}',
+                            storeType: widget.storeType,
+                            sellerName: widget.sellerName ?? 'غير معروف',
+                          ),
                         ),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green[600],
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 60,
+                        vertical: 18,
                       ),
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green[600],
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 60,
-                      vertical: 18,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 4,
                     ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                    icon: const Icon(Icons.check_circle_outline, size: 24),
+                    label: const Text(
+                      'دخــول',
+                      style:
+                          TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                     ),
-                    elevation: 4,
-                  ),
-                  icon: const Icon(Icons.check_circle_outline, size: 24),
-                  label: const Text(
-                    'دخــول',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

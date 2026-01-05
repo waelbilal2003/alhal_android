@@ -621,7 +621,7 @@ class _SalesScreenState extends State<SalesScreen> {
                   ),
             tooltip: _hasUnsavedChanges
                 ? 'هناك تغييرات غير محفوظة - انقر للحفظ'
-                : 'حفظ سجل المبيعات',
+                : 'حفظ يومية المبيعات',
             onPressed: _isSaving
                 ? null
                 : () {
@@ -631,7 +631,7 @@ class _SalesScreenState extends State<SalesScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.folder_open),
-            tooltip: 'فتح سجل',
+            tooltip: 'فتح يومية',
             onPressed: () async {
               await _saveCurrentRecord(silent: true);
               await _showRecordSelectionDialog();
@@ -815,7 +815,7 @@ class _SalesScreenState extends State<SalesScreen> {
     if (!silent && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(success ? 'تم حفظ سجل المبيعات بنجاح' : 'فشل الحفظ'),
+          content: Text(success ? 'تم حفظ يومية المبيعات بنجاح' : 'فشل الحفظ'),
           backgroundColor: success ? Colors.green : Colors.red,
         ),
       );
@@ -856,7 +856,7 @@ class _SalesScreenState extends State<SalesScreen> {
       builder: (BuildContext context) {
         return AlertDialog(
           title: const Text(
-            'اختر رقم السجل',
+            'اليومية سابقة',
             style: TextStyle(fontWeight: FontWeight.bold),
             textAlign: TextAlign.center,
           ),
@@ -868,7 +868,7 @@ class _SalesScreenState extends State<SalesScreen> {
                   const Padding(
                     padding: EdgeInsets.all(16.0),
                     child: Text(
-                      'لا توجد سجلات محفوظة لهذا التاريخ',
+                      'لا توجد يومية  محفوظة لهذا التاريخ',
                       style: TextStyle(color: Colors.grey),
                       textAlign: TextAlign.center,
                     ),
@@ -882,7 +882,7 @@ class _SalesScreenState extends State<SalesScreen> {
                         leading:
                             const Icon(Icons.description, color: Colors.green),
                         title: Text(
-                          'سجل رقم $recordNum',
+                          'اليومية رقم $recordNum',
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                         trailing: Row(
@@ -927,7 +927,7 @@ class _SalesScreenState extends State<SalesScreen> {
                     }
                   },
                   icon: const Icon(Icons.add_circle_outline),
-                  label: const Text('سجل جديد'),
+                  label: const Text('يومية جديدة'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green[600],
                     foregroundColor: Colors.white,
@@ -953,7 +953,7 @@ class _SalesScreenState extends State<SalesScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('الرجاء حفظ السجل أولاً'),
+            content: Text('الرجاء حفظ اليومية أولاً'),
             backgroundColor: Colors.orange,
           ),
         );
@@ -1000,7 +1000,7 @@ class _SalesScreenState extends State<SalesScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('فشل تحميل السجل'),
+            content: Text('فشل تحميل اليومية'),
             backgroundColor: Colors.red,
           ),
         );

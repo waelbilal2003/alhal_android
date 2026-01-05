@@ -140,7 +140,7 @@ class _DateSelectionScreenState extends State<DateSelectionScreen> {
               child: Align(
                 alignment: Alignment.topRight,
                 child: Text(
-                  '${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}',
+                  '${_selectedDate.year}/${_selectedDate.month}/${_selectedDate.day}',
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
@@ -186,7 +186,7 @@ class _DateSelectionScreenState extends State<DateSelectionScreen> {
                       MaterialPageRoute(
                         builder: (context) => DailyMovementScreen(
                           selectedDate:
-                              '${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}',
+                              '${_selectedDate.year}/${_selectedDate.month}/${_selectedDate.day}',
                           storeType: widget.storeType,
                           sellerName: widget.sellerName ?? 'غير معروف',
                         ),

@@ -10,6 +10,7 @@ class Purchase {
   final String total;
   final String cashOrDebt;
   final String empties;
+  final String sellerName; // إضافة اسم البائع لكل سجل (صف)
 
   Purchase({
     required this.serialNumber,
@@ -23,6 +24,7 @@ class Purchase {
     required this.total,
     required this.cashOrDebt,
     required this.empties,
+    required this.sellerName,
   });
 
   // تحويل من JSON إلى كائن
@@ -39,6 +41,7 @@ class Purchase {
       total: json['total'] ?? '',
       cashOrDebt: json['cashOrDebt'] ?? '',
       empties: json['empties'] ?? '',
+      sellerName: json['sellerName'] ?? '',
     );
   }
 
@@ -56,6 +59,7 @@ class Purchase {
       'total': total,
       'cashOrDebt': cashOrDebt,
       'empties': empties,
+      'sellerName': sellerName,
     };
   }
 }

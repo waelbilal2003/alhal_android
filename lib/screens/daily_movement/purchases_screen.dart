@@ -720,6 +720,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
         total: controllers[8].text,
         cashOrDebt: cashOrDebtValues[i],
         empties: emptiesValues[i],
+        sellerName: widget.sellerName, // إضافة اسم البائع لكل سجل
       ));
     }
 

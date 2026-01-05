@@ -7,6 +7,7 @@ class Receipt {
   final String standing;
   final String payment; // حقل الدفعة
   final String load; // حقل الحمولة
+  final String sellerName; // إضافة اسم البائع لكل سجل (صف)
 
   Receipt({
     required this.serialNumber,
@@ -17,6 +18,7 @@ class Receipt {
     required this.standing,
     required this.payment,
     required this.load,
+    required this.sellerName,
   });
 
   // تحويل من JSON إلى كائن
@@ -30,6 +32,7 @@ class Receipt {
       standing: json['standing'] ?? '',
       payment: json['payment'] ?? '',
       load: json['load'] ?? '',
+      sellerName: json['sellerName'] ?? '',
     );
   }
 
@@ -44,6 +47,7 @@ class Receipt {
       'standing': standing,
       'payment': payment,
       'load': load,
+      'sellerName': sellerName,
     };
   }
 }

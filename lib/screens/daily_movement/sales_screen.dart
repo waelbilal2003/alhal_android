@@ -786,6 +786,7 @@ class _SalesScreenState extends State<SalesScreen> {
         cashOrDebt: cashOrDebtValues[i],
         empties: emptiesValues[i],
         customerName: cashOrDebtValues[i] == 'دين' ? customerNames[i] : null,
+        sellerName: widget.sellerName, // إضافة اسم البائع لكل سجل
       ));
     }
 

@@ -27,7 +27,7 @@ class PurchaseStorageService {
 
   // إنشاء اسم الملف بناءً على التاريخ ورقم السجل
   String _createFileName(String date, String recordNumber) {
-    // تحويل التاريخ من "19/12/2025" إلى "19-12-2025"
+    // تحويل التاريخ من "2025/12/19" إلى "2025-12-19"
     final dateParts = date.split('/');
     final formattedDate = dateParts.join('-');
 
@@ -36,7 +36,7 @@ class PurchaseStorageService {
 
   // إنشاء اسم المجلد بناءً على التاريخ
   String _createFolderName(String date) {
-    // تحويل التاريخ من "19/12/2025" إلى "19-12-2025"
+    // تحويل التاريخ من "2025/12/19" إلى "2025-12-19"
     final dateParts = date.split('/');
     final formattedDate = dateParts.join('-');
 

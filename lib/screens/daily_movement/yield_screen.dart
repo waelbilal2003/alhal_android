@@ -99,12 +99,17 @@ class _YieldScreenState extends State<YieldScreen> {
         await purchaseStorage.getAvailableRecords(widget.selectedDate!);
     double totalCashPurchases = 0;
 
+    // الحصول على اسم البائع الحالي من تسجيل الدخول
+    final currentSellerName = _sellerNameController.text;
+
     for (var recordNum in records) {
       final doc = await purchaseStorage.loadPurchaseDocument(
           widget.selectedDate!, recordNum);
       if (doc != null) {
         for (var purchase in doc.purchases) {
-          if (purchase.cashOrDebt == 'نقدي') {
+          // إظهار فقط سجلات البائع الحالي
+          if (purchase.sellerName == currentSellerName &&
+              purchase.cashOrDebt == 'نقدي') {
             totalCashPurchases += double.tryParse(purchase.total) ?? 0;
           }
         }
@@ -124,13 +129,17 @@ class _YieldScreenState extends State<YieldScreen> {
         await salesStorage.getAvailableRecords(widget.selectedDate!);
     double totalCashSales = 0;
 
+    // الحصول على اسم البائع الحالي من تسجيل الدخول
+    final currentSellerName = _sellerNameController.text;
+
     for (var recordNum in records) {
       final doc =
           await salesStorage.loadSalesDocument(widget.selectedDate!, recordNum);
       if (doc != null) {
         for (var sale in doc.sales) {
-          // حساب فقط المبيعات النقدية (لا تشمل المبيعات بالدين)
-          if (sale.cashOrDebt == 'نقدي') {
+          // إظهار فقط سجلات البائع الحالي
+          if (sale.sellerName == currentSellerName &&
+              sale.cashOrDebt == 'نقدي') {
             totalCashSales += double.tryParse(sale.total) ?? 0;
           }
         }
@@ -146,17 +155,30 @@ class _YieldScreenState extends State<YieldScreen> {
     if (widget.selectedDate == null) return;
 
     final boxStorage = BoxStorageService();
+    final records = await boxStorage.getAvailableRecords(widget.selectedDate!);
 
-    // حساب إجمالي المقبوضات من الصندوق
-    final totalReceived =
-        await boxStorage.getTotalReceived(widget.selectedDate!);
+    double totalReceived = 0;
+    double totalPaid = 0;
 
-    // حساب إجمالي المدفوعات من الصندوق
-    final totalPaid = await boxStorage.getTotalPaid(widget.selectedDate!);
+    // الحصول على اسم البائع الحالي
+    final currentSellerName = _sellerNameController.text;
+
+    for (var recordNum in records) {
+      final doc =
+          await boxStorage.loadBoxDocument(widget.selectedDate!, recordNum);
+      if (doc != null) {
+        for (var transaction in doc.transactions) {
+          // إظهار فقط سجلات البائع الحالي
+          if (transaction.sellerName == currentSellerName) {
+            totalReceived += double.tryParse(transaction.received) ?? 0;
+            totalPaid += double.tryParse(transaction.paid) ?? 0;
+          }
+        }
+      }
+    }
 
     setState(() {
       _receiptsController.text = totalReceived.toStringAsFixed(2);
-      // سنضيف مدفوعات الاستلام لاحقاً
       _paymentsController.text = totalPaid.toStringAsFixed(2);
     });
   }
@@ -170,24 +192,29 @@ class _YieldScreenState extends State<YieldScreen> {
     double totalPaymentFromReceipt = 0;
     double totalLoadFromReceipt = 0;
 
+    // الحصول على اسم البائع الحالي
+    final currentSellerName = _sellerNameController.text;
+
     for (var recordNum in records) {
       final doc = await receiptStorage.loadReceiptDocument(
           widget.selectedDate!, recordNum);
 
-      // استخدام الوصول الآمن بدون تحقق صريح
-      final totals = doc?.totals; // null-aware access
-      if (totals != null) {
-        totalPaymentFromReceipt +=
-            double.tryParse(totals['totalPayment'] ?? '0') ?? 0;
-        totalLoadFromReceipt +=
-            double.tryParse(totals['totalLoad'] ?? '0') ?? 0;
+      if (doc != null) {
+        for (var receipt in doc.receipts) {
+          // إظهار فقط سجلات البائع الحالي
+          if (receipt.sellerName == currentSellerName) {
+            totalPaymentFromReceipt += double.tryParse(receipt.payment) ?? 0;
+            totalLoadFromReceipt += double.tryParse(receipt.load) ?? 0;
+          }
+        }
       }
     }
 
-    final double currentPayments =
+    // المعادلة الصحيحة: دفعة + حمولة + مدفوع(صندوق) = مدفوعات
+    final double currentPaymentsFromBox =
         double.tryParse(_paymentsController.text) ?? 0;
     final double totalPayments =
-        currentPayments + totalPaymentFromReceipt + totalLoadFromReceipt;
+        currentPaymentsFromBox + totalPaymentFromReceipt + totalLoadFromReceipt;
 
     setState(() {
       _paymentsController.text = totalPayments.toStringAsFixed(2);
@@ -599,8 +626,8 @@ class _YieldScreenState extends State<YieldScreen> {
                         ],
                       ),
                     ),
-
-                    // معلومات عن الحقول
+                    /*
+                   // معلومات عن الحقول
                     Padding(
                       padding: const EdgeInsets.symmetric(
                           vertical: 16.0, horizontal: 8.0),
@@ -626,7 +653,7 @@ class _YieldScreenState extends State<YieldScreen> {
                         ],
                       ),
                     ),
-
+*/
                     // مسافة إضافية في الأسفل
                     const SizedBox(height: 40),
                   ],
@@ -639,6 +666,7 @@ class _YieldScreenState extends State<YieldScreen> {
     );
   }
 
+/*
   Widget _buildInfoItem(String title, String description) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4.0),
@@ -681,7 +709,7 @@ class _YieldScreenState extends State<YieldScreen> {
       ),
     );
   }
-
+*/
   Widget _buildReadOnlyField(
     String label,
     TextEditingController controller, {

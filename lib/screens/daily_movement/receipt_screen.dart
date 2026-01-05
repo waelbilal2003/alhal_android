@@ -538,6 +538,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
         standing: controllers[5].text,
         payment: controllers[6].text,
         load: controllers[7].text,
+        sellerName: widget.sellerName, // إضافة اسم البائع لكل سجل
       ));
     }
 

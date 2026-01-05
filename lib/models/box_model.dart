@@ -5,6 +5,7 @@ class BoxTransaction {
   final String accountType;
   final String accountName;
   final String notes;
+  final String sellerName; // إضافة اسم البائع لكل سجل (صف)
 
   BoxTransaction({
     required this.serialNumber,
@@ -13,6 +14,7 @@ class BoxTransaction {
     required this.accountType,
     required this.accountName,
     required this.notes,
+    required this.sellerName,
   });
 
   // تحويل من JSON إلى كائن
@@ -24,6 +26,7 @@ class BoxTransaction {
       accountType: json['accountType'] ?? '',
       accountName: json['accountName'] ?? '',
       notes: json['notes'] ?? '',
+      sellerName: json['sellerName'] ?? '',
     );
   }
 
@@ -36,6 +39,7 @@ class BoxTransaction {
       'accountType': accountType,
       'accountName': accountName,
       'notes': notes,
+      'sellerName': sellerName,
     };
   }
 }

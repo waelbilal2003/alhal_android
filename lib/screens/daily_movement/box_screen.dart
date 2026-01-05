@@ -736,7 +736,7 @@ class _BoxScreenState extends State<BoxScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          'يومية الصندوق رقم /$serialNumber/ ليوم $dayName تاريخ ${widget.selectedDate} لمحل ${widget.storeName} البائع ${widget.sellerName}',
+          'يومية الصندوق رقم /$serialNumber/ ليوم $dayName تاريخ ${widget.selectedDate}',
           style: const TextStyle(
             fontWeight: FontWeight.bold,
             fontSize: 14,
@@ -788,7 +788,7 @@ class _BoxScreenState extends State<BoxScreen> {
                   ),
             tooltip: _hasUnsavedChanges
                 ? 'هناك تغييرات غير محفوظة - انقر للحفظ'
-                : 'حفظ السجل',
+                : 'حفظ اليومية',
             onPressed: _isSaving
                 ? null
                 : () {
@@ -914,6 +914,7 @@ class _BoxScreenState extends State<BoxScreen> {
         accountType: accountTypeValues[i],
         accountName: controllers[3].text,
         notes: controllers[4].text,
+        sellerName: widget.sellerName, // إضافة اسم البائع لكل سجل
       ));
     }
 
@@ -971,7 +972,7 @@ class _BoxScreenState extends State<BoxScreen> {
       builder: (BuildContext context) {
         return AlertDialog(
           title: const Text(
-            'اختر رقم السجل',
+            'يومية سابقة',
             style: TextStyle(fontWeight: FontWeight.bold),
             textAlign: TextAlign.center,
           ),
@@ -1122,6 +1123,9 @@ class _BoxScreenState extends State<BoxScreen> {
       accountTypeValues.clear();
 
       for (var transaction in document.transactions) {
+        // التحقق من ما إذا كان البائع الحالي هو صاحب السجل
+        bool canEdit = transaction.sellerName == widget.sellerName;
+
         List<TextEditingController> newControllers = [
           TextEditingController(text: transaction.serialNumber),
           TextEditingController(text: transaction.received),
@@ -1133,24 +1137,26 @@ class _BoxScreenState extends State<BoxScreen> {
         List<FocusNode> newFocusNodes =
             List.generate(5, (index) => FocusNode());
 
-        newControllers[1].addListener(() {
-          _hasUnsavedChanges = true;
-          if (newControllers[1].text.isNotEmpty) {
-            newControllers[2].text = '';
-          }
-          _calculateAllTotals();
-        });
+        if (canEdit) {
+          newControllers[1].addListener(() {
+            _hasUnsavedChanges = true;
+            if (newControllers[1].text.isNotEmpty) {
+              newControllers[2].text = '';
+            }
+            _calculateAllTotals();
+          });
 
-        newControllers[2].addListener(() {
-          _hasUnsavedChanges = true;
-          if (newControllers[2].text.isNotEmpty) {
-            newControllers[1].text = '';
-          }
-          _calculateAllTotals();
-        });
+          newControllers[2].addListener(() {
+            _hasUnsavedChanges = true;
+            if (newControllers[2].text.isNotEmpty) {
+              newControllers[1].text = '';
+            }
+            _calculateAllTotals();
+          });
 
-        newControllers[3].addListener(() => _hasUnsavedChanges = true);
-        newControllers[4].addListener(() => _hasUnsavedChanges = true);
+          newControllers[3].addListener(() => _hasUnsavedChanges = true);
+          newControllers[4].addListener(() => _hasUnsavedChanges = true);
+        }
 
         rowControllers.add(newControllers);
         rowFocusNodes.add(newFocusNodes);

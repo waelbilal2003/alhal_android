@@ -12,7 +12,7 @@ class ChangePasswordScreen extends StatefulWidget {
     super.key,
     this.sellerName,
     required this.currentStoreName,
-    required this.onStoreNameChanged,
+    required this.onStoreNameChanged,//
   });
 
   @override

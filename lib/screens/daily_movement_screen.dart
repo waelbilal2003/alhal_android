@@ -40,16 +40,18 @@ class _DailyMovementScreenState extends State<DailyMovementScreen> {
     });
   }
 
-  // دالة للتعامل مع زر الرجوع
-  Future<bool> _onWillPop() async {
+  // دالة للتعامل مع زر الرجوع في AppBar
+  void _handleBackButton() {
     Navigator.of(context).pop();
-    return false;
   }
 
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
-      onWillPop: _onWillPop,
+      onWillPop: () async {
+        Navigator.of(context).pop();
+        return false;
+      },
       child: Scaffold(
         appBar: AppBar(
           title: Text('الحركة اليومية - ${widget.selectedDate}',
@@ -57,6 +59,10 @@ class _DailyMovementScreenState extends State<DailyMovementScreen> {
           centerTitle: true,
           backgroundColor: Colors.green[600],
           foregroundColor: Colors.white,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: _handleBackButton,
+          ),
         ),
         body: Directionality(
           textDirection: TextDirection.rtl,
@@ -170,6 +176,7 @@ class _DailyMovementScreenState extends State<DailyMovementScreen> {
                             builder: (context) => SellerManagementScreen(
                               currentStoreName: _storeName,
                               onLogout: () {
+                                // استخدام popUntil للعودة للشاشة الرئيسية
                                 Navigator.of(context)
                                     .popUntil((route) => route.isFirst);
                               },

@@ -115,16 +115,18 @@ class _DateSelectionScreenState extends State<DateSelectionScreen> {
     );
   }
 
-  // دالة للتعامل مع زر الرجوع
-  Future<bool> _onWillPop() async {
+  // دالة للتعامل مع زر الرجوع في AppBar
+  void _handleBackButton() {
     Navigator.of(context).pop();
-    return false;
   }
 
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
-      onWillPop: _onWillPop,
+      onWillPop: () async {
+        Navigator.of(context).pop();
+        return false;
+      },
       child: Scaffold(
         appBar: AppBar(
           title: const Text(
@@ -134,6 +136,10 @@ class _DateSelectionScreenState extends State<DateSelectionScreen> {
           backgroundColor: Colors.teal[600],
           foregroundColor: Colors.white,
           centerTitle: true,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: _handleBackButton,
+          ),
         ),
         body: Directionality(
           textDirection: TextDirection.rtl,
@@ -184,8 +190,7 @@ class _DateSelectionScreenState extends State<DateSelectionScreen> {
                 child: Center(
                   child: ElevatedButton.icon(
                     onPressed: () {
-                      Navigator.pushReplacement(
-                        context,
+                      Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (context) => DailyMovementScreen(
                             selectedDate:

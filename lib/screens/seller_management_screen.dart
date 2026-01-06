@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
-import '../services/store_db_service.dart'; // استيراد خدمة قاعدة البيانات
+import '../services/store_db_service.dart';
 
-// يجب استيراد الشاشات الأخرى المطلوبة
-// ChangePasswordScreen و LoginScreen (لإعادة توجيه الإضافة)
-import 'change_password_screen.dart'; // نفترض وجود هذا الملف
-import 'login_screen.dart'; // للوصول إلى _buildSetupScreen
+// استيراد الشاشات الأخرى المطلوبة
+import 'change_password_screen.dart'; // الشاشة الموحدة الجديدة
+import 'login_screen.dart';
 
 class SellerManagementScreen extends StatefulWidget {
   final String currentStoreName;
@@ -24,11 +23,12 @@ class SellerManagementScreen extends StatefulWidget {
 
 class _SellerManagementScreenState extends State<SellerManagementScreen> {
   final _sellerNameController = TextEditingController();
-  String _currentStoreName = ''; // لتخزين اسم المحل الموحد
+  String _currentStoreName = '';
   final _passwordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   String? _errorMessage;
   Map<String, String> _accounts = {};
+  bool _showDeleteList = false;
 
   @override
   void initState() {
@@ -66,6 +66,7 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
         _accounts.remove(sellerName);
       });
       await _saveAccounts();
+
       // إذا كان البائع المحذوف هو البائع الحالي، يجب تسجيل الخروج
       final prefs = await SharedPreferences.getInstance();
       final currentSeller = prefs.getString('current_seller');
@@ -75,7 +76,6 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
     }
   }
 
-  // دالة لبناء حقل الإدخال مع دعم زر ENTER
   Widget _buildInputField(
     TextEditingController controller,
     String hint,
@@ -87,7 +87,7 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
       controller: controller,
       obscureText: obscure,
       textAlign: TextAlign.center,
-      textInputAction: TextInputAction.next, // استخدام Next للتنقل بين الحقول
+      textInputAction: TextInputAction.next,
       decoration: InputDecoration(
         hintText: hint,
         hintStyle: const TextStyle(color: Colors.white70),
@@ -99,7 +99,7 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.white, width: 2),
+          borderSide: const BorderSide(color: Colors.white, width: 2),
         ),
         errorText: errorText,
         errorStyle: const TextStyle(color: Colors.yellowAccent),
@@ -118,7 +118,6 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
     );
   }
 
-  // دالة بناء شاشة إدارة البائعين
   Widget _buildManagementScreen() {
     return Container(
       decoration: BoxDecoration(
@@ -174,7 +173,7 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
                             true,
                             errorText: _errorMessage,
                             onSubmitted: _handleEditSeller,
-                          ), // عند الضغط على ENTER في آخر حقل، يتم محاولة التعديل
+                          ),
                         ),
                       ),
                     ],
@@ -182,7 +181,7 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
                 ),
                 const SizedBox(height: 30),
 
-                // أزرار الإدارة (إضافة، تعديل، حذف، خروج)
+                // أزرار الإدارة
                 _buildManagementButtons(),
                 const SizedBox(height: 40),
 
@@ -196,7 +195,6 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
     );
   }
 
-  // بناء الأزرار السفلية المشابهة لـ purchases_screen.dart
   Widget _buildManagementButtons() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -236,7 +234,6 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
     );
   }
 
-  // معالجة زر الإضافة: الانتقال إلى شاشة الإعداد لإضافة مستخدم جديد
   void _handleAddSeller() {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -246,30 +243,32 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
     );
   }
 
-  // معالجة زر التعديل: الانتقال إلى شاشة ChangePasswordScreen مع خيار تعديل اسم المحل
   void _handleEditSeller() {
     if (!_formKey.currentState!.validate()) return;
 
     final sellerName = _sellerNameController.text;
     final password = _passwordController.text;
 
+    // التحقق من صحة بيانات البائع
     if (_accounts.containsKey(sellerName) &&
         _accounts[sellerName] == password) {
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (context) => ChangePasswordScreen(
-            sellerName: sellerName,
-            // تمرير اسم المحل الحالي لتمكين تعديله
-            currentStoreName: _currentStoreName,
-            onStoreNameChanged: (newName) {
-              // تحديث اسم المحل في الشاشة الحالية بعد التعديل
-              setState(() {
-                _currentStoreName = newName;
-              });
-            },
+      // حفظ بيانات البائع الحالي في SharedPreferences مؤقتاً للتحقق في الشاشة التالية
+      _saveCurrentSellerForVerification(sellerName, password).then((_) {
+        // الانتقال إلى شاشة التعديل الموحدة
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => ChangePasswordScreen(
+              currentStoreName: _currentStoreName,
+              onStoreNameChanged: (newName) {
+                // تحديث اسم المحل في الشاشة الحالية بعد التعديل
+                setState(() {
+                  _currentStoreName = newName;
+                });
+              },
+            ),
           ),
-        ),
-      );
+        );
+      });
     } else {
       setState(() {
         _errorMessage = 'اسم البائع أو كلمة المرور غير صحيحة للتعديل.';
@@ -277,8 +276,20 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
     }
   }
 
-  // معالجة زر الحذف: عرض قائمة البائعين
-  bool _showDeleteList = false;
+  Future<void> _saveCurrentSellerForVerification(
+      String sellerName, String password) async {
+    final prefs = await SharedPreferences.getInstance();
+
+    // حفظ بيانات البائع المؤقتة للتحقق في ChangePasswordScreen
+    await prefs.setString('temp_seller_name', sellerName);
+    await prefs.setString('temp_seller_password', password);
+
+    // تعيين مهلة للحذف التلقائي بعد 5 دقائق
+    final expiryTime =
+        DateTime.now().add(const Duration(minutes: 5)).millisecondsSinceEpoch;
+    await prefs.setInt('temp_seller_expiry', expiryTime);
+  }
+
   void _handleDeleteMode() {
     setState(() {
       _showDeleteList = !_showDeleteList;
@@ -289,6 +300,24 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
     if (!_showDeleteList) return const SizedBox.shrink();
 
     final sellerNames = _accounts.keys.toList();
+
+    if (sellerNames.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Text(
+          'لا يوجد بائعين مسجلين',
+          style: TextStyle(
+            fontSize: 18,
+            color: Colors.white,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -364,6 +393,7 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
               onPressed: () {
                 _deleteSeller(sellerName);
                 Navigator.of(context).pop();
+                setState(() {});
               },
             ),
           ],

@@ -82,6 +82,15 @@ class _YieldScreenState extends State<YieldScreen> {
     _paymentsController.addListener(() => setState(_calculateYield));
     _collectedController.addListener(() => setState(_calculateYield));
 
+    // إضافة Listener لحفظ القيمة عند التغيير
+    _collectedController.addListener(() async {
+      // استخدام debounce لتجنب الحفظ المستمر مع كل ضغطة زر
+      await Future.delayed(const Duration(milliseconds: 500));
+      if (_isLoggedIn) {
+        await _saveCollectedAmount();
+      }
+    });
+
     // تحميل البيانات تلقائياً إذا توفر التاريخ
     if (widget.selectedDate != null) {
       _loadCashPurchases();
@@ -274,6 +283,7 @@ class _YieldScreenState extends State<YieldScreen> {
             _loadCashSales();
             _loadBoxData();
             _loadReceiptData();
+            _loadCollectedAmount(); // <-- إضافة هذا السطر
           }
         } else {
           setState(() {
@@ -867,53 +877,71 @@ class _YieldScreenState extends State<YieldScreen> {
           ),
         ],
       ),
-      child: TextField(
-        controller: controller,
-        textAlign: TextAlign.center,
-        keyboardType: TextInputType.number,
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          color: Colors.black,
-        ),
-        decoration: InputDecoration(
-          labelText: label,
-          labelStyle: TextStyle(
-            fontSize: 12,
-            color: Colors.grey[700],
-            fontWeight: FontWeight.bold,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4.0, right: 8.0),
+            child: Text(
+              'سيتم حفظ القيمة تلقائياً',
+              style: TextStyle(
+                fontSize: 9,
+                color: Colors.teal[600],
+                fontStyle: FontStyle.italic,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
-          prefixIcon: icon != null
-              ? Icon(
-                  icon,
-                  size: 18,
-                  color: Colors.teal[600],
-                )
-              : null,
-          filled: true,
-          fillColor: Colors.white,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide(color: Colors.grey[300]!),
+          TextField(
+            controller: controller,
+            textAlign: TextAlign.center,
+            keyboardType: TextInputType.number,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: Colors.black,
+            ),
+            decoration: InputDecoration(
+              labelText: label,
+              labelStyle: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[700],
+                fontWeight: FontWeight.bold,
+              ),
+              prefixIcon: icon != null
+                  ? Icon(
+                      icon,
+                      size: 18,
+                      color: Colors.teal[600],
+                    )
+                  : null,
+              filled: true,
+              fillColor: Colors.white,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(color: Colors.grey[300]!),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(color: Colors.grey[300]!),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(color: Colors.teal[400]!, width: 2),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 1,
+              ),
+            ),
+            onChanged: (value) {
+              setState(() {
+                _calculateYield();
+              });
+            },
           ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide(color: Colors.grey[300]!),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide(color: Colors.teal[400]!, width: 2),
-          ),
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 1,
-          ),
-        ),
-        onChanged: (value) {
-          setState(() {
-            _calculateYield();
-          });
-        },
+        ],
       ),
     );
   }
@@ -957,6 +985,36 @@ class _YieldScreenState extends State<YieldScreen> {
       );
     } else {
       return _buildYieldScreen();
+    }
+  }
+
+  Future<void> _saveCollectedAmount() async {
+    final prefs = await SharedPreferences.getInstance();
+    final collectedValue = _collectedController.text.trim();
+    final currentSellerName = _sellerNameController.text.trim();
+    final dateKey = widget.selectedDate ?? 'default';
+
+    if (collectedValue.isNotEmpty && currentSellerName.isNotEmpty) {
+      // إنشاء مفتاح فريد يجمع بين البائع والتاريخ
+      final uniqueKey = 'collected_${currentSellerName}_$dateKey';
+      await prefs.setString(uniqueKey, collectedValue);
+    }
+  }
+
+  Future<void> _loadCollectedAmount() async {
+    final prefs = await SharedPreferences.getInstance();
+    final currentSellerName = _sellerNameController.text.trim();
+    final dateKey = widget.selectedDate ?? 'default';
+
+    if (currentSellerName.isNotEmpty) {
+      final uniqueKey = 'collected_${currentSellerName}_$dateKey';
+      final savedValue = prefs.getString(uniqueKey);
+
+      if (savedValue != null && savedValue.isNotEmpty) {
+        setState(() {
+          _collectedController.text = savedValue;
+        });
+      }
     }
   }
 }

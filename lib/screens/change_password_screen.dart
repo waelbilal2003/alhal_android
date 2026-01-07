@@ -380,76 +380,68 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
           end: Alignment.centerRight,
         ),
       ),
-      child: Column(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxWidth: isLandscape ? 800 : 500,
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        _identityVerified ? Icons.person : Icons.verified_user,
-                        size: isLandscape ? 48 : 38,
-                        color: Colors.white,
-                      ),
-                      const SizedBox(height: 5),
-                      Text(
-                        _identityVerified
-                            ? 'تعديل بيانات البائع'
-                            : 'التحقق من الهوية',
-                        style: TextStyle(
-                          fontSize: isLandscape ? 17 : 14,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(height: 5),
-
-                      if (!_identityVerified)
-                        _buildVerificationForm(isLandscape)
-                      else
-                        _buildEditForm(isLandscape),
-
-                      if (_errorMessage != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 15.0),
-                          child: Text(
-                            _errorMessage!,
-                            style: const TextStyle(
-                              color: Colors.yellowAccent,
-                              fontSize: 14,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-
-                      const SizedBox(height: 5),
-
-                      // أزرار التحكم
-                      if (isLandscape)
-                        _buildLandscapeButtons()
-                      else
-                        _buildPortraitButtons(),
-
-                      // إضافة مسافة ثابتة في الأسفل
-                      const SizedBox(height: 20),
-                    ],
+      child: SingleChildScrollView(
+        // هذه الخصائص تحل المشكلة
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+        ),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: isLandscape ? 800 : 500,
+              minHeight: MediaQuery.of(context).size.height -
+                  MediaQuery.of(context).viewInsets.bottom,
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  _identityVerified ? Icons.person : Icons.verified_user,
+                  size: isLandscape ? 48 : 38,
+                  color: Colors.white,
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  _identityVerified
+                      ? 'تعديل بيانات البائع'
+                      : 'التحقق من الهوية',
+                  style: TextStyle(
+                    fontSize: isLandscape ? 17 : 14,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
                   ),
                 ),
-              ),
+                const SizedBox(height: 5),
+
+                if (!_identityVerified)
+                  _buildVerificationForm(isLandscape)
+                else
+                  _buildEditForm(isLandscape),
+
+                if (_errorMessage != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 15.0),
+                    child: Text(
+                      _errorMessage!,
+                      style: const TextStyle(
+                        color: Colors.yellowAccent,
+                        fontSize: 14,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+
+                const SizedBox(height: 5),
+
+                // أزرار التحكم
+                if (isLandscape)
+                  _buildLandscapeButtons()
+                else
+                  _buildPortraitButtons(),
+              ],
             ),
           ),
-
-          // هذه المساحة ستكون بلون الخلفية تلقائياً
-          SizedBox(
-            height: MediaQuery.of(context).viewInsets.bottom,
-          ),
-        ],
+        ),
       ),
     );
   }

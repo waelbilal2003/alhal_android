@@ -10,7 +10,7 @@ class Purchase {
   final String total;
   final String cashOrDebt;
   final String empties;
-  final String sellerName; // إضافة اسم البائع لكل سجل (صف)
+  final String sellerName;
 
   Purchase({
     required this.serialNumber,
@@ -27,7 +27,37 @@ class Purchase {
     required this.sellerName,
   });
 
-  // تحويل من JSON إلى كائن
+  // دالة مساعدة لإنشاء نسخة معدلة
+  Purchase copyWith({
+    String? serialNumber,
+    String? material,
+    String? affiliation,
+    String? count,
+    String? packaging,
+    String? standing,
+    String? net,
+    String? price,
+    String? total,
+    String? cashOrDebt,
+    String? empties,
+    String? sellerName,
+  }) {
+    return Purchase(
+      serialNumber: serialNumber ?? this.serialNumber,
+      material: material ?? this.material,
+      affiliation: affiliation ?? this.affiliation,
+      count: count ?? this.count,
+      packaging: packaging ?? this.packaging,
+      standing: standing ?? this.standing,
+      net: net ?? this.net,
+      price: price ?? this.price,
+      total: total ?? this.total,
+      cashOrDebt: cashOrDebt ?? this.cashOrDebt,
+      empties: empties ?? this.empties,
+      sellerName: sellerName ?? this.sellerName,
+    );
+  }
+
   factory Purchase.fromJson(Map<String, dynamic> json) {
     return Purchase(
       serialNumber: json['serialNumber'] ?? '',
@@ -45,7 +75,6 @@ class Purchase {
     );
   }
 
-  // تحويل من كائن إلى JSON
   Map<String, dynamic> toJson() {
     return {
       'serialNumber': serialNumber,
@@ -65,9 +94,9 @@ class Purchase {
 }
 
 class PurchaseDocument {
-  final String recordNumber;
+  final String recordNumber; // لم يعد يستخدم للنظام الجديد
   final String date;
-  final String sellerName;
+  final String sellerName; // "Multiple Sellers" أو اسم البائع الأول
   final String storeName;
   final String dayName;
   final List<Purchase> purchases;
@@ -83,7 +112,6 @@ class PurchaseDocument {
     required this.totals,
   });
 
-  // تحويل من JSON إلى كائن
   factory PurchaseDocument.fromJson(Map<String, dynamic> json) {
     return PurchaseDocument(
       recordNumber: json['recordNumber'] ?? '',
@@ -99,7 +127,6 @@ class PurchaseDocument {
     );
   }
 
-  // تحويل من كائن إلى JSON
   Map<String, dynamic> toJson() {
     return {
       'recordNumber': recordNumber,

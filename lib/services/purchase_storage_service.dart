@@ -2,247 +2,259 @@ import 'dart:io';
 import 'dart:convert';
 import 'package:path_provider/path_provider.dart';
 import '../models/purchase_model.dart';
-
-// استيراد debugPrint
 import 'package:flutter/foundation.dart';
 
 class PurchaseStorageService {
-  // الحصول على المسار الأساسي للتطبيق
   Future<String> _getBasePath() async {
     Directory? directory;
 
     if (Platform.isAndroid) {
-      // للأندرويد: استخدام External Storage
       directory = await getExternalStorageDirectory();
     } else if (Platform.isWindows) {
-      // للويندوز: استخدام Documents
       directory = await getApplicationDocumentsDirectory();
     } else {
-      // لباقي المنصات
       directory = await getApplicationDocumentsDirectory();
     }
 
     return directory!.path;
   }
 
-  // إنشاء اسم الملف بناءً على التاريخ ورقم السجل
-  String _createFileName(String date, String recordNumber) {
-    // تحويل التاريخ من "2025/12/19" إلى "2025-12-19"
+  // اسم الملف الآن يحتوي فقط على التاريخ
+  String _createFileName(String date) {
     final dateParts = date.split('/');
     final formattedDate = dateParts.join('-');
-
-    return 'alhal-$recordNumber-$formattedDate.json';
+    return 'purchases-$formattedDate.json';
   }
 
-  // إنشاء اسم المجلد بناءً على التاريخ
-  String _createFolderName(String date) {
-    // تحويل التاريخ من "2025/12/19" إلى "2025-12-19"
-    final dateParts = date.split('/');
-    final formattedDate = dateParts.join('-');
-
-    return 'alhal-$formattedDate';
-  }
-
-  // حفظ مستند المشتريات
+  // حفظ يومية المشتريات (ملف واحد لكل تاريخ)
   Future<bool> savePurchaseDocument(PurchaseDocument document) async {
     try {
-      // الحصول على المسار الأساسي
       final basePath = await _getBasePath();
+      final folderPath = '$basePath/AlhalJournals';
 
-      // إنشاء مسار المجلد
-      final folderName = _createFolderName(document.date);
-      final folderPath = '$basePath/AlhalPurchases/$folderName';
-
-      // إنشاء المجلد إذا لم يكن موجوداً
+      // إنشاء مجلد اليوميات إذا لم يكن موجوداً
       final folder = Directory(folderPath);
       if (!await folder.exists()) {
         await folder.create(recursive: true);
       }
 
-      // إنشاء اسم الملف
-      final fileName = _createFileName(document.date, document.recordNumber);
+      // اسم الملف: purchases-YYYY-MM-DD.json
+      final fileName = _createFileName(document.date);
       final filePath = '$folderPath/$fileName';
 
-      // تحويل المستند إلى JSON وحفظه
+      // قراءة الملف الحالي إذا كان موجوداً
       final file = File(filePath);
-      final jsonString = jsonEncode(document.toJson());
-      await file.writeAsString(jsonString);
+      PurchaseDocument? existingDocument;
+
+      if (await file.exists()) {
+        final jsonString = await file.readAsString();
+        final jsonMap = jsonDecode(jsonString) as Map<String, dynamic>;
+        existingDocument = PurchaseDocument.fromJson(jsonMap);
+      }
+
+      // دمج السجلات (الحفاظ على السجلات القديمة، تحديث السجلات المعدلة)
+      List<Purchase> mergedPurchases = [];
+      if (existingDocument != null) {
+        // الحفاظ على السجلات التي لم يتم تعديلها
+        for (var existing in existingDocument.purchases) {
+          // البحث إذا كان نفس السجل موجوداً في المستند الجديد
+          bool found = false;
+          for (var newPurchase in document.purchases) {
+            if (existing.serialNumber == newPurchase.serialNumber) {
+              found = true;
+              break;
+            }
+          }
+          // إذا لم يتم العثور عليه، احتفظ بالسجل القديم
+          if (!found) {
+            mergedPurchases.add(existing);
+          }
+        }
+      }
+
+      // إضافة السجلات الجديدة/المعدلة
+      mergedPurchases.addAll(document.purchases);
+
+      // ترتيب السجلات حسب الرقم المسلسل
+      mergedPurchases.sort((a, b) =>
+          int.parse(a.serialNumber).compareTo(int.parse(b.serialNumber)));
+
+      // تحديث المجاميع
+      final updatedDocument = PurchaseDocument(
+        recordNumber: document.recordNumber, // لم يعد مهم (رقم اليومية)
+        date: document.date,
+        sellerName: 'Multiple Sellers', // لأنه قد يكون أكثر من بائع
+        storeName: document.storeName,
+        dayName: document.dayName,
+        purchases: mergedPurchases,
+        totals: _calculateTotals(mergedPurchases),
+      );
+
+      // حفظ المستند المحدث
+      final updatedJsonString = jsonEncode(updatedDocument.toJson());
+      await file.writeAsString(updatedJsonString);
 
       if (kDebugMode) {
-        debugPrint('✅ تم حفظ الملف: $filePath');
+        debugPrint('✅ تم حفظ اليومية: $filePath');
+        debugPrint('📊 عدد السجلات: ${mergedPurchases.length}');
       }
 
       return true;
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('❌ خطأ في حفظ الملف: $e');
+        debugPrint('❌ خطأ في حفظ اليومية: $e');
       }
       return false;
     }
   }
 
-  // قراءة مستند المشتريات
-  Future<PurchaseDocument?> loadPurchaseDocument(
-      String date, String recordNumber) async {
+  // تحميل يومية المشترات لتاريخ معين
+  Future<PurchaseDocument?> loadPurchaseDocument(String date) async {
     try {
-      // الحصول على المسار الأساسي
       final basePath = await _getBasePath();
-
-      // إنشاء مسار المجلد
-      final folderName = _createFolderName(date);
-      final folderPath = '$basePath/AlhalPurchases/$folderName';
-
-      // إنشاء اسم الملف
-      final fileName = _createFileName(date, recordNumber);
+      final folderPath = '$basePath/AlhalJournals';
+      final fileName = _createFileName(date);
       final filePath = '$folderPath/$fileName';
 
-      // قراءة الملف
       final file = File(filePath);
       if (!await file.exists()) {
         if (kDebugMode) {
-          debugPrint('⚠️ الملف غير موجود: $filePath');
+          debugPrint('⚠️ اليومية غير موجودة: $filePath');
         }
         return null;
       }
 
-      // قراءة المحتوى وتحويله إلى كائن
       final jsonString = await file.readAsString();
       final jsonMap = jsonDecode(jsonString) as Map<String, dynamic>;
       final document = PurchaseDocument.fromJson(jsonMap);
 
       if (kDebugMode) {
-        debugPrint('✅ تم تحميل الملف: $filePath');
+        debugPrint('✅ تم تحميل اليومية: $filePath');
+        debugPrint('📊 عدد السجلات: ${document.purchases.length}');
       }
 
       return document;
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('❌ خطأ في قراءة الملف: $e');
+        debugPrint('❌ خطأ في قراءة اليومية: $e');
       }
       return null;
     }
   }
 
-  // الحصول على قائمة أرقام السجلات المتاحة لتاريخ معين
-  Future<List<String>> getAvailableRecords(String date) async {
+  // الحصول على تواريخ اليوميات المتاحة
+  Future<List<String>> getAvailableDates() async {
     try {
-      // الحصول على المسار الأساسي
       final basePath = await _getBasePath();
+      final folderPath = '$basePath/AlhalJournals';
 
-      // إنشاء مسار المجلد
-      final folderName = _createFolderName(date);
-      final folderPath = '$basePath/AlhalPurchases/$folderName';
-
-      // التحقق من وجود المجلد
       final folder = Directory(folderPath);
       if (!await folder.exists()) {
         return [];
       }
 
-      // قراءة قائمة الملفات
       final files = await folder.list().toList();
-      final recordNumbers = <String>[];
+      final dates = <String>[];
 
       for (var file in files) {
         if (file is File && file.path.endsWith('.json')) {
-          // استخراج رقم السجل من اسم الملف
-          // مثال: alhal-1-19-12-2025.json
           final fileName = file.path.split('/').last;
-          final parts = fileName.split('-');
-          if (parts.length >= 2) {
-            final recordNumber = parts[1]; // الرقم الثاني هو رقم السجل
-            recordNumbers.add(recordNumber);
+          // استخراج التاريخ من purchases-YYYY-MM-DD.json
+          if (fileName.startsWith('purchases-')) {
+            final datePart =
+                fileName.replaceAll('purchases-', '').replaceAll('.json', '');
+            // تحويل من YYYY-MM-DD إلى YYYY/MM/DD
+            final formattedDate = datePart.replaceAll('-', '/');
+            dates.add(formattedDate);
           }
         }
       }
 
-      // ترتيب الأرقام تصاعدياً
-      recordNumbers.sort((a, b) => int.parse(a).compareTo(int.parse(b)));
-
-      return recordNumbers;
+      dates.sort((a, b) => b.compareTo(a)); // ترتيب تنازلي
+      return dates;
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('❌ خطأ في قراءة السجلات: $e');
+        debugPrint('❌ خطأ في قراءة التواريخ: $e');
       }
       return [];
     }
   }
 
-  // الحصول على الرقم التالي المتاح لسجل جديد
-  Future<String> getNextRecordNumber(String date) async {
-    final existingRecords = await getAvailableRecords(date);
-
-    if (existingRecords.isEmpty) {
-      return '1';
-    }
-
-    // الحصول على أكبر رقم وإضافة 1
-    final lastNumber = int.parse(existingRecords.last);
-    return (lastNumber + 1).toString();
-  }
-
-  // حذف سجل معين
-  Future<bool> deletePurchaseDocument(String date, String recordNumber) async {
+  // حذف سجل معين من اليومية
+  Future<bool> deletePurchaseRecord(
+      String date, String recordSerial, String sellerName) async {
     try {
-      // الحصول على المسار الأساسي
-      final basePath = await _getBasePath();
+      final document = await loadPurchaseDocument(date);
+      if (document == null) return false;
 
-      // إنشاء مسار المجلد
-      final folderName = _createFolderName(date);
-      final folderPath = '$basePath/AlhalPurchases/$folderName';
+      // البحث عن السجل
+      final recordIndex = document.purchases.indexWhere(
+          (p) => p.serialNumber == recordSerial && p.sellerName == sellerName);
 
-      // إنشاء اسم الملف
-      final fileName = _createFileName(date, recordNumber);
-      final filePath = '$folderPath/$fileName';
+      if (recordIndex == -1) return false;
 
-      // حذف الملف
-      final file = File(filePath);
-      if (await file.exists()) {
-        await file.delete();
+      // حذف السجل
+      document.purchases.removeAt(recordIndex);
 
-        if (kDebugMode) {
-          debugPrint('✅ تم حذف الملف: $filePath');
-        }
-
-        // التحقق من وجود ملفات أخرى في المجلد
-        final folder = Directory(folderPath);
-        final remainingFiles = await folder.list().toList();
-
-        // إذا كان المجلد فارغاً، احذفه
-        if (remainingFiles.isEmpty) {
-          await folder.delete();
-          if (kDebugMode) {
-            debugPrint('✅ تم حذف المجلد الفارغ: $folderPath');
-          }
-        }
-
-        return true;
+      // تحديث الأرقام المسلسلة
+      for (int i = 0; i < document.purchases.length; i++) {
+        document.purchases[i] = document.purchases[i].copyWith(
+          serialNumber: (i + 1).toString(),
+        );
       }
 
-      return false;
+      // تحديث المجاميع
+      final updatedDocument = PurchaseDocument(
+        recordNumber: document.recordNumber,
+        date: document.date,
+        sellerName: document.sellerName,
+        storeName: document.storeName,
+        dayName: document.dayName,
+        purchases: document.purchases,
+        totals: _calculateTotals(document.purchases),
+      );
+
+      // حفظ اليومية المحدثة
+      return await savePurchaseDocument(updatedDocument);
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('❌ خطأ في حذف الملف: $e');
+        debugPrint('❌ خطأ في حذف السجل: $e');
       }
       return false;
     }
   }
 
-  // الحصول على مسار الملف لمشاركته
-  Future<String?> getFilePath(String date, String recordNumber) async {
+  // حساب المجاميع من السجلات
+  Map<String, String> _calculateTotals(List<Purchase> purchases) {
+    double totalCount = 0;
+    double totalBase = 0;
+    double totalNet = 0;
+    double totalGrand = 0;
+
+    for (var purchase in purchases) {
+      try {
+        totalCount += double.tryParse(purchase.count) ?? 0;
+        totalBase += double.tryParse(purchase.standing) ?? 0;
+        totalNet += double.tryParse(purchase.net) ?? 0;
+        totalGrand += double.tryParse(purchase.total) ?? 0;
+      } catch (e) {}
+    }
+
+    return {
+      'totalCount': totalCount.toStringAsFixed(0),
+      'totalBase': totalBase.toStringAsFixed(2),
+      'totalNet': totalNet.toStringAsFixed(2),
+      'totalGrand': totalGrand.toStringAsFixed(2),
+    };
+  }
+
+  Future<String?> getFilePath(String date) async {
     try {
-      // الحصول على المسار الأساسي
       final basePath = await _getBasePath();
-
-      // إنشاء مسار المجلد
-      final folderName = _createFolderName(date);
-      final folderPath = '$basePath/AlhalPurchases/$folderName';
-
-      // إنشاء اسم الملف
-      final fileName = _createFileName(date, recordNumber);
+      final folderPath = '$basePath/AlhalJournals';
+      final fileName = _createFileName(date);
       final filePath = '$folderPath/$fileName';
 
-      // التحقق من وجود الملف
       final file = File(filePath);
       if (await file.exists()) {
         return filePath;
@@ -254,6 +266,32 @@ class PurchaseStorageService {
         debugPrint('❌ خطأ في الحصول على مسار الملف: $e');
       }
       return null;
+    }
+  }
+
+  // إضافة هذه الدالة إلى PurchaseStorageService
+  Future<double> getCashPurchasesForSeller(
+      String date, String sellerName) async {
+    try {
+      final document = await loadPurchaseDocument(date);
+      if (document == null) return 0;
+
+      double totalCashPurchases = 0;
+
+      for (var purchase in document.purchases) {
+        if (purchase.sellerName == sellerName &&
+            purchase.cashOrDebt == 'نقدي' &&
+            purchase.total.isNotEmpty) {
+          totalCashPurchases += double.tryParse(purchase.total) ?? 0;
+        }
+      }
+
+      return totalCashPurchases;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ خطأ في حساب المشتريات النقدية: $e');
+      }
+      return 0;
     }
   }
 }

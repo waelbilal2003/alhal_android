@@ -86,7 +86,7 @@ class _YieldScreenState extends State<YieldScreen> {
     _collectedController.addListener(() async {
       // استخدام debounce لتجنب الحفظ المستمر مع كل ضغطة زر
       await Future.delayed(const Duration(milliseconds: 500));
-      if (_isLoggedIn) {
+      if (_isLoggedIn && _collectedController.text.isNotEmpty) {
         await _saveCollectedAmount();
       }
     });
@@ -97,6 +97,8 @@ class _YieldScreenState extends State<YieldScreen> {
       _loadCashSales(); // تحميل المبيعات النقدية
       _loadBoxData(); // تحميل بيانات الصندوق
       _loadReceiptData(); // تحميل بيانات الاستلام
+      // تحميل قيمة المقبوض منه المحفوظة
+      _loadCollectedAmount(); // إضافة هذا السطر هنا أيضًا
     }
   }
 
@@ -104,30 +106,31 @@ class _YieldScreenState extends State<YieldScreen> {
     if (widget.selectedDate == null) return;
 
     final purchaseStorage = PurchaseStorageService();
-    final records =
-        await purchaseStorage.getAvailableRecords(widget.selectedDate!);
-    double totalCashPurchases = 0;
-
-    // الحصول على اسم البائع الحالي من تسجيل الدخول
     final currentSellerName = _sellerNameController.text;
 
-    for (var recordNum in records) {
-      final doc = await purchaseStorage.loadPurchaseDocument(
-          widget.selectedDate!, recordNum);
-      if (doc != null) {
-        for (var purchase in doc.purchases) {
-          // إظهار فقط سجلات البائع الحالي
-          if (purchase.sellerName == currentSellerName &&
-              purchase.cashOrDebt == 'نقدي') {
-            totalCashPurchases += double.tryParse(purchase.total) ?? 0;
-          }
-        }
+    if (currentSellerName.isEmpty) return;
+
+    try {
+      // الحصول على إجمالي المشتريات النقدية للبائع الحالي
+      final totalCashPurchases =
+          await purchaseStorage.getCashPurchasesForSeller(
+        widget.selectedDate!,
+        currentSellerName,
+      );
+
+      setState(() {
+        _cashPurchasesController.text = totalCashPurchases.toStringAsFixed(2);
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('خطأ في تحميل المشتريات: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     }
-
-    setState(() {
-      _cashPurchasesController.text = totalCashPurchases.toStringAsFixed(2);
-    });
   }
 
   Future<void> _loadCashSales() async {
@@ -883,7 +886,7 @@ class _YieldScreenState extends State<YieldScreen> {
           Padding(
             padding: const EdgeInsets.only(bottom: 4.0, right: 8.0),
             child: Text(
-              'سيتم حفظ القيمة تلقائياً',
+              'سيتم حفظ القيمة تلقائياً عند التعديل',
               style: TextStyle(
                 fontSize: 9,
                 color: Colors.teal[600],
@@ -940,6 +943,18 @@ class _YieldScreenState extends State<YieldScreen> {
                 _calculateYield();
               });
             },
+            onTapOutside: (_) {
+              // حفظ القيمة عند النقر خارج الحقل
+              if (_isLoggedIn) {
+                _saveCollectedAmount();
+              }
+            },
+            onEditingComplete: () {
+              // حفظ القيمة عند الضغط على Enter
+              if (_isLoggedIn) {
+                _saveCollectedAmount();
+              }
+            },
           ),
         ],
       ),
@@ -948,6 +963,11 @@ class _YieldScreenState extends State<YieldScreen> {
 
   @override
   void dispose() {
+    // حفظ قيمة المقبوض منه عند تدمير الشاشة
+    if (_isLoggedIn && _collectedController.text.isNotEmpty) {
+      _saveCollectedAmount();
+    }
+
     _cashSalesController.dispose();
     _receiptsController.dispose();
     _cashPurchasesController.dispose();
@@ -989,19 +1009,45 @@ class _YieldScreenState extends State<YieldScreen> {
   }
 
   Future<void> _saveCollectedAmount() async {
+    if (!_isLoggedIn) return;
+
     final prefs = await SharedPreferences.getInstance();
     final collectedValue = _collectedController.text.trim();
     final currentSellerName = _sellerNameController.text.trim();
     final dateKey = widget.selectedDate ?? 'default';
 
-    if (collectedValue.isNotEmpty && currentSellerName.isNotEmpty) {
+    if (currentSellerName.isNotEmpty) {
       // إنشاء مفتاح فريد يجمع بين البائع والتاريخ
       final uniqueKey = 'collected_${currentSellerName}_$dateKey';
-      await prefs.setString(uniqueKey, collectedValue);
+
+      if (collectedValue.isEmpty) {
+        // إذا كانت القيمة فارغة، احفظ "0.00"
+        await prefs.setString(uniqueKey, '0.00');
+      } else {
+        // تأكد من تنسيق الرقم بشكل صحيح
+        final doubleValue = double.tryParse(collectedValue);
+        final formattedValue = doubleValue?.toStringAsFixed(2) ?? '0.00';
+        await prefs.setString(uniqueKey, formattedValue);
+      }
+
+      // تحديث واجهة المستخدم
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                'تم حفظ قيمة المقبوض منه: ${collectedValue.isNotEmpty ? collectedValue : "0.00"}'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 1),
+          ),
+        );
+      }
     }
   }
 
   Future<void> _loadCollectedAmount() async {
+    // انتظار تسجيل الدخول أولاً
+    if (!_isLoggedIn) return;
+
     final prefs = await SharedPreferences.getInstance();
     final currentSellerName = _sellerNameController.text.trim();
     final dateKey = widget.selectedDate ?? 'default';
@@ -1010,9 +1056,11 @@ class _YieldScreenState extends State<YieldScreen> {
       final uniqueKey = 'collected_${currentSellerName}_$dateKey';
       final savedValue = prefs.getString(uniqueKey);
 
-      if (savedValue != null && savedValue.isNotEmpty) {
+      if (savedValue != null && savedValue.isNotEmpty && mounted) {
         setState(() {
           _collectedController.text = savedValue;
+          // إعادة حساب الغلة بعد تحميل القيمة
+          _calculateYield();
         });
       }
     }

@@ -110,14 +110,6 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
         _currentSellerName = enteredSellerName;
         _newSellerNameController.text = enteredSellerName;
       });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('تم التحقق من الهوية بنجاح'),
-          backgroundColor: Colors.green,
-          duration: Duration(seconds: 2),
-        ),
-      );
     } else {
       setState(() {
         _isLoading = false;
@@ -380,64 +372,84 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   }
 
   Widget _buildSellerDataScreen(bool isLandscape) {
-    return SingleChildScrollView(
-      child: Center(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxWidth: isLandscape ? 800 : 500,
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                _identityVerified ? Icons.person : Icons.verified_user,
-                size: isLandscape ? 48 : 38,
-                color: Colors.white,
-              ),
-              const SizedBox(height: 5),
-              Text(
-                _identityVerified ? 'تعديل بيانات البائع' : 'التحقق من الهوية',
-                style: TextStyle(
-                  fontSize: isLandscape ? 17 : 14,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-              const SizedBox(height: 5),
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.teal[400]!, Colors.teal[700]!],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+        ),
+      ),
+      child: Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: isLandscape ? 800 : 500,
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        _identityVerified ? Icons.person : Icons.verified_user,
+                        size: isLandscape ? 48 : 38,
+                        color: Colors.white,
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        _identityVerified
+                            ? 'تعديل بيانات البائع'
+                            : 'التحقق من الهوية',
+                        style: TextStyle(
+                          fontSize: isLandscape ? 17 : 14,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
 
-              if (!_identityVerified)
-                _buildVerificationForm(isLandscape)
-              else
-                _buildEditForm(isLandscape),
+                      if (!_identityVerified)
+                        _buildVerificationForm(isLandscape)
+                      else
+                        _buildEditForm(isLandscape),
 
-              if (_errorMessage != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 15.0),
-                  child: Text(
-                    _errorMessage!,
-                    style: const TextStyle(
-                      color: Colors.yellowAccent,
-                      fontSize: 14,
-                    ),
-                    textAlign: TextAlign.center,
+                      if (_errorMessage != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 15.0),
+                          child: Text(
+                            _errorMessage!,
+                            style: const TextStyle(
+                              color: Colors.yellowAccent,
+                              fontSize: 14,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+
+                      const SizedBox(height: 5),
+
+                      // أزرار التحكم
+                      if (isLandscape)
+                        _buildLandscapeButtons()
+                      else
+                        _buildPortraitButtons(),
+
+                      // إضافة مسافة ثابتة في الأسفل
+                      const SizedBox(height: 20),
+                    ],
                   ),
                 ),
-
-              const SizedBox(height: 5),
-
-              // أزرار التحكم
-              if (isLandscape)
-                _buildLandscapeButtons()
-              else
-                _buildPortraitButtons(),
-
-              // مساحة إضافية للكيبورد
-              SizedBox(
-                  height:
-                      MediaQuery.of(context).viewInsets.bottom > 0 ? 250 : 0),
-            ],
+              ),
+            ),
           ),
-        ),
+
+          // هذه المساحة ستكون بلون الخلفية تلقائياً
+          SizedBox(
+            height: MediaQuery.of(context).viewInsets.bottom,
+          ),
+        ],
       ),
     );
   }
@@ -484,7 +496,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                       FocusScope.of(context).requestFocus(_verifyPasswordFocus),
                   icon: Icons.person,
                 ),
-                const SizedBox(height: 40),
+                const SizedBox(height: 5),
                 _buildInputField(
                   _verifyPasswordController,
                   'كلمة المرور الحالية',
@@ -493,7 +505,6 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                   onSubmitted: _verifyIdentity,
                   icon: Icons.lock,
                 ),
-                const SizedBox(height: 40),
               ],
             ),
     );

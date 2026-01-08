@@ -6,6 +6,7 @@ import 'daily_movement/purchases_screen.dart';
 import 'daily_movement/sales_screen.dart';
 import 'daily_movement/receipt_screen.dart';
 import 'daily_movement/box_screen.dart';
+import 'journals_history_screen.dart';
 
 class DailyMovementScreen extends StatefulWidget {
   final String selectedDate;
@@ -63,6 +64,23 @@ class _DailyMovementScreenState extends State<DailyMovementScreen> {
             icon: const Icon(Icons.arrow_back),
             onPressed: _handleBackButton,
           ),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.history),
+              tooltip: 'استعراض اليوميات القديمة',
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => JournalsHistoryScreen(
+                      storeName: _storeName,
+                      sellerName: widget.sellerName,
+                    ),
+                  ),
+                );
+              },
+            ),
+          ],
         ),
         body: Directionality(
           textDirection: TextDirection.rtl,

@@ -34,6 +34,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   List<List<FocusNode>> rowFocusNodes = [];
   List<String> cashOrDebtValues = [];
   List<String> emptiesValues = [];
+  List<String> sellerNames = []; // <-- تخزين اسم البائع لكل صف
 
   // متحكمات صف المجموع
   late TextEditingController totalCountController;
@@ -53,6 +54,10 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   bool _isSaving = false;
   bool _hasUnsavedChanges = false;
 
+  // التواريخ المتاحة
+  List<String> _availableDates = [];
+  bool _isLoadingDates = false;
+
   @override
   void initState() {
     super.initState();
@@ -67,6 +72,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadOrCreateJournal();
+      _loadAvailableDates(); // <-- تحميل التواريخ
     });
   }
 
@@ -111,6 +117,28 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     return days[now.weekday % 7];
   }
 
+  // تحميل التواريخ المتاحة
+  Future<void> _loadAvailableDates() async {
+    if (_isLoadingDates) return;
+
+    setState(() {
+      _isLoadingDates = true;
+    });
+
+    try {
+      final dates = await _storageService.getAvailableDates();
+      setState(() {
+        _availableDates = dates;
+        _isLoadingDates = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoadingDates = false;
+        _availableDates = [];
+      });
+    }
+  }
+
   // تحميل اليومية إذا كانت موجودة، أو إنشاء جديدة
   Future<void> _loadOrCreateJournal() async {
     final document =
@@ -138,6 +166,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       rowFocusNodes.clear();
       cashOrDebtValues.clear();
       emptiesValues.clear();
+      sellerNames.clear(); // <-- تنظيف قائمة أسماء البائعين
       _resetTotalValues();
       _hasUnsavedChanges = false;
       _addNewRow();
@@ -163,6 +192,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       rowFocusNodes.clear();
       cashOrDebtValues.clear();
       emptiesValues.clear();
+      sellerNames.clear();
 
       // تحميل السجلات من الوثيقة
       for (var purchase in document.purchases) {
@@ -183,6 +213,9 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
         List<FocusNode> newFocusNodes =
             List.generate(11, (index) => FocusNode());
 
+        // تخزين اسم البائع لهذا الصف
+        sellerNames.add(purchase.sellerName);
+
         // التحقق إذا كان السجل مملوكاً للبائع الحالي
         final bool isOwnedByCurrentSeller =
             purchase.sellerName == widget.sellerName;
@@ -193,7 +226,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
             newControllers[i].addListener(() {
               _hasUnsavedChanges = true;
               if (i >= 3 && i <= 7) {
-                final rowIndex = rowControllers.length - 1;
+                final rowIndex = sellerNames.length - 1;
                 _calculateRowValues(rowIndex);
                 _calculateAllTotals();
               }
@@ -202,17 +235,12 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
           // إضافة التحقق من قاعدة القائم والصافي
           newControllers[5].addListener(() {
-            _validateStandingAndNet(rowControllers.length - 1);
+            _validateStandingAndNet(sellerNames.length - 1);
           });
 
           newControllers[6].addListener(() {
-            _validateStandingAndNet(rowControllers.length - 1);
+            _validateStandingAndNet(sellerNames.length - 1);
           });
-        } else {
-          // إذا كان السجل مملوكاً لبائع آخر، جعل الحقول للقراءة فقط
-          for (int i = 0; i < newControllers.length; i++) {
-            newControllers[i].text = _getControllerText(i, purchase);
-          }
         }
 
         rowControllers.add(newControllers);
@@ -231,31 +259,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
       _hasUnsavedChanges = false;
     });
-  }
-
-  String _getControllerText(int index, Purchase purchase) {
-    switch (index) {
-      case 0:
-        return purchase.serialNumber;
-      case 1:
-        return purchase.material;
-      case 2:
-        return purchase.affiliation;
-      case 3:
-        return purchase.count;
-      case 4:
-        return purchase.packaging;
-      case 5:
-        return purchase.standing;
-      case 6:
-        return purchase.net;
-      case 7:
-        return purchase.price;
-      case 8:
-        return purchase.total;
-      default:
-        return '';
-    }
   }
 
   void _addNewRow() {
@@ -311,6 +314,9 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       newControllers[6].addListener(() {
         _validateStandingAndNet(rowControllers.length);
       });
+
+      // تخزين اسم البائع للصف الجديد
+      sellerNames.add(widget.sellerName);
 
       rowControllers.add(newControllers);
       rowFocusNodes.add(newFocusNodes);
@@ -431,7 +437,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
     for (int i = 0; i < rowControllers.length; i++) {
       // التحقق إذا كان السجل مملوكاً للبائع الحالي
-      final bool isOwnedByCurrentSeller = _isRowOwnedByCurrentSeller(i);
+      final bool isOwnedByCurrentSeller = sellerNames[i] == widget.sellerName;
 
       contentRows.add(
         TableRow(
@@ -519,7 +525,12 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       return IgnorePointer(
         child: Opacity(
           opacity: 0.7,
-          child: cell,
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+            ),
+            child: cell,
+          ),
         ),
       );
     }
@@ -607,7 +618,12 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       return IgnorePointer(
         child: Opacity(
           opacity: 0.7,
-          child: cell,
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+            ),
+            child: cell,
+          ),
         ),
       );
     }
@@ -630,7 +646,12 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       return IgnorePointer(
         child: Opacity(
           opacity: 0.7,
-          child: cell,
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+            ),
+            child: cell,
+          ),
         ),
       );
     }
@@ -705,18 +726,8 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
   // التحقق إذا كان السجل مملوكاً للبائع الحالي
   bool _isRowOwnedByCurrentSeller(int rowIndex) {
-    // في التطبيق الحقيقي، يجب تخزين اسم البائع مع كل سجل
-    // حالياً، نفترض أن جميع السجلات الجديدة مملوكة للبائع الحالي
-
-    // إذا كان السجل فارغاً، فهو مملوك للبائع الحالي
-    final controllers = rowControllers[rowIndex];
-    if (controllers[1].text.isEmpty && controllers[3].text.isEmpty) {
-      return true;
-    }
-
-    // للتبسيط، نعتبر أن البائع الحالي يملك السجل
-    // في الإصدار النهائي، تحتاج إلى تخزين اسم البائع مع كل سجل
-    return true;
+    if (rowIndex >= sellerNames.length) return false;
+    return sellerNames[rowIndex] == widget.sellerName;
   }
 
   @override
@@ -783,12 +794,87 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                     _saveCurrentRecord();
                   },
           ),
-          IconButton(
+          PopupMenuButton<String>(
             icon: const Icon(Icons.calendar_today),
-            tooltip: 'فتح يومية أخرى',
-            onPressed: () async {
-              await _saveCurrentRecord(silent: true);
-              await _showDateSelectionDialog();
+            tooltip: 'فتح يومية سابقة',
+            onSelected: (selectedDate) async {
+              if (selectedDate != widget.selectedDate) {
+                // التحقق من وجود تغييرات غير محفوظة
+                if (_hasUnsavedChanges) {
+                  final shouldSave = await _showUnsavedChangesDialog();
+                  if (shouldSave) {
+                    await _saveCurrentRecord(silent: true);
+                  }
+                }
+
+                // الانتقال إلى الشاشة الجديدة بالتاريخ المحدد
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => PurchasesScreen(
+                      sellerName: widget.sellerName,
+                      selectedDate: selectedDate,
+                      storeName: widget.storeName,
+                    ),
+                  ),
+                );
+              }
+            },
+            itemBuilder: (BuildContext context) {
+              List<PopupMenuEntry<String>> items = [];
+
+              if (_isLoadingDates) {
+                items.add(
+                  const PopupMenuItem<String>(
+                    value: '',
+                    enabled: false,
+                    child: Text('جاري التحميل...'),
+                  ),
+                );
+              } else if (_availableDates.isEmpty) {
+                items.add(
+                  const PopupMenuItem<String>(
+                    value: '',
+                    enabled: false,
+                    child: Text('لا توجد يوميات سابقة'),
+                  ),
+                );
+              } else {
+                // إضافة عنوان
+                items.add(
+                  const PopupMenuItem<String>(
+                    value: '',
+                    enabled: false,
+                    child: Text(
+                      'اليوميات المتاحة',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                );
+                items.add(const PopupMenuDivider());
+
+                // إضافة التواريخ
+                for (var date in _availableDates) {
+                  items.add(
+                    PopupMenuItem<String>(
+                      value: date,
+                      child: Text(
+                        'يومية $date',
+                        style: TextStyle(
+                          fontWeight: date == widget.selectedDate
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                          color: date == widget.selectedDate
+                              ? Colors.red
+                              : Colors.black,
+                        ),
+                      ),
+                    ),
+                  );
+                }
+              }
+
+              return items;
             },
           ),
         ],
@@ -873,7 +959,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           total: controllers[8].text,
           cashOrDebt: cashOrDebtValues[i],
           empties: emptiesValues[i],
-          sellerName: widget.sellerName,
+          sellerName: sellerNames[i], // <-- استخدام اسم البائع المخزن
         ));
       }
     }
@@ -923,7 +1009,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     setState(() => _isSaving = true);
 
     final document = PurchaseDocument(
-      recordNumber: '1', // رقم افتراضي (لم يعد مهماً)
+      recordNumber: '1',
       date: widget.selectedDate,
       sellerName: widget.sellerName,
       storeName: widget.storeName,
@@ -955,101 +1041,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
         ),
       );
     }
-  }
-
-  Future<void> _showDateSelectionDialog() async {
-    final availableDates = await _storageService.getAvailableDates();
-
-    if (!mounted) return;
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text(
-            'اليوميات المحفوظة',
-            style: TextStyle(fontWeight: FontWeight.bold),
-            textAlign: TextAlign.center,
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (availableDates.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.all(16.0),
-                    child: Text(
-                      'لا توجد يوميات محفوظة',
-                      style: TextStyle(color: Colors.grey),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                if (availableDates.isNotEmpty)
-                  ...availableDates.map((date) {
-                    return Card(
-                      elevation: 2,
-                      margin: const EdgeInsets.symmetric(vertical: 4),
-                      child: ListTile(
-                        leading: const Icon(Icons.calendar_today,
-                            color: Colors.blue),
-                        title: Text(
-                          'يومية تاريخ $date',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.red),
-                          onPressed: () async {
-                            // يمكن إضافة وظيفة حذف اليومية لاحقاً
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content:
-                                      Text('سيتم إضافة وظيفة الحذف لاحقاً'),
-                                  backgroundColor: Colors.orange,
-                                ),
-                              );
-                            }
-                          },
-                        ),
-                        onTap: () async {
-                          Navigator.of(context).pop();
-                          // في التطبيق الحقيقي، تحتاج إلى إعادة تحميل الشاشة بالتاريخ الجديد
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                    'لتحميل يومية تاريخ مختلف، يرجى العودة للشاشة الرئيسية واختيار التاريخ: $date'),
-                                backgroundColor: Colors.blue,
-                                duration: const Duration(seconds: 3),
-                              ),
-                            );
-                          }
-                        },
-                      ),
-                    );
-                  }).toList(),
-                const Divider(),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    _createNewJournal();
-                  },
-                  icon: const Icon(Icons.add_circle_outline),
-                  label: const Text('بدء يومية جديدة'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green[600],
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 24, vertical: 12),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
   }
 
   Future<void> _shareFile() async {
@@ -1089,6 +1080,31 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
               TextButton(
                 onPressed: () => Navigator.pop(context, true),
                 child: const Text('موافق'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
+  Future<bool> _showUnsavedChangesDialog() async {
+    return await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            title: const Text('تغييرات غير محفوظة'),
+            content: const Text(
+              'هناك تغييرات غير محفوظة. هل تريد حفظها قبل الانتقال؟',
+              textAlign: TextAlign.center,
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('تجاهل'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('حفظ'),
               ),
             ],
           ),

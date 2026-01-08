@@ -145,8 +145,7 @@ class _YieldScreenState extends State<YieldScreen> {
     final currentSellerName = _sellerNameController.text;
 
     for (var recordNum in records) {
-      final doc =
-          await salesStorage.loadSalesDocument(widget.selectedDate!, recordNum);
+      final doc = await salesStorage.loadSalesDocument(widget.selectedDate!);
       if (doc != null) {
         for (var sale in doc.sales) {
           // إظهار فقط سجلات البائع الحالي

@@ -269,7 +269,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
           const Icon(Icons.vpn_key, size: 60, color: Colors.white),
           const SizedBox(height: 20),
           const Text(
-            'إعداد التطبيق',
+            'تسجيل بائع جديد',
             style: TextStyle(
               fontSize: 28,
               fontWeight: FontWeight.bold,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import '../../models/sales_model.dart';
 import '../../services/sales_storage_service.dart';
 import '../../widgets/table_builder.dart' as TableBuilder;
@@ -54,7 +55,7 @@ class _SalesScreenState extends State<SalesScreen> {
   // حالة الحفظ
   bool _isSaving = false;
   bool _hasUnsavedChanges = false;
-  String? _recordCreator; // منشئ السجل الحالي
+  bool _isLoadingJournal = false;
 
   @override
   void initState() {
@@ -69,7 +70,7 @@ class _SalesScreenState extends State<SalesScreen> {
     _resetTotalValues();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _createNewRecordAutomatically();
+      _loadOrCreateDailyJournal();
     });
   }
 
@@ -114,11 +115,34 @@ class _SalesScreenState extends State<SalesScreen> {
     return days[now.weekday % 7];
   }
 
-  Future<void> _createNewRecordAutomatically() async {
-    final nextNumber =
-        await _storageService.getNextRecordNumber(widget.selectedDate);
-    if (mounted) {
-      _createNewRecord(nextNumber);
+  // تحميل أو إنشاء اليومية عند الدخول
+  Future<void> _loadOrCreateDailyJournal() async {
+    setState(() => _isLoadingJournal = true);
+
+    try {
+      // محاولة تحميل اليومية الموجودة
+      final document =
+          await _storageService.loadSalesDocument(widget.selectedDate);
+
+      if (document != null && mounted) {
+        // اليومية موجودة - نحملها
+        _loadExistingJournal(document);
+      } else {
+        // اليومية غير موجودة - ننشئ واحدة جديدة
+        final journalNumber =
+            await _storageService.getDailyJournalNumber(widget.selectedDate);
+        if (mounted) {
+          _createNewJournal(journalNumber);
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ خطأ في تحميل يومية المبيعات: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingJournal = false);
+      }
     }
   }
 
@@ -629,14 +653,6 @@ class _SalesScreenState extends State<SalesScreen> {
                     setState(() => _hasUnsavedChanges = false);
                   },
           ),
-          IconButton(
-            icon: const Icon(Icons.folder_open),
-            tooltip: 'فتح يومية',
-            onPressed: () async {
-              await _saveCurrentRecord(silent: true);
-              await _showRecordSelectionDialog();
-            },
-          ),
         ],
       ),
       body: _buildTableWithStickyHeader(),
@@ -687,37 +703,13 @@ class _SalesScreenState extends State<SalesScreen> {
   Future<void> _saveCurrentRecord({bool silent = false}) async {
     if (_isSaving) return;
 
-    // نظام الصلاحيات: التحقق من أن المستخدم الحالي هو منشئ السجل
-    if (_recordCreator != null && _recordCreator != widget.sellerName) {
+    // التحقق من أن اليومية غير فارغة
+    if (rowControllers.isEmpty) {
       if (!silent && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('هذا السجل ليس سجلك، لا يمكنك التعديل عليه'),
+            content: Text('لا توجد بيانات للحفظ'),
             backgroundColor: Colors.orange,
-          ),
-        );
-      }
-      return;
-    }
-
-    // التحقق من أن السجل غير فارغ
-    bool isEmptyRecord = true;
-    for (var controllers in rowControllers) {
-      if (controllers[1].text.isNotEmpty || // المادة
-          controllers[4].text.isNotEmpty || // العدد
-          controllers[8].text.isNotEmpty) {
-        // السعر
-        isEmptyRecord = false;
-        break;
-      }
-    }
-
-    if (isEmptyRecord) {
-      if (!silent && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('لا يمكن حفظ سجل فارغ'),
-            backgroundColor: Colors.red,
           ),
         );
       }
@@ -754,18 +746,6 @@ class _SalesScreenState extends State<SalesScreen> {
 
     // إعادة حساب المجاميع بعد التصحيح
     _calculateAllTotals();
-
-    if (rowControllers.isEmpty) {
-      if (!silent && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('لا توجد بيانات للحفظ'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
-      return;
-    }
 
     setState(() => _isSaving = true);
 
@@ -844,110 +824,8 @@ class _SalesScreenState extends State<SalesScreen> {
         false;
   }
 
-  Future<void> _showRecordSelectionDialog() async {
-    final availableRecords =
-        await _storageService.getAvailableRecords(widget.selectedDate);
-
-    if (!mounted) return;
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text(
-            'اليومية سابقة',
-            style: TextStyle(fontWeight: FontWeight.bold),
-            textAlign: TextAlign.center,
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (availableRecords.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.all(16.0),
-                    child: Text(
-                      'لا توجد يومية  محفوظة لهذا التاريخ',
-                      style: TextStyle(color: Colors.grey),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                if (availableRecords.isNotEmpty)
-                  ...availableRecords.map((recordNum) {
-                    return Card(
-                      elevation: 2,
-                      margin: const EdgeInsets.symmetric(vertical: 4),
-                      child: ListTile(
-                        leading:
-                            const Icon(Icons.description, color: Colors.green),
-                        title: Text(
-                          'اليومية رقم $recordNum',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.delete, color: Colors.red),
-                              onPressed: () async {
-                                final confirm = await CommonDialogs
-                                    .showDeleteConfirmationDialog(
-                                  context: context,
-                                  recordNumber: recordNum,
-                                );
-
-                                if (confirm == true) {
-                                  await _storageService.deleteSalesDocument(
-                                    widget.selectedDate,
-                                    recordNum,
-                                  );
-                                  Navigator.pop(context);
-                                  await _showRecordSelectionDialog();
-                                }
-                              },
-                            ),
-                          ],
-                        ),
-                        onTap: () async {
-                          Navigator.of(context).pop();
-                          await _loadRecord(recordNum);
-                        },
-                      ),
-                    );
-                  }).toList(),
-                const Divider(),
-                ElevatedButton.icon(
-                  onPressed: () async {
-                    final nextNumber = await _storageService
-                        .getNextRecordNumber(widget.selectedDate);
-                    if (mounted) {
-                      Navigator.of(context).pop();
-                      _createNewRecord(nextNumber);
-                    }
-                  },
-                  icon: const Icon(Icons.add_circle_outline),
-                  label: const Text('يومية جديدة'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green[600],
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 24, vertical: 12),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
   Future<void> _shareFile() async {
-    final filePath = await _storageService.getFilePath(
-      widget.selectedDate,
-      serialNumber,
-    );
+    final filePath = await _storageService.getFilePath(widget.selectedDate);
 
     if (filePath == null) {
       if (mounted) {
@@ -969,10 +847,10 @@ class _SalesScreenState extends State<SalesScreen> {
     }
   }
 
-  void _createNewRecord(String recordNumber) {
+  // إنشاء يومية جديدة
+  void _createNewJournal(String journalNumber) {
     setState(() {
-      serialNumber = recordNumber;
-      _recordCreator = widget.sellerName; // تعيين المنشئ عند إنشاء سجل جديد
+      serialNumber = journalNumber;
       rowControllers.clear();
       rowFocusNodes.clear();
       cashOrDebtValues.clear();
@@ -990,28 +868,12 @@ class _SalesScreenState extends State<SalesScreen> {
     });
   }
 
-  Future<void> _loadRecord(String recordNumber) async {
-    final document = await _storageService.loadSalesDocument(
-      widget.selectedDate,
-      recordNumber,
-    );
-
-    if (document == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('فشل تحميل اليومية'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-      return;
-    }
-
+  // تحميل يومية موجودة
+  void _loadExistingJournal(SalesDocument document) {
     setState(() {
-      serialNumber = recordNumber;
-      _recordCreator = document.sellerName; // تعيين المنشئ عند تحميل السجل
+      serialNumber = document.recordNumber;
 
+      // تنظيف البيانات القديمة
       for (var row in rowControllers) {
         for (var controller in row) {
           controller.dispose();
@@ -1029,6 +891,7 @@ class _SalesScreenState extends State<SalesScreen> {
       emptiesValues.clear();
       customerNames.clear();
 
+      // تحميل السجلات (الصفوف) من اليومية
       for (var sale in document.sales) {
         List<TextEditingController> newControllers = [
           TextEditingController(text: sale.serialNumber),
@@ -1048,6 +911,7 @@ class _SalesScreenState extends State<SalesScreen> {
         List<FocusNode> newFocusNodes =
             List.generate(12, (index) => FocusNode());
 
+        // إضافة المستمعين
         newControllers[1].addListener(() => _hasUnsavedChanges = true);
         newControllers[2].addListener(() => _hasUnsavedChanges = true);
         newControllers[3].addListener(() => _hasUnsavedChanges = true);

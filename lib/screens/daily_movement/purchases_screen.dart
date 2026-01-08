@@ -49,7 +49,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   // متحكمات للتمرير
   final ScrollController _verticalScrollController = ScrollController();
   final ScrollController _horizontalScrollController = ScrollController();
-
+  final _scrollController = ScrollController(); // للتمرير
   // حالة الحفظ
   bool _isSaving = false;
   bool _hasUnsavedChanges = false;
@@ -99,6 +99,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
     _verticalScrollController.dispose();
     _horizontalScrollController.dispose();
+    _scrollController.dispose();
 
     super.dispose();
   }
@@ -315,13 +316,32 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
         _validateStandingAndNet(rowControllers.length);
       });
 
-      // تخزين اسم البائع للصف الجديد
-      sellerNames.add(widget.sellerName);
+      // تخزين اسم البائع للصف الجديد (البائع الحالي)
+      sellerNames.add(widget.sellerName); // <-- هذا السطر مهم!
 
       rowControllers.add(newControllers);
       rowFocusNodes.add(newFocusNodes);
       cashOrDebtValues.add('');
       emptiesValues.add('');
+
+      // التمرير إلى أسفل الجدول لرؤية السجل الجديد
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_verticalScrollController.hasClients) {
+          _verticalScrollController.animateTo(
+            _verticalScrollController.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        }
+      });
+    });
+
+    // تركيز الماوس على حقل المادة في السجل الجديد
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (rowFocusNodes.isNotEmpty) {
+        final newRowIndex = rowFocusNodes.length - 1;
+        FocusScope.of(context).requestFocus(rowFocusNodes[newRowIndex][1]);
+      }
     });
   }
 
@@ -880,6 +900,21 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
         ],
       ),
       body: _buildTableWithStickyHeader(),
+      // إضافة الزر العائم هنا
+      floatingActionButton: _buildFloatingActionButton(),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+    );
+  }
+
+// دالة لبناء الزر العائم
+  Widget _buildFloatingActionButton() {
+    return FloatingActionButton(
+      onPressed: _addNewRow,
+      backgroundColor: Colors.red[700],
+      foregroundColor: Colors.white,
+      child: const Icon(Icons.add),
+      tooltip: 'إضافة سجل جديد',
+      heroTag: 'purchases_fab', // مهم لمنع تضارب الـ Hero tags
     );
   }
 

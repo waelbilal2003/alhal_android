@@ -25,23 +25,33 @@ class SalesStorageService {
     return directory!.path;
   }
 
-  // إنشاء اسم الملف بناءً على التاريخ فقط (يومية واحدة لكل تاريخ)
-  String _createFileName(String date) {
+  // إنشاء اسم الملف بناءً على التاريخ ورقم السجل
+  String _createFileName(String date, String recordNumber) {
     // تحويل التاريخ من "2025/12/19" إلى "2025-12-19"
     final dateParts = date.split('/');
     final formattedDate = dateParts.join('-');
 
-    return 'alhal-sales-$formattedDate.json';
+    return 'alhal-sales-$recordNumber-$formattedDate.json';
   }
 
-  // حفظ مستند المبيعات (يومية كاملة)
+  // إنشاء اسم المجلد بناءً على التاريخ
+  String _createFolderName(String date) {
+    // تحويل التاريخ من "2025/12/19" إلى "2025-12-19"
+    final dateParts = date.split('/');
+    final formattedDate = dateParts.join('-');
+
+    return 'alhal-sales-$formattedDate';
+  }
+
+  // حفظ مستند المبيعات
   Future<bool> saveSalesDocument(SalesDocument document) async {
     try {
       // الحصول على المسار الأساسي
       final basePath = await _getBasePath();
 
-      // إنشاء مسار المجلد الرئيسي
-      final folderPath = '$basePath/AlhalSales';
+      // إنشاء مسار المجلد
+      final folderName = _createFolderName(document.date);
+      final folderPath = '$basePath/AlhalSales/$folderName';
 
       // إنشاء المجلد إذا لم يكن موجوداً
       final folder = Directory(folderPath);
@@ -49,8 +59,8 @@ class SalesStorageService {
         await folder.create(recursive: true);
       }
 
-      // إنشاء اسم الملف (يومية واحدة لكل تاريخ)
-      final fileName = _createFileName(document.date);
+      // إنشاء اسم الملف
+      final fileName = _createFileName(document.date, document.recordNumber);
       final filePath = '$folderPath/$fileName';
 
       // تحويل المستند إلى JSON وحفظه
@@ -59,36 +69,38 @@ class SalesStorageService {
       await file.writeAsString(jsonString);
 
       if (kDebugMode) {
-        debugPrint('✅ تم حفظ يومية المبيعات: $filePath');
+        debugPrint('✅ تم حفظ ملف المبيعات: $filePath');
       }
 
       return true;
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('❌ خطأ في حفظ يومية المبيعات: $e');
+        debugPrint('❌ خطأ في حفظ ملف المبيعات: $e');
       }
       return false;
     }
   }
 
-  // قراءة مستند المبيعات (يومية كاملة)
-  Future<SalesDocument?> loadSalesDocument(String date) async {
+  // قراءة مستند المبيعات
+  Future<SalesDocument?> loadSalesDocument(
+      String date, String recordNumber) async {
     try {
       // الحصول على المسار الأساسي
       final basePath = await _getBasePath();
 
-      // إنشاء مسار المجلد الرئيسي
-      final folderPath = '$basePath/AlhalSales';
+      // إنشاء مسار المجلد
+      final folderName = _createFolderName(date);
+      final folderPath = '$basePath/AlhalSales/$folderName';
 
-      // إنشاء اسم الملف (يومية واحدة لكل تاريخ)
-      final fileName = _createFileName(date);
+      // إنشاء اسم الملف
+      final fileName = _createFileName(date, recordNumber);
       final filePath = '$folderPath/$fileName';
 
       // قراءة الملف
       final file = File(filePath);
       if (!await file.exists()) {
         if (kDebugMode) {
-          debugPrint('⚠️ يومية المبيعات غير موجودة للتاريخ: $date');
+          debugPrint('⚠️ ملف المبيعات غير موجود: $filePath');
         }
         return null;
       }
@@ -99,196 +111,16 @@ class SalesStorageService {
       final document = SalesDocument.fromJson(jsonMap);
 
       if (kDebugMode) {
-        debugPrint('✅ تم تحميل يومية المبيعات: $filePath');
+        debugPrint('✅ تم تحميل ملف المبيعات: $filePath');
       }
 
       return document;
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('❌ خطأ في قراءة يومية المبيعات: $e');
+        debugPrint('❌ خطأ في قراءة ملف المبيعات: $e');
       }
       return null;
     }
-  }
-
-  // التحقق من وجود يومية لتاريخ معين
-  Future<bool> hasDailyJournal(String date) async {
-    try {
-      // الحصول على المسار الأساسي
-      final basePath = await _getBasePath();
-
-      // إنشاء مسار المجلد الرئيسي
-      final folderPath = '$basePath/AlhalSales';
-
-      // إنشاء اسم الملف
-      final fileName = _createFileName(date);
-      final filePath = '$folderPath/$fileName';
-
-      // التحقق من وجود الملف
-      final file = File(filePath);
-      return await file.exists();
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ خطأ في التحقق من وجود يومية المبيعات: $e');
-      }
-      return false;
-    }
-  }
-
-  // الحصول على رقم اليومية (يومية واحدة لكل تاريخ - رقم تسلسلي عالمي)
-  Future<String> getDailyJournalNumber(String date) async {
-    try {
-      // الحصول على المسار الأساسي
-      final basePath = await _getBasePath();
-      final folderPath = '$basePath/AlhalSales';
-
-      // التحقق من وجود يومية لهذا التاريخ
-      final hasJournal = await hasDailyJournal(date);
-
-      if (hasJournal) {
-        // إذا كانت اليومية موجودة، نحمل رقمها
-        final document = await loadSalesDocument(date);
-        return document?.recordNumber ?? '1';
-      }
-
-      // إذا لم تكن موجودة، نحسب الرقم التالي من جميع اليوميات
-      final folder = Directory(folderPath);
-      if (!await folder.exists()) {
-        return '1';
-      }
-
-      // قراءة جميع الملفات واستخراج أكبر رقم يومية
-      final files = await folder.list().toList();
-      int maxNumber = 0;
-
-      for (var file in files) {
-        if (file is File && file.path.endsWith('.json')) {
-          try {
-            final jsonString = await file.readAsString();
-            final jsonMap = jsonDecode(jsonString) as Map<String, dynamic>;
-            final recordNumber =
-                int.tryParse(jsonMap['recordNumber'] ?? '0') ?? 0;
-            if (recordNumber > maxNumber) {
-              maxNumber = recordNumber;
-            }
-          } catch (e) {
-            // تجاهل الملفات التالفة
-          }
-        }
-      }
-
-      return (maxNumber + 1).toString();
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ خطأ في الحصول على رقم يومية المبيعات: $e');
-      }
-      return '1';
-    }
-  }
-
-  // حذف يومية كاملة
-  Future<bool> deleteSalesDocument(String date) async {
-    try {
-      // الحصول على المسار الأساسي
-      final basePath = await _getBasePath();
-
-      // إنشاء مسار المجلد الرئيسي
-      final folderPath = '$basePath/AlhalSales';
-
-      // إنشاء اسم الملف
-      final fileName = _createFileName(date);
-      final filePath = '$folderPath/$fileName';
-
-      // حذف الملف
-      final file = File(filePath);
-      if (await file.exists()) {
-        await file.delete();
-
-        if (kDebugMode) {
-          debugPrint('✅ تم حذف يومية المبيعات: $filePath');
-        }
-
-        return true;
-      }
-
-      return false;
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ خطأ في حذف يومية المبيعات: $e');
-      }
-      return false;
-    }
-  }
-
-  // الحصول على مسار الملف لمشاركته
-  Future<String?> getFilePath(String date) async {
-    try {
-      // الحصول على المسار الأساسي
-      final basePath = await _getBasePath();
-
-      // إنشاء مسار المجلد الرئيسي
-      final folderPath = '$basePath/AlhalSales';
-
-      // إنشاء اسم الملف
-      final fileName = _createFileName(date);
-      final filePath = '$folderPath/$fileName';
-
-      // التحقق من وجود الملف
-      final file = File(filePath);
-      if (await file.exists()) {
-        return filePath;
-      }
-
-      return null;
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ خطأ في الحصول على مسار ملف المبيعات: $e');
-      }
-      return null;
-    }
-  }
-
-  // دالة: حساب إجمالي المبيعات النقدية ليوم محدد (يومية واحدة)
-  Future<double> getTotalCashSales(String date) async {
-    double totalCashSales = 0;
-
-    try {
-      final doc = await loadSalesDocument(date);
-      if (doc != null) {
-        for (var sale in doc.sales) {
-          // حساب فقط المبيعات النقدية (لا تشمل المبيعات بالدين)
-          if (sale.cashOrDebt == 'نقدي') {
-            totalCashSales += double.tryParse(sale.total) ?? 0;
-          }
-        }
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('Error calculating cash sales: $e');
-      }
-    }
-
-    return totalCashSales;
-  }
-
-  // دالة: حساب إجمالي جميع المبيعات (نقدي ودين) ليوم محدد (يومية واحدة)
-  Future<double> getTotalSales(String date) async {
-    double totalSales = 0;
-
-    try {
-      final doc = await loadSalesDocument(date);
-      if (doc != null) {
-        for (var sale in doc.sales) {
-          totalSales += double.tryParse(sale.total) ?? 0;
-        }
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('Error calculating total sales: $e');
-      }
-    }
-
-    return totalSales;
   }
 
   // الحصول على قائمة أرقام السجلات المتاحة لتاريخ معين
@@ -336,12 +168,139 @@ class SalesStorageService {
     }
   }
 
-  // إنشاء اسم المجلد بناءً على التاريخ
-  String _createFolderName(String date) {
-    // تحويل التاريخ من "2025/12/19" إلى "2025-12-19"
-    final dateParts = date.split('/');
-    final formattedDate = dateParts.join('-');
+  // الحصول على الرقم التالي المتاح لسجل جديد
+  Future<String> getNextRecordNumber(String date) async {
+    final existingRecords = await getAvailableRecords(date);
 
-    return 'alhal-sales-$formattedDate';
+    if (existingRecords.isEmpty) {
+      return '1';
+    }
+
+    // الحصول على أكبر رقم وإضافة 1
+    final lastNumber = int.parse(existingRecords.last);
+    return (lastNumber + 1).toString();
+  }
+
+  // حذف سجل معين
+  Future<bool> deleteSalesDocument(String date, String recordNumber) async {
+    try {
+      // الحصول على المسار الأساسي
+      final basePath = await _getBasePath();
+
+      // إنشاء مسار المجلد
+      final folderName = _createFolderName(date);
+      final folderPath = '$basePath/AlhalSales/$folderName';
+
+      // إنشاء اسم الملف
+      final fileName = _createFileName(date, recordNumber);
+      final filePath = '$folderPath/$fileName';
+
+      // حذف الملف
+      final file = File(filePath);
+      if (await file.exists()) {
+        await file.delete();
+
+        if (kDebugMode) {
+          debugPrint('✅ تم حذف ملف المبيعات: $filePath');
+        }
+
+        // التحقق من وجود ملفات أخرى في المجلد
+        final folder = Directory(folderPath);
+        final remainingFiles = await folder.list().toList();
+
+        // إذا كان المجلد فارغاً، احذفه
+        if (remainingFiles.isEmpty) {
+          await folder.delete();
+          if (kDebugMode) {
+            debugPrint('✅ تم حذف مجلد المبيعات الفارغ: $folderPath');
+          }
+        }
+
+        return true;
+      }
+
+      return false;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ خطأ في حذف ملف المبيعات: $e');
+      }
+      return false;
+    }
+  }
+
+  // الحصول على مسار الملف لمشاركته
+  Future<String?> getFilePath(String date, String recordNumber) async {
+    try {
+      // الحصول على المسار الأساسي
+      final basePath = await _getBasePath();
+
+      // إنشاء مسار المجلد
+      final folderName = _createFolderName(date);
+      final folderPath = '$basePath/AlhalSales/$folderName';
+
+      // إنشاء اسم الملف
+      final fileName = _createFileName(date, recordNumber);
+      final filePath = '$folderPath/$fileName';
+
+      // التحقق من وجود الملف
+      final file = File(filePath);
+      if (await file.exists()) {
+        return filePath;
+      }
+
+      return null;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ خطأ في الحصول على مسار ملف المبيعات: $e');
+      }
+      return null;
+    }
+  }
+
+// دالة جديدة: حساب إجمالي المبيعات النقدية ليوم محدد
+  Future<double> getTotalCashSales(String date) async {
+    double totalCashSales = 0;
+
+    try {
+      final records = await getAvailableRecords(date);
+
+      for (var recordNum in records) {
+        final doc = await loadSalesDocument(date, recordNum);
+        if (doc != null) {
+          for (var sale in doc.sales) {
+            // حساب فقط المبيعات النقدية (لا تشمل المبيعات بالدين)
+            if (sale.cashOrDebt == 'نقدي') {
+              totalCashSales += double.tryParse(sale.total) ?? 0;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      print('Error calculating cash sales: $e');
+    }
+
+    return totalCashSales;
+  }
+
+  // دالة جديدة: حساب إجمالي جميع المبيعات (نقدي ودين)
+  Future<double> getTotalSales(String date) async {
+    double totalSales = 0;
+
+    try {
+      final records = await getAvailableRecords(date);
+
+      for (var recordNum in records) {
+        final doc = await loadSalesDocument(date, recordNum);
+        if (doc != null) {
+          for (var sale in doc.sales) {
+            totalSales += double.tryParse(sale.total) ?? 0;
+          }
+        }
+      }
+    } catch (e) {
+      print('Error calculating total sales: $e');
+    }
+
+    return totalSales;
   }
 }

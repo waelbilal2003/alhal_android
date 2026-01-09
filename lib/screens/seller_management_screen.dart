@@ -202,7 +202,7 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
       children: [
         _buildActionButton('إضافة', Icons.person_add, _handleAddSeller),
         _buildActionButton('تعديل', Icons.edit, _handleEditSeller),
-        _buildActionButton('حذف', Icons.delete, _handleDeleteMode),
+        _buildActionButton('فهرس البائعين', Icons.list, _handleSellerIndex),
         _buildActionButton('خروج', Icons.exit_to_app, () {
           Navigator.of(context).pop();
         }),
@@ -329,7 +329,7 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const Text(
-            'قائمة البائعين المسجلين:',
+            'فهرس البائعين المسجلين:',
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
@@ -338,7 +338,54 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 15),
-          ...sellerNames.map((seller) {
+
+          // جدول العناوين
+          Row(
+            textDirection: TextDirection.rtl,
+            children: [
+              Expanded(
+                child: Text(
+                  'رقم البائع',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  'اسم البائع',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  'كلمة السر',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ],
+          ),
+          Divider(color: Colors.white70, thickness: 1),
+
+          // بيانات البائعين
+          ...sellerNames.asMap().entries.map((entry) {
+            final index = entry.key + 1; // بدء الترقيم من 1
+            final seller = entry.value;
+            final password = _accounts[seller]!;
+
             return Padding(
               padding: const EdgeInsets.symmetric(vertical: 8.0),
               child: Row(
@@ -346,22 +393,24 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
                 children: [
                   Expanded(
                     child: Text(
-                      seller,
-                      style: const TextStyle(fontSize: 18, color: Colors.white),
-                      textAlign: TextAlign.right,
+                      index.toString(),
+                      style: TextStyle(fontSize: 16, color: Colors.white),
+                      textAlign: TextAlign.center,
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  ElevatedButton(
-                    onPressed: () => _confirmDelete(seller),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
+                  Expanded(
+                    child: Text(
+                      seller,
+                      style: TextStyle(fontSize: 16, color: Colors.white),
+                      textAlign: TextAlign.center,
                     ),
-                    child: const Text('حذف'),
+                  ),
+                  Expanded(
+                    child: Text(
+                      password,
+                      style: TextStyle(fontSize: 16, color: Colors.white),
+                      textAlign: TextAlign.center,
+                    ),
                   ),
                 ],
               ),
@@ -405,5 +454,11 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
   @override
   Widget build(BuildContext context) {
     return _buildManagementScreen();
+  }
+
+  void _handleSellerIndex() {
+    setState(() {
+      _showDeleteList = !_showDeleteList;
+    });
   }
 }

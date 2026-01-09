@@ -6,6 +6,7 @@ import 'daily_movement/purchases_screen.dart';
 import 'daily_movement/sales_screen.dart';
 import 'daily_movement/receipt_screen.dart';
 import 'daily_movement/box_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class DailyMovementScreen extends StatefulWidget {
   final String selectedDate;
@@ -170,19 +171,30 @@ class _DailyMovementScreenState extends State<DailyMovementScreen> {
                       _buildMenuButton(context,
                           icon: Icons.settings,
                           label: 'الخدمات',
-                          color: Colors.grey[600]!, onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (context) => SellerManagementScreen(
-                              currentStoreName: _storeName,
-                              onLogout: () {
-                                // استخدام popUntil للعودة للشاشة الرئيسية
-                                Navigator.of(context)
-                                    .popUntil((route) => route.isFirst);
-                              },
+                          color: Colors.grey[600]!, onTap: () async {
+                        final isAdmin = await _isAdminSeller(widget.sellerName);
+                        if (isAdmin) {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => SellerManagementScreen(
+                                currentStoreName: _storeName,
+                                onLogout: () {
+                                  Navigator.of(context)
+                                      .popUntil((route) => route.isFirst);
+                                },
+                              ),
                             ),
-                          ),
-                        );
+                          );
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content:
+                                  Text('عفواً، هذه الخدمة متاحة فقط للإدارة'),
+                              backgroundColor: Colors.red,
+                              duration: Duration(seconds: 2),
+                            ),
+                          );
+                        }
                       }),
                     ],
                   ),
@@ -200,43 +212,81 @@ class _DailyMovementScreenState extends State<DailyMovementScreen> {
       required String label,
       required Color color,
       VoidCallback? onTap}) {
-    return InkWell(
-      onTap: onTap ??
-          () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('تم الضغط على $label'),
-                backgroundColor: color,
-                duration: const Duration(seconds: 1),
+    // تحديد إذا كان زر الخدمات
+    final isServicesButton = label == 'الخدمات';
+
+    return FutureBuilder<bool>(
+        future: isServicesButton
+            ? _isAdminSeller(widget.sellerName)
+            : Future.value(true),
+        builder: (context, snapshot) {
+          final isAdmin = snapshot.data ?? false;
+          final isEnabled = !isServicesButton || isAdmin;
+
+          return InkWell(
+            onTap: isEnabled
+                ? onTap ??
+                    () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('تم الضغط على $label'),
+                          backgroundColor: color,
+                          duration: const Duration(seconds: 1),
+                        ),
+                      );
+                    }
+                : null,
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              decoration: BoxDecoration(
+                color: isEnabled ? color : Colors.grey[400],
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: isEnabled
+                    ? [
+                        BoxShadow(
+                            color: color.withOpacity(0.4),
+                            spreadRadius: 1,
+                            blurRadius: 3)
+                      ]
+                    : null,
               ),
-            );
-          },
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-                color: color.withOpacity(0.4), spreadRadius: 1, blurRadius: 3)
-          ],
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 32, color: Colors.white),
-            const SizedBox(height: 5),
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(icon,
+                      size: 32,
+                      color: isEnabled ? Colors.white : Colors.grey[200]),
+                  const SizedBox(height: 5),
+                  Text(
+                    label,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: isEnabled ? Colors.white : Colors.grey[200],
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  // إضافة علامة الادمن إذا كان زر الخدمات والمسؤول هو الادمن
+                  if (isServicesButton && isAdmin)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4.0),
+                      child: Icon(
+                        Icons.star,
+                        size: 12,
+                        color: Colors.yellow,
+                      ),
+                    ),
+                ],
+              ),
             ),
-          ],
-        ),
-      ),
-    );
+          );
+        });
+  }
+
+  // إضافة دالة للتحقق من الادمن
+  Future<bool> _isAdminSeller(String sellerName) async {
+    final prefs = await SharedPreferences.getInstance();
+    final adminSeller = prefs.getString('admin_seller');
+    return adminSeller == sellerName;
   }
 }

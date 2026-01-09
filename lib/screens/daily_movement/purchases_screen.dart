@@ -55,7 +55,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   bool _hasUnsavedChanges = false;
 
   // التواريخ المتاحة
-  List<String> _availableDates = [];
+  List<Map<String, String>> _availableDates = [];
   bool _isLoadingDates = false;
 
   String serialNumber = '';
@@ -132,15 +132,15 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     });
 
     try {
-      final dates = await _storageService.getAvailableDates();
+      final dates = await _storageService.getAvailableDatesWithNumbers();
       setState(() {
         _availableDates = dates;
         _isLoadingDates = false;
       });
     } catch (e) {
       setState(() {
-        _isLoadingDates = false;
         _availableDates = [];
+        _isLoadingDates = false;
       });
     }
   }
@@ -897,29 +897,23 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                 );
                 items.add(const PopupMenuDivider());
 
-                for (var date in _availableDates) {
+                for (var dateInfo in _availableDates) {
+                  final date = dateInfo['date']!;
+                  final journalNumber = dateInfo['journalNumber']!;
+
                   items.add(
                     PopupMenuItem<String>(
                       value: date,
-                      child: FutureBuilder<String>(
-                        future: _storageService.getJournalNumberForDate(date),
-                        builder: (context, snapshot) {
-                          if (snapshot.connectionState ==
-                              ConnectionState.waiting) {
-                            return Text('يومية رقم ...');
-                          }
-                          return Text(
-                            'يومية رقم ${snapshot.data ?? "1"}',
-                            style: TextStyle(
-                              fontWeight: date == widget.selectedDate
-                                  ? FontWeight.bold
-                                  : FontWeight.normal,
-                              color: date == widget.selectedDate
-                                  ? Colors.red
-                                  : Colors.black,
-                            ),
-                          );
-                        },
+                      child: Text(
+                        'يومية رقم $journalNumber - تاريخ $date',
+                        style: TextStyle(
+                          fontWeight: date == widget.selectedDate
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                          color: date == widget.selectedDate
+                              ? Colors.red
+                              : Colors.black,
+                        ),
                       ),
                     ),
                   );
@@ -1026,7 +1020,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           total: controllers[8].text,
           cashOrDebt: cashOrDebtValues[i],
           empties: emptiesValues[i],
-          sellerName: sellerNames[i], // <-- استخدام اسم البائع المخزن
+          sellerName: sellerNames[i],
         ));
       }
     }
@@ -1075,8 +1069,23 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
     setState(() => _isSaving = true);
 
+    // الحصول على رقم اليومية الحالي أو الجديد
+    String journalNumber = serialNumber;
+    if (journalNumber.isEmpty || journalNumber == '1') {
+      // إذا كان الرقم فارغاً أو 1، نطلب رقم جديد إذا كانت اليومية جديدة
+      final document =
+          await _storageService.loadPurchaseDocument(widget.selectedDate);
+      if (document == null) {
+        // اليومية جديدة - الحصول على الرقم التالي
+        journalNumber = await _storageService.getNextJournalNumber();
+      } else {
+        // اليومية موجودة - استخدام رقمها الحالي
+        journalNumber = document.recordNumber;
+      }
+    }
+
     final document = PurchaseDocument(
-      recordNumber: '1',
+      recordNumber: journalNumber, // <-- استخدام رقم اليومية
       date: widget.selectedDate,
       sellerName: widget.sellerName,
       storeName: widget.storeName,
@@ -1095,6 +1104,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     if (success) {
       setState(() {
         _hasUnsavedChanges = false;
+        serialNumber = journalNumber; // تحديث الرقم المعروض
       });
     }
 

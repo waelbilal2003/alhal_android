@@ -27,7 +27,10 @@ class PurchaseStorageService {
   }
 
   // حفظ يومية المشتريات (ملف واحد لكل تاريخ)
-  Future<bool> savePurchaseDocument(PurchaseDocument document) async {
+  Future<bool> savePurchaseDocument(
+    PurchaseDocument document, {
+    String? journalNumber,
+  }) async {
     try {
       final basePath = await _getBasePath();
       final folderPath = '$basePath/AlhalJournals';
@@ -52,12 +55,10 @@ class PurchaseStorageService {
         existingDocument = PurchaseDocument.fromJson(jsonMap);
       }
 
-      // دمج السجلات (الحفاظ على السجلات القديمة، تحديث السجلات المعدلة)
+      // دمج السجلات
       List<Purchase> mergedPurchases = [];
       if (existingDocument != null) {
-        // الحفاظ على السجلات التي لم يتم تعديلها
         for (var existing in existingDocument.purchases) {
-          // البحث إذا كان نفس السجل موجوداً في المستند الجديد
           bool found = false;
           for (var newPurchase in document.purchases) {
             if (existing.serialNumber == newPurchase.serialNumber) {
@@ -65,7 +66,6 @@ class PurchaseStorageService {
               break;
             }
           }
-          // إذا لم يتم العثور عليه، احتفظ بالسجل القديم
           if (!found) {
             mergedPurchases.add(existing);
           }
@@ -79,11 +79,24 @@ class PurchaseStorageService {
       mergedPurchases.sort((a, b) =>
           int.parse(a.serialNumber).compareTo(int.parse(b.serialNumber)));
 
+      // الحصول على رقم اليومية
+      final String finalJournalNumber;
+      if (journalNumber != null) {
+        finalJournalNumber = journalNumber;
+      } else if (existingDocument != null &&
+          existingDocument.recordNumber.isNotEmpty) {
+        // استخدام الرقم الموجود إذا كان هناك
+        finalJournalNumber = existingDocument.recordNumber;
+      } else {
+        // الحصول على الرقم التالي
+        finalJournalNumber = await getNextJournalNumber();
+      }
+
       // تحديث المجاميع
       final updatedDocument = PurchaseDocument(
-        recordNumber: document.recordNumber, // لم يعد مهم (رقم اليومية)
+        recordNumber: finalJournalNumber, // <-- رقم اليومية
         date: document.date,
-        sellerName: 'Multiple Sellers', // لأنه قد يكون أكثر من بائع
+        sellerName: 'Multiple Sellers',
         storeName: document.storeName,
         dayName: document.dayName,
         purchases: mergedPurchases,
@@ -95,7 +108,7 @@ class PurchaseStorageService {
       await file.writeAsString(updatedJsonString);
 
       if (kDebugMode) {
-        debugPrint('✅ تم حفظ اليومية: $filePath');
+        debugPrint('✅ تم حفظ اليومية رقم $finalJournalNumber: $filePath');
         debugPrint('📊 عدد السجلات: ${mergedPurchases.length}');
       }
 
@@ -129,7 +142,8 @@ class PurchaseStorageService {
       final document = PurchaseDocument.fromJson(jsonMap);
 
       if (kDebugMode) {
-        debugPrint('✅ تم تحميل اليومية: $filePath');
+        debugPrint(
+            '✅ تم تحميل اليومية رقم ${document.recordNumber}: $filePath');
         debugPrint('📊 عدد السجلات: ${document.purchases.length}');
       }
 
@@ -143,7 +157,7 @@ class PurchaseStorageService {
   }
 
   // الحصول على تواريخ اليوميات المتاحة
-  Future<List<String>> getAvailableDates() async {
+  Future<List<Map<String, String>>> getAvailableDatesWithNumbers() async {
     try {
       final basePath = await _getBasePath();
       final folderPath = '$basePath/AlhalJournals';
@@ -154,24 +168,40 @@ class PurchaseStorageService {
       }
 
       final files = await folder.list().toList();
-      final dates = <String>[];
+      final datesWithNumbers = <Map<String, String>>[];
 
       for (var file in files) {
         if (file is File && file.path.endsWith('.json')) {
-          final fileName = file.path.split('/').last;
-          // استخراج التاريخ من purchases-YYYY-MM-DD.json
-          if (fileName.startsWith('purchases-')) {
-            final datePart =
-                fileName.replaceAll('purchases-', '').replaceAll('.json', '');
-            // تحويل من YYYY-MM-DD إلى YYYY/MM/DD
-            final formattedDate = datePart.replaceAll('-', '/');
-            dates.add(formattedDate);
+          try {
+            final jsonString = await file.readAsString();
+            final jsonMap = jsonDecode(jsonString) as Map<String, dynamic>;
+            final date = jsonMap['date']?.toString() ?? '';
+            final journalNumber = jsonMap['recordNumber']?.toString() ?? '1';
+            final fileName = file.path.split('/').last;
+
+            if (fileName.startsWith('purchases-') && date.isNotEmpty) {
+              datesWithNumbers.add({
+                'date': date,
+                'journalNumber': journalNumber,
+                'fileName': fileName,
+              });
+            }
+          } catch (e) {
+            if (kDebugMode) {
+              debugPrint('❌ خطأ في قراءة ملف: ${file.path}, $e');
+            }
           }
         }
       }
 
-      dates.sort((a, b) => b.compareTo(a)); // ترتيب تنازلي
-      return dates;
+      // ترتيب حسب رقم اليومية (تصاعدي)
+      datesWithNumbers.sort((a, b) {
+        final numA = int.tryParse(a['journalNumber'] ?? '0') ?? 0;
+        final numB = int.tryParse(b['journalNumber'] ?? '0') ?? 0;
+        return numA.compareTo(numB);
+      });
+
+      return datesWithNumbers;
     } catch (e) {
       if (kDebugMode) {
         debugPrint('❌ خطأ في قراءة التواريخ: $e');
@@ -314,6 +344,41 @@ class PurchaseStorageService {
     } catch (e) {
       if (kDebugMode) {
         debugPrint('❌ خطأ في الحصول على رقم اليومية: $e');
+      }
+      return '1';
+    }
+  }
+
+  Future<String> getNextJournalNumber() async {
+    try {
+      final basePath = await _getBasePath();
+      final folderPath = '$basePath/AlhalJournals';
+      final folder = Directory(folderPath);
+
+      if (!await folder.exists()) {
+        return '1'; // أول يومية
+      }
+
+      final files = await folder.list().toList();
+      int maxJournalNumber = 0;
+
+      for (var file in files) {
+        if (file is File && file.path.endsWith('.json')) {
+          final jsonString = await file.readAsString();
+          final jsonMap = jsonDecode(jsonString) as Map<String, dynamic>;
+          final journalNumber =
+              int.tryParse(jsonMap['recordNumber'] ?? '0') ?? 0;
+
+          if (journalNumber > maxJournalNumber) {
+            maxJournalNumber = journalNumber;
+          }
+        }
+      }
+
+      return (maxJournalNumber + 1).toString();
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ خطأ في الحصول على الرقم التسلسلي التالي: $e');
       }
       return '1';
     }

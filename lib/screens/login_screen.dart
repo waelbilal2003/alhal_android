@@ -37,6 +37,9 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
   late FocusNode _loginSellerNameFocus;
   late FocusNode _loginPasswordFocus;
   late FocusNode _storeNameFocus;
+  bool _isFirstSeller = true;
+  List<String> _sellersList = [];
+  String? _selectedSeller;
 
   @override
   void initState() {
@@ -96,6 +99,16 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     final prefs = await SharedPreferences.getInstance();
     final accountsJson = prefs.getString('accounts');
     final savedStoreName = await storeDbService.getStoreName();
+    final adminSeller = prefs.getString('admin_seller');
+
+    // تحميل قائمة البائعين
+    if (accountsJson != null) {
+      final accounts = json.decode(accountsJson) as Map<String, dynamic>;
+      setState(() {
+        _sellersList = accounts.keys.toList();
+        _isFirstSeller = accounts.isEmpty;
+      });
+    }
 
     if (accountsJson != null) {
       if (savedStoreName != null) {
@@ -113,6 +126,17 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
         _currentFlowState = LoginFlowState.setup;
       });
     }
+  }
+
+// إضافة دالة جديدة لتحديث اختيار البائع
+  void _onSellerSelected(String? value) {
+    setState(() {
+      _selectedSeller = value;
+      _sellerNameController.text = value ?? '';
+      if (value != null) {
+        FocusScope.of(context).requestFocus(_loginPasswordFocus);
+      }
+    });
   }
 
   Future<void> _saveAccount(String sellerName, String password) async {
@@ -179,6 +203,15 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
 
     await _saveAccount(sellerName, newPassword);
 
+    // حفظ كأول بائع (ادمن) إذا كان الأول
+    if (_isFirstSeller) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('admin_seller', sellerName);
+      setState(() {
+        _isFirstSeller = false;
+      });
+    }
+
     final storeDbService = StoreDbService();
     final savedStoreName = await storeDbService.getStoreName();
 
@@ -186,7 +219,6 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
       _isLoading = false;
     });
 
-    // عرض النافذة المنبثقة بعد الحفظ
     _showAddAnotherSellerDialog(savedStoreName != null);
   }
 
@@ -428,6 +460,53 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
             ),
           ),
           const SizedBox(height: 40),
+
+          // قائمة اختيار البائعين
+          if (_sellersList.isNotEmpty) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 50),
+              child: DropdownButtonFormField<String>(
+                value: _selectedSeller,
+                hint: Text(
+                  'اختر اسم البائع',
+                  style: TextStyle(color: Colors.white70),
+                  textAlign: TextAlign.center,
+                ),
+                items: _sellersList.map((seller) {
+                  return DropdownMenuItem<String>(
+                    value: seller,
+                    child: Text(
+                      seller,
+                      style: TextStyle(
+                        color: Colors.teal[700],
+                        fontSize: 16,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  );
+                }).toList(),
+                onChanged: _onSellerSelected,
+                decoration: InputDecoration(
+                  filled: true,
+                  fillColor: Colors.white.withOpacity(0.2),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.white, width: 2),
+                  ),
+                ),
+                dropdownColor: Colors.white,
+                icon: Icon(Icons.arrow_drop_down, color: Colors.white),
+                style: TextStyle(color: Colors.teal[700], fontSize: 16),
+              ),
+            ),
+            const SizedBox(height: 20),
+          ],
+
           Row(
             textDirection: TextDirection.rtl,
             children: [

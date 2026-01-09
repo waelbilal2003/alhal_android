@@ -184,17 +184,76 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
 
     setState(() {
       _isLoading = false;
-      if (savedStoreName != null) {
-        _storeName = savedStoreName;
-        _currentFlowState = LoginFlowState.login;
-      } else {
-        _currentFlowState = LoginFlowState.storeName;
-      }
     });
 
-    _newPasswordController.clear();
-    _confirmPasswordController.clear();
-    _sellerNameController.clear();
+    // عرض النافذة المنبثقة بعد الحفظ
+    _showAddAnotherSellerDialog(savedStoreName != null);
+  }
+
+  // دالة لعرض النافذة المنبثقة
+  void _showAddAnotherSellerDialog(bool hasStoreName) {
+    showDialog(
+      context: context,
+      barrierDismissible: false, // المستخدم لا يمكنه إغلاقها بالنقر خارجها
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('تسجيل بائع جديد'),
+          content: const Text('هل تريد تسجيل بائع آخر؟'),
+          actionsAlignment: MainAxisAlignment.spaceAround,
+          actions: <Widget>[
+            ElevatedButton(
+              onPressed: () {
+                // زر "نعم" - مسح الحقول والبقاء في الشاشة الحالية
+                _sellerNameController.clear();
+                _newPasswordController.clear();
+                _confirmPasswordController.clear();
+
+                // إعادة التركيز على أول حقل
+                FocusScope.of(context).requestFocus(_sellerNameFocus);
+
+                Navigator.of(context).pop();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.teal,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('نعم'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                // زر "لا" - الانتقال للشاشة التالية
+                Navigator.of(context).pop();
+
+                // الحصول على اسم المحل مرة أخرى للتأكد
+                final storeDbService = StoreDbService();
+                final savedStoreName = await storeDbService.getStoreName();
+
+                if (savedStoreName != null) {
+                  setState(() {
+                    _storeName = savedStoreName;
+                    _currentFlowState = LoginFlowState.login;
+                  });
+                } else {
+                  setState(() {
+                    _currentFlowState = LoginFlowState.storeName;
+                  });
+                }
+
+                // مسح الحقول
+                _newPasswordController.clear();
+                _confirmPasswordController.clear();
+                _sellerNameController.clear();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.grey,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('لا'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   // دالة للتعامل مع زر الرجوع

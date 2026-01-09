@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // أضف هذا الاستيراد
 import 'daily_movement_screen.dart';
 
 class DateSelectionScreen extends StatefulWidget {
@@ -115,16 +116,12 @@ class _DateSelectionScreenState extends State<DateSelectionScreen> {
     );
   }
 
-  // دالة للتعامل مع زر الرجوع في AppBar
-  void _handleBackButton() {
-    Navigator.of(context).pop();
-  }
-
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
       onWillPop: () async {
-        Navigator.of(context).pop();
+        // عند الضغط على زر الرجوع الجهازي، نخرج من التطبيق تماماً
+        SystemNavigator.pop();
         return false;
       },
       child: Scaffold(
@@ -136,10 +133,8 @@ class _DateSelectionScreenState extends State<DateSelectionScreen> {
           backgroundColor: Colors.teal[600],
           foregroundColor: Colors.white,
           centerTitle: true,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: _handleBackButton,
-          ),
+          // تم إزالة زر الرجوع (السهم) من AppBar
+          automaticallyImplyLeading: false,
         ),
         body: Directionality(
           textDirection: TextDirection.rtl,

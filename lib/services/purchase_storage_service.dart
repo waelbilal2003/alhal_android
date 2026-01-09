@@ -294,4 +294,28 @@ class PurchaseStorageService {
       return 0;
     }
   }
+
+  Future<String> getJournalNumberForDate(String date) async {
+    try {
+      final basePath = await _getBasePath();
+      final folderPath = '$basePath/AlhalJournals';
+      final fileName = _createFileName(date);
+      final filePath = '$folderPath/$fileName';
+
+      final file = File(filePath);
+      if (await file.exists()) {
+        final jsonString = await file.readAsString();
+        final jsonMap = jsonDecode(jsonString) as Map<String, dynamic>;
+        return jsonMap['recordNumber'] ?? '1';
+      }
+
+      // إذا كان الملف غير موجود، نرجع الرقم 1
+      return '1';
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ خطأ في الحصول على رقم اليومية: $e');
+      }
+      return '1';
+    }
+  }
 }

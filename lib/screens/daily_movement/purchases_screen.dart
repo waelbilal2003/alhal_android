@@ -58,6 +58,10 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   List<String> _availableDates = [];
   bool _isLoadingDates = false;
 
+  String serialNumber = '';
+  // ignore: unused_field
+  String? _currentJournalNumber;
+
   @override
   void initState() {
     super.initState();
@@ -73,6 +77,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadOrCreateJournal();
       _loadAvailableDates(); // <-- تحميل التواريخ
+      _loadJournalNumber();
     });
   }
 
@@ -174,94 +179,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     });
   }
 
-  void _loadJournal(PurchaseDocument document) {
-    setState(() {
-      // تنظيف المتحكمات القديمة
-      for (var row in rowControllers) {
-        for (var controller in row) {
-          controller.dispose();
-        }
-      }
-      for (var row in rowFocusNodes) {
-        for (var node in row) {
-          node.dispose();
-        }
-      }
-
-      // إعادة تهيئة القوائم
-      rowControllers.clear();
-      rowFocusNodes.clear();
-      cashOrDebtValues.clear();
-      emptiesValues.clear();
-      sellerNames.clear();
-
-      // تحميل السجلات من الوثيقة
-      for (var purchase in document.purchases) {
-        List<TextEditingController> newControllers = [
-          TextEditingController(text: purchase.serialNumber),
-          TextEditingController(text: purchase.material),
-          TextEditingController(text: purchase.affiliation),
-          TextEditingController(text: purchase.count),
-          TextEditingController(text: purchase.packaging),
-          TextEditingController(text: purchase.standing),
-          TextEditingController(text: purchase.net),
-          TextEditingController(text: purchase.price),
-          TextEditingController(text: purchase.total),
-          TextEditingController(),
-          TextEditingController(),
-        ];
-
-        List<FocusNode> newFocusNodes =
-            List.generate(11, (index) => FocusNode());
-
-        // تخزين اسم البائع لهذا الصف
-        sellerNames.add(purchase.sellerName);
-
-        // التحقق إذا كان السجل مملوكاً للبائع الحالي
-        final bool isOwnedByCurrentSeller =
-            purchase.sellerName == widget.sellerName;
-
-        // إضافة مستمعات للتغيير فقط إذا كان السجل مملوكاً للبائع الحالي
-        if (isOwnedByCurrentSeller) {
-          for (int i = 1; i <= 7; i++) {
-            newControllers[i].addListener(() {
-              _hasUnsavedChanges = true;
-              if (i >= 3 && i <= 7) {
-                final rowIndex = sellerNames.length - 1;
-                _calculateRowValues(rowIndex);
-                _calculateAllTotals();
-              }
-            });
-          }
-
-          // إضافة التحقق من قاعدة القائم والصافي
-          newControllers[5].addListener(() {
-            _validateStandingAndNet(sellerNames.length - 1);
-          });
-
-          newControllers[6].addListener(() {
-            _validateStandingAndNet(sellerNames.length - 1);
-          });
-        }
-
-        rowControllers.add(newControllers);
-        rowFocusNodes.add(newFocusNodes);
-        cashOrDebtValues.add(purchase.cashOrDebt);
-        emptiesValues.add(purchase.empties);
-      }
-
-      // تحميل المجاميع
-      if (document.totals.isNotEmpty) {
-        totalCountController.text = document.totals['totalCount'] ?? '0';
-        totalBaseController.text = document.totals['totalBase'] ?? '0.00';
-        totalNetController.text = document.totals['totalNet'] ?? '0.00';
-        totalGrandController.text = document.totals['totalGrand'] ?? '0.00';
-      }
-
-      _hasUnsavedChanges = false;
-    });
-  }
-
+  // تعديل _addNewRow لتحسين المستمعات
   void _addNewRow() {
     setState(() {
       final newSerialNumber = (rowControllers.length + 1).toString();
@@ -273,51 +191,11 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
       newControllers[0].text = newSerialNumber;
 
-      // إضافة مستمعات للتغيير
-      newControllers[1].addListener(() => _hasUnsavedChanges = true);
-      newControllers[2].addListener(() => _hasUnsavedChanges = true);
+      // إضافة مستمعات للتغيير باستخدام دالة مساعدة
+      _addChangeListenersToControllers(newControllers, rowControllers.length);
 
-      newControllers[3].addListener(() {
-        _hasUnsavedChanges = true;
-        _calculateRowValues(rowControllers.length);
-        _calculateAllTotals();
-      });
-
-      newControllers[4].addListener(() {
-        _hasUnsavedChanges = true;
-        _calculateRowValues(rowControllers.length);
-        _calculateAllTotals();
-      });
-
-      newControllers[5].addListener(() {
-        _hasUnsavedChanges = true;
-        _calculateRowValues(rowControllers.length);
-        _calculateAllTotals();
-      });
-
-      newControllers[6].addListener(() {
-        _hasUnsavedChanges = true;
-        _calculateRowValues(rowControllers.length);
-        _calculateAllTotals();
-      });
-
-      newControllers[7].addListener(() {
-        _hasUnsavedChanges = true;
-        _calculateRowValues(rowControllers.length);
-        _calculateAllTotals();
-      });
-
-      // إضافة التحقق من قاعدة القائم والصافي
-      newControllers[5].addListener(() {
-        _validateStandingAndNet(rowControllers.length);
-      });
-
-      newControllers[6].addListener(() {
-        _validateStandingAndNet(rowControllers.length);
-      });
-
-      // تخزين اسم البائع للصف الجديد (البائع الحالي)
-      sellerNames.add(widget.sellerName); // <-- هذا السطر مهم!
+      // تخزين اسم البائع للصف الجديد
+      sellerNames.add(widget.sellerName);
 
       rowControllers.add(newControllers);
       rowFocusNodes.add(newFocusNodes);
@@ -345,65 +223,211 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     });
   }
 
+// دالة مساعدة لإضافة المستمعات
+  void _addChangeListenersToControllers(
+      List<TextEditingController> controllers, int rowIndex) {
+    // حقل المادة والعائدية
+    controllers[1].addListener(() {
+      _hasUnsavedChanges = true;
+    });
+
+    controllers[2].addListener(() {
+      _hasUnsavedChanges = true;
+    });
+
+    // الحقول الرقمية مع التحديث التلقائي
+    controllers[3].addListener(() {
+      _hasUnsavedChanges = true;
+      _calculateRowValues(rowIndex);
+      _calculateAllTotals();
+    });
+
+    controllers[4].addListener(() {
+      _hasUnsavedChanges = true;
+      _calculateRowValues(rowIndex);
+      _calculateAllTotals();
+    });
+
+    controllers[5].addListener(() {
+      _hasUnsavedChanges = true;
+      _validateStandingAndNet(rowIndex);
+      _calculateRowValues(rowIndex);
+      _calculateAllTotals();
+    });
+
+    controllers[6].addListener(() {
+      _hasUnsavedChanges = true;
+      _validateStandingAndNet(rowIndex);
+      _calculateRowValues(rowIndex);
+      _calculateAllTotals();
+    });
+
+    controllers[7].addListener(() {
+      _hasUnsavedChanges = true;
+      _calculateRowValues(rowIndex);
+      _calculateAllTotals();
+    });
+  }
+
+// تعديل _validateStandingAndNet لإعادة الحساب بشكل صحيح
   void _validateStandingAndNet(int rowIndex) {
     if (rowIndex >= rowControllers.length) return;
 
     final controllers = rowControllers[rowIndex];
-    double standing = double.tryParse(controllers[5].text) ?? 0;
-    double net = double.tryParse(controllers[6].text) ?? 0;
 
-    if (standing < net) {
-      // إذا كان الصافي أكبر من القائم، نجعل الصافي يساوي القائم
-      controllers[6].text = standing.toStringAsFixed(2);
-      _showInlineWarning(rowIndex, 'الصافي لا يمكن أن يكون أكبر من القائم');
-    } else if (standing == 0 && net > 0) {
-      // إذا كان القائم صفر، يجب أن يكون الصافي صفر
-      controllers[6].text = '0.00';
-      _showInlineWarning(
-          rowIndex, 'إذا كان القائم صفر، يجب أن يكون الصافي صفر');
+    try {
+      double standing = double.tryParse(controllers[5].text) ?? 0;
+      double net = double.tryParse(controllers[6].text) ?? 0;
+
+      if (standing < net) {
+        // إذا كان الصافي أكبر من القائم، نجعل الصافي يساوي القائم
+        controllers[6].text = standing.toStringAsFixed(2);
+        _showInlineWarning(rowIndex, 'الصافي لا يمكن أن يكون أكبر من القائم');
+
+        // إعادة الحساب فوراً
+        _calculateRowValues(rowIndex);
+        _calculateAllTotals();
+      } else if (standing == 0 && net > 0) {
+        // إذا كان القائم صفر، يجب أن يكون الصافي صفر
+        controllers[6].text = '0.00';
+        _showInlineWarning(
+            rowIndex, 'إذا كان القائم صفر، يجب أن يكون الصافي صفر');
+
+        // إعادة الحساب فوراً
+        _calculateRowValues(rowIndex);
+        _calculateAllTotals();
+      }
+    } catch (e) {
+      // تجاهل الأخطاء في التحليل
     }
   }
 
+// تحسين _calculateRowValues للتأكد من التحديث
   void _calculateRowValues(int rowIndex) {
     if (rowIndex >= rowControllers.length) return;
 
     final controllers = rowControllers[rowIndex];
 
-    setState(() {
-      try {
-        double count = (double.tryParse(controllers[3].text) ?? 0).abs();
-        double net = (double.tryParse(controllers[6].text) ?? 0).abs();
-        double price = (double.tryParse(controllers[7].text) ?? 0).abs();
+    // التأكد من تحديث الواجهة
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        setState(() {
+          try {
+            double count = (double.tryParse(controllers[3].text) ?? 0).abs();
+            double net = (double.tryParse(controllers[6].text) ?? 0).abs();
+            double price = (double.tryParse(controllers[7].text) ?? 0).abs();
 
-        double baseValue = net > 0 ? net : count;
-        double total = baseValue * price;
-        controllers[8].text = total.toStringAsFixed(2);
-      } catch (e) {
-        controllers[8].text = '';
+            double baseValue = net > 0 ? net : count;
+            double total = baseValue * price;
+            controllers[8].text = total.toStringAsFixed(2);
+          } catch (e) {
+            controllers[8].text = '';
+          }
+        });
       }
     });
   }
 
+// تحسين _calculateAllTotals
   void _calculateAllTotals() {
-    setState(() {
-      double totalCount = 0;
-      double totalBase = 0;
-      double totalNet = 0;
-      double totalGrand = 0;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        setState(() {
+          double totalCount = 0;
+          double totalBase = 0;
+          double totalNet = 0;
+          double totalGrand = 0;
 
-      for (var controllers in rowControllers) {
-        try {
-          totalCount += double.tryParse(controllers[3].text) ?? 0;
-          totalBase += double.tryParse(controllers[5].text) ?? 0;
-          totalNet += double.tryParse(controllers[6].text) ?? 0;
-          totalGrand += double.tryParse(controllers[8].text) ?? 0;
-        } catch (e) {}
+          for (var controllers in rowControllers) {
+            try {
+              totalCount += double.tryParse(controllers[3].text) ?? 0;
+              totalBase += double.tryParse(controllers[5].text) ?? 0;
+              totalNet += double.tryParse(controllers[6].text) ?? 0;
+              totalGrand += double.tryParse(controllers[8].text) ?? 0;
+            } catch (e) {
+              // تجاهل الأخطاء
+            }
+          }
+
+          totalCountController.text = totalCount.toStringAsFixed(0);
+          totalBaseController.text = totalBase.toStringAsFixed(2);
+          totalNetController.text = totalNet.toStringAsFixed(2);
+          totalGrandController.text = totalGrand.toStringAsFixed(2);
+        });
+      }
+    });
+  }
+
+// تعديل _loadJournal لاستخدام الدالة المساعدة
+  void _loadJournal(PurchaseDocument document) {
+    setState(() {
+      // تنظيف المتحكمات القديمة
+      for (var row in rowControllers) {
+        for (var controller in row) {
+          controller.dispose();
+        }
+      }
+      for (var row in rowFocusNodes) {
+        for (var node in row) {
+          node.dispose();
+        }
       }
 
-      totalCountController.text = totalCount.toStringAsFixed(0);
-      totalBaseController.text = totalBase.toStringAsFixed(2);
-      totalNetController.text = totalNet.toStringAsFixed(2);
-      totalGrandController.text = totalGrand.toStringAsFixed(2);
+      // إعادة تهيئة القوائم
+      rowControllers.clear();
+      rowFocusNodes.clear();
+      cashOrDebtValues.clear();
+      emptiesValues.clear();
+      sellerNames.clear();
+
+      // تحميل السجلات من الوثيقة
+      for (int i = 0; i < document.purchases.length; i++) {
+        var purchase = document.purchases[i];
+
+        List<TextEditingController> newControllers = [
+          TextEditingController(text: purchase.serialNumber),
+          TextEditingController(text: purchase.material),
+          TextEditingController(text: purchase.affiliation),
+          TextEditingController(text: purchase.count),
+          TextEditingController(text: purchase.packaging),
+          TextEditingController(text: purchase.standing),
+          TextEditingController(text: purchase.net),
+          TextEditingController(text: purchase.price),
+          TextEditingController(text: purchase.total),
+          TextEditingController(),
+          TextEditingController(),
+        ];
+
+        List<FocusNode> newFocusNodes =
+            List.generate(11, (index) => FocusNode());
+
+        // تخزين اسم البائع لهذا الصف
+        sellerNames.add(purchase.sellerName);
+
+        // التحقق إذا كان السجل مملوكاً للبائع الحالي
+        final bool isOwnedByCurrentSeller =
+            purchase.sellerName == widget.sellerName;
+
+        // إضافة مستمعات للتغيير فقط إذا كان السجل مملوكاً للبائع الحالي
+        if (isOwnedByCurrentSeller) {
+          _addChangeListenersToControllers(newControllers, i);
+        }
+
+        rowControllers.add(newControllers);
+        rowFocusNodes.add(newFocusNodes);
+        cashOrDebtValues.add(purchase.cashOrDebt);
+        emptiesValues.add(purchase.empties);
+      }
+
+      // تحميل المجاميع
+      if (document.totals.isNotEmpty) {
+        totalCountController.text = document.totals['totalCount'] ?? '0';
+        totalBaseController.text = document.totals['totalBase'] ?? '0.00';
+        totalNetController.text = document.totals['totalNet'] ?? '0.00';
+        totalGrandController.text = document.totals['totalGrand'] ?? '0.00';
+      }
+
+      _hasUnsavedChanges = false;
     });
   }
 
@@ -755,7 +779,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          'يومية مشتريات تاريخ ${widget.selectedDate} لمحل ${widget.storeName} البائع ${widget.sellerName}',
+          'يومية مشتريات رقم /$serialNumber/ ليوم $dayName تاريخ ${widget.selectedDate} لمحل ${widget.storeName} البائع ${widget.sellerName}',
           style: const TextStyle(
             fontWeight: FontWeight.bold,
             fontSize: 14,
@@ -873,21 +897,29 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                 );
                 items.add(const PopupMenuDivider());
 
-                // إضافة التواريخ
                 for (var date in _availableDates) {
                   items.add(
                     PopupMenuItem<String>(
                       value: date,
-                      child: Text(
-                        'يومية $date',
-                        style: TextStyle(
-                          fontWeight: date == widget.selectedDate
-                              ? FontWeight.bold
-                              : FontWeight.normal,
-                          color: date == widget.selectedDate
-                              ? Colors.red
-                              : Colors.black,
-                        ),
+                      child: FutureBuilder<String>(
+                        future: _storageService.getJournalNumberForDate(date),
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState ==
+                              ConnectionState.waiting) {
+                            return Text('يومية رقم ...');
+                          }
+                          return Text(
+                            'يومية رقم ${snapshot.data ?? "1"}',
+                            style: TextStyle(
+                              fontWeight: date == widget.selectedDate
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
+                              color: date == widget.selectedDate
+                                  ? Colors.red
+                                  : Colors.black,
+                            ),
+                          );
+                        },
                       ),
                     ),
                   );
@@ -1156,6 +1188,22 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           duration: const Duration(seconds: 2),
         ),
       );
+    }
+  }
+
+  Future<void> _loadJournalNumber() async {
+    try {
+      final journalNumber =
+          await _storageService.getJournalNumberForDate(widget.selectedDate);
+      setState(() {
+        serialNumber = journalNumber;
+        _currentJournalNumber = journalNumber;
+      });
+    } catch (e) {
+      setState(() {
+        serialNumber = '1'; // الرقم الافتراضي
+        _currentJournalNumber = '1';
+      });
     }
   }
 }

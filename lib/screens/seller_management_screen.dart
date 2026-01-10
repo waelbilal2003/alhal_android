@@ -55,11 +55,11 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
     });
   }
 
+/*
   Future<void> _saveAccounts() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('accounts', json.encode(_accounts));
   }
-
   Future<void> _deleteSeller(String sellerName) async {
     if (_accounts.containsKey(sellerName)) {
       setState(() {
@@ -75,7 +75,7 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
       }
     }
   }
-
+*/
   Widget _buildInputField(
     TextEditingController controller,
     String hint,
@@ -290,12 +290,6 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
     await prefs.setInt('temp_seller_expiry', expiryTime);
   }
 
-  void _handleDeleteMode() {
-    setState(() {
-      _showDeleteList = !_showDeleteList;
-    });
-  }
-
   Widget _buildDeleteSellerList() {
     if (!_showDeleteList) return const SizedBox.shrink();
 
@@ -421,6 +415,7 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
     );
   }
 
+/*
   void _confirmDelete(String sellerName) {
     showDialog(
       context: context,
@@ -450,7 +445,7 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
       },
     );
   }
-
+*/
   @override
   Widget build(BuildContext context) {
     return _buildManagementScreen();

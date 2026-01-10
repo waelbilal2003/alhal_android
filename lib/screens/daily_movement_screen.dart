@@ -7,6 +7,7 @@ import 'daily_movement/sales_screen.dart';
 import 'daily_movement/receipt_screen.dart';
 import 'daily_movement/box_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 
 class DailyMovementScreen extends StatefulWidget {
   final String selectedDate;
@@ -285,8 +286,28 @@ class _DailyMovementScreenState extends State<DailyMovementScreen> {
 
   // إضافة دالة للتحقق من الادمن
   Future<bool> _isAdminSeller(String sellerName) async {
-    final prefs = await SharedPreferences.getInstance();
-    final adminSeller = prefs.getString('admin_seller');
-    return adminSeller == sellerName;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final adminSeller = prefs.getString('admin_seller');
+
+      // إذا لم يكن هناك ادمن مسبقاً، يتم تعيين أول بائع موجود كادمن
+      if (adminSeller == null) {
+        final accountsJson = prefs.getString('accounts');
+        if (accountsJson != null) {
+          final accounts = json.decode(accountsJson) as Map<String, dynamic>;
+          if (accounts.isNotEmpty) {
+            final firstSeller = accounts.keys.first;
+            await prefs.setString('admin_seller', firstSeller);
+            return firstSeller == sellerName;
+          }
+        }
+        return false;
+      }
+
+      return adminSeller == sellerName;
+    } catch (e) {
+      print('خطأ في التحقق من الادمن: $e');
+      return false;
+    }
   }
 }

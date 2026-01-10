@@ -860,11 +860,4 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
       await prefs.remove('temp_seller_expiry');
     }
   }
-
-  Future<bool> _isCurrentUserAdmin() async {
-    final prefs = await SharedPreferences.getInstance();
-    final adminSeller = prefs.getString('admin_seller');
-    final currentSeller = prefs.getString('current_seller');
-    return adminSeller == currentSeller;
-  }
 }

@@ -99,13 +99,13 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     final prefs = await SharedPreferences.getInstance();
     final accountsJson = prefs.getString('accounts');
     final savedStoreName = await storeDbService.getStoreName();
-    final adminSeller = prefs.getString('admin_seller');
 
     // تحميل قائمة البائعين
     if (accountsJson != null) {
       final accounts = json.decode(accountsJson) as Map<String, dynamic>;
       setState(() {
         _sellersList = accounts.keys.toList();
+        // التحقق إذا كان هناك بائعين مسجلين بالفعل
         _isFirstSeller = accounts.isEmpty;
       });
     }
@@ -206,10 +206,13 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     // حفظ كأول بائع (ادمن) إذا كان الأول
     if (_isFirstSeller) {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('admin_seller', sellerName);
-      setState(() {
-        _isFirstSeller = false;
-      });
+      final existingAdmin = prefs.getString('admin_seller');
+
+      // فقط إذا لم يكن هناك ادمن مسبقاً، نعين هذا كادمن
+      if (existingAdmin == null) {
+        await prefs.setString('admin_seller', sellerName);
+        print('تم تعيين $sellerName كأدمن (أول بائع)');
+      }
     }
 
     final storeDbService = StoreDbService();

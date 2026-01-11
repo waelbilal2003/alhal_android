@@ -81,6 +81,14 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   int? _activePackagingRowIndex;
   int? _activeSupplierRowIndex;
 
+  // متحكمات التمرير الأفقي للاقتراحات
+  final ScrollController _materialSuggestionsScrollController =
+      ScrollController();
+  final ScrollController _packagingSuggestionsScrollController =
+      ScrollController();
+  final ScrollController _supplierSuggestionsScrollController =
+      ScrollController();
+
   @override
   void initState() {
     super.initState();
@@ -93,9 +101,18 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
     _resetTotalValues();
 
+    // إخفاء الاقتراحات عند التمرير
+    _verticalScrollController.addListener(() {
+      _hideAllSuggestionsImmediately();
+    });
+
+    _horizontalScrollController.addListener(() {
+      _hideAllSuggestionsImmediately();
+    });
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadOrCreateJournal();
-      _loadAvailableDates(); // <-- تحميل التواريخ
+      _loadAvailableDates();
       _loadJournalNumber();
     });
   }
@@ -124,6 +141,11 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     _verticalScrollController.dispose();
     _horizontalScrollController.dispose();
     _scrollController.dispose();
+
+    // تحرير متحكمات اقتراحات التمرير
+    _materialSuggestionsScrollController.dispose();
+    _packagingSuggestionsScrollController.dispose();
+    _supplierSuggestionsScrollController.dispose();
 
     super.dispose();
   }
@@ -231,6 +253,22 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     });
   }
 
+  // دالة مساعدة لإخفاء جميع الاقتراحات فوراً
+  void _hideAllSuggestionsImmediately() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        setState(() {
+          _materialSuggestions = [];
+          _packagingSuggestions = [];
+          _supplierSuggestions = [];
+          _activeMaterialRowIndex = null;
+          _activePackagingRowIndex = null;
+          _activeSupplierRowIndex = null;
+        });
+      }
+    });
+  }
+
 // دالة مساعدة لإضافة المستمعات
   void _addChangeListenersToControllers(
       List<TextEditingController> controllers, int rowIndex) {
@@ -290,6 +328,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
         _activeMaterialRowIndex = rowIndex;
       });
     } else {
+      // إخفاء الاقتراحات إذا كان الحقل فارغاً
       setState(() {
         _materialSuggestions = [];
         _activeMaterialRowIndex = null;
@@ -297,7 +336,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     }
   }
 
-  // تحديث اقتراحات العبوة
+// تحديث اقتراحات العبوة
   void _updatePackagingSuggestions(int rowIndex) async {
     final query = rowControllers[rowIndex][4].text;
     if (query.length >= 1) {
@@ -307,6 +346,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
         _activePackagingRowIndex = rowIndex;
       });
     } else {
+      // إخفاء الاقتراحات إذا كان الحقل فارغاً
       setState(() {
         _packagingSuggestions = [];
         _activePackagingRowIndex = null;
@@ -314,7 +354,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     }
   }
 
-  // تحديث اقتراحات الموردين (العائدية)
+// تحديث اقتراحات الموردين (العائدية)
   void _updateSupplierSuggestions(int rowIndex) async {
     final query = rowControllers[rowIndex][2].text;
     if (query.length >= 1) {
@@ -324,6 +364,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
         _activeSupplierRowIndex = rowIndex;
       });
     } else {
+      // إخفاء الاقتراحات إذا كان الحقل فارغاً
       setState(() {
         _supplierSuggestions = [];
         _activeSupplierRowIndex = null;
@@ -331,72 +372,96 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     }
   }
 
-  // اختيار اقتراح للمادة
+// اختيار اقتراح للمادة - معدلة تماماً
   void _selectMaterialSuggestion(String suggestion, int rowIndex) {
-    setState(() {
-      rowControllers[rowIndex][1].text = suggestion;
-      _materialSuggestions = [];
-      _activeMaterialRowIndex = null;
-      _hasUnsavedChanges = true;
+    // إخفاء الاقتراحات أولاً وفوراً
+    _hideAllSuggestionsImmediately();
 
-      // حفظ المادة في الفهرس إذا لم تكن موجودة
+    // ثم تعيين النص
+    rowControllers[rowIndex][1].text = suggestion;
+    _hasUnsavedChanges = true;
+
+    // حفظ المادة في الفهرس إذا لم تكن موجودة (مع شرط الطول)
+    if (suggestion.trim().length > 1) {
       _saveMaterialToIndex(suggestion);
+    }
 
-      // نقل التركيز إلى الحقل التالي
-      FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][2]);
+    // نقل التركيز إلى الحقل التالي بعد تأخير بسيط
+    Future.delayed(const Duration(milliseconds: 50), () {
+      if (mounted) {
+        FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][2]);
+      }
     });
   }
 
-  // اختيار اقتراح للعبوة
+// اختيار اقتراح للعبوة - معدلة تماماً
   void _selectPackagingSuggestion(String suggestion, int rowIndex) {
-    setState(() {
-      rowControllers[rowIndex][4].text = suggestion;
-      _packagingSuggestions = [];
-      _activePackagingRowIndex = null;
-      _hasUnsavedChanges = true;
+    // إخفاء الاقتراحات أولاً وفوراً
+    _hideAllSuggestionsImmediately();
 
-      // حفظ العبوة في الفهرس إذا لم تكن موجودة
+    // ثم تعيين النص
+    rowControllers[rowIndex][4].text = suggestion;
+    _hasUnsavedChanges = true;
+
+    // حفظ العبوة في الفهرس إذا لم تكن موجودة (مع شرط الطول)
+    if (suggestion.trim().length > 1) {
       _savePackagingToIndex(suggestion);
+    }
 
-      // نقل التركيز إلى الحقل التالي
-      FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][5]);
+    // نقل التركيز إلى الحقل التالي بعد تأخير بسيط
+    Future.delayed(const Duration(milliseconds: 50), () {
+      if (mounted) {
+        FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][5]);
+      }
     });
   }
 
-  // اختيار اقتراح للمورد (العائدية)
+// اختيار اقتراح للمورد (العائدية) - معدلة تماماً
   void _selectSupplierSuggestion(String suggestion, int rowIndex) {
-    setState(() {
-      rowControllers[rowIndex][2].text = suggestion;
-      _supplierSuggestions = [];
-      _activeSupplierRowIndex = null;
-      _hasUnsavedChanges = true;
+    // إخفاء الاقتراحات أولاً وفوراً
+    _hideAllSuggestionsImmediately();
 
-      // حفظ المورد في الفهرس إذا لم يكن موجوداً
+    // ثم تعيين النص
+    rowControllers[rowIndex][2].text = suggestion;
+    _hasUnsavedChanges = true;
+
+    // حفظ المورد في الفهرس إذا لم يكن موجوداً (مع شرط الطول)
+    if (suggestion.trim().length > 1) {
       _saveSupplierToIndex(suggestion);
+    }
 
-      // نقل التركيز إلى الحقل التالي
-      FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][3]);
+    // نقل التركيز إلى الحقل التالي بعد تأخير بسيط
+    Future.delayed(const Duration(milliseconds: 50), () {
+      if (mounted) {
+        FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][3]);
+      }
     });
   }
 
-  // حفظ المادة في الفهرس
+  // حفظ المادة في الفهرس - معدلة لمنع تخزين حرف واحد
   void _saveMaterialToIndex(String material) {
-    if (material.trim().isNotEmpty) {
-      _materialIndexService.saveMaterial(material);
+    final trimmedMaterial = material.trim();
+    // منع تخزين حرف واحد أو قيمة فارغة
+    if (trimmedMaterial.length > 1) {
+      _materialIndexService.saveMaterial(trimmedMaterial);
     }
   }
 
-  // حفظ العبوة في الفهرس
+// حفظ العبوة في الفهرس - معدلة لمنع تخزين حرف واحد
   void _savePackagingToIndex(String packaging) {
-    if (packaging.trim().isNotEmpty) {
-      _packagingIndexService.savePackaging(packaging);
+    final trimmedPackaging = packaging.trim();
+    // منع تخزين حرف واحد أو قيمة فارغة
+    if (trimmedPackaging.length > 1) {
+      _packagingIndexService.savePackaging(trimmedPackaging);
     }
   }
 
-  // حفظ المورد في الفهرس
+// حفظ المورد في الفهرس - معدلة لمنع تخزين حرف واحد
   void _saveSupplierToIndex(String supplier) {
-    if (supplier.trim().isNotEmpty) {
-      _supplierIndexService.saveSupplier(supplier);
+    final trimmedSupplier = supplier.trim();
+    // منع تخزين حرف واحد أو قيمة فارغة
+    if (trimmedSupplier.length > 1) {
+      _supplierIndexService.saveSupplier(trimmedSupplier);
     }
   }
 
@@ -713,13 +778,20 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     return cell;
   }
 
-  // خلية خاصة لحقل المادة مع الاقتراحات
+  // خلية خاصة لحقل المادة مع الاقتراحات - معدلة
   Widget _buildMaterialCell(
       TextEditingController controller,
       FocusNode focusNode,
       int rowIndex,
       int colIndex,
       bool isOwnedByCurrentSeller) {
+    // إضافة مستمع لفقدان التركيز
+    focusNode.addListener(() {
+      if (!focusNode.hasFocus) {
+        _hideAllSuggestionsImmediately();
+      }
+    });
+
     Widget cell = TableBuilder.buildTableCell(
       controller: controller,
       focusNode: focusNode,
@@ -731,7 +803,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       onFieldSubmitted: (value, rIndex, cIndex) {
         _handleFieldSubmitted(value, rIndex, cIndex);
         // حفظ المادة في الفهرس عند الإنتهاء من الكتابة
-        if (value.trim().isNotEmpty) {
+        if (value.trim().isNotEmpty && value.trim().length > 1) {
           _saveMaterialToIndex(value);
         }
       },
@@ -749,7 +821,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
             top: 25,
             left: 0,
             right: 0,
-            child: _buildMaterialSuggestions(rowIndex),
+            child: _buildHorizontalMaterialSuggestions(rowIndex),
           ),
       ],
     );
@@ -808,7 +880,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
             top: 25,
             left: 0,
             right: 0,
-            child: _buildPackagingSuggestions(rowIndex),
+            child: _buildHorizontalPackagingSuggestions(rowIndex),
           ),
       ],
     );
@@ -867,7 +939,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
             top: 25,
             left: 0,
             right: 0,
-            child: _buildSupplierSuggestions(rowIndex),
+            child: _buildHorizontalSupplierSuggestions(rowIndex),
           ),
       ],
     );
@@ -890,10 +962,10 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     return cellWithSuggestions;
   }
 
-  // بناء قائمة اقتراحات المادة
-  Widget _buildMaterialSuggestions(int rowIndex) {
+  // بناء قائمة اقتراحات المادة بشكل أفقي - معدلة لاختيار بنقرة واحدة
+  Widget _buildHorizontalMaterialSuggestions(int rowIndex) {
     return Container(
-      constraints: const BoxConstraints(maxHeight: 150),
+      height: 30, // ارتفاع ثابت لعدم حجب المحتوى
       decoration: BoxDecoration(
         color: Colors.white,
         border: Border.all(color: Colors.grey[300]!),
@@ -906,26 +978,53 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           ),
         ],
       ),
-      child: ListView.builder(
-        shrinkWrap: true,
-        itemCount: _materialSuggestions.length,
-        itemBuilder: (context, index) {
-          return ListTile(
-            title: Text(_materialSuggestions[index]),
-            onTap: () => _selectMaterialSuggestion(
-                _materialSuggestions[index], rowIndex),
-            dense: true,
-            visualDensity: VisualDensity.compact,
-          );
-        },
-      ),
+      child: _materialSuggestions.isEmpty
+          ? Container()
+          : ListView.separated(
+              scrollDirection: Axis.horizontal,
+              controller: _materialSuggestionsScrollController,
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              itemCount: _materialSuggestions.length,
+              separatorBuilder: (context, index) => const SizedBox(width: 4),
+              itemBuilder: (context, index) {
+                return InkWell(
+                  onTap: () {
+                    // اختيار الاقتراح وتنفيذ كل شيء بنقرة واحدة
+                    _selectMaterialSuggestion(
+                        _materialSuggestions[index], rowIndex);
+                  },
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: index == 0
+                          ? Colors.blue[100] // تمييز أول اقتراح
+                          : Colors.blue[50],
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: Colors.blue[100]!),
+                    ),
+                    child: Text(
+                      _materialSuggestions[index],
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.blue,
+                        fontWeight:
+                            index == 0 ? FontWeight.bold : FontWeight.normal,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                );
+              },
+            ),
     );
   }
 
-  // بناء قائمة اقتراحات العبوة
-  Widget _buildPackagingSuggestions(int rowIndex) {
+// بناء قائمة اقتراحات العبوة بشكل أفقي - معدلة لاختيار بنقرة واحدة
+  Widget _buildHorizontalPackagingSuggestions(int rowIndex) {
     return Container(
-      constraints: const BoxConstraints(maxHeight: 150),
+      height: 30, // ارتفاع ثابت لعدم حجب المحتوى
       decoration: BoxDecoration(
         color: Colors.white,
         border: Border.all(color: Colors.grey[300]!),
@@ -938,26 +1037,53 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           ),
         ],
       ),
-      child: ListView.builder(
-        shrinkWrap: true,
-        itemCount: _packagingSuggestions.length,
-        itemBuilder: (context, index) {
-          return ListTile(
-            title: Text(_packagingSuggestions[index]),
-            onTap: () => _selectPackagingSuggestion(
-                _packagingSuggestions[index], rowIndex),
-            dense: true,
-            visualDensity: VisualDensity.compact,
-          );
-        },
-      ),
+      child: _packagingSuggestions.isEmpty
+          ? Container()
+          : ListView.separated(
+              scrollDirection: Axis.horizontal,
+              controller: _packagingSuggestionsScrollController,
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              itemCount: _packagingSuggestions.length,
+              separatorBuilder: (context, index) => const SizedBox(width: 4),
+              itemBuilder: (context, index) {
+                return InkWell(
+                  onTap: () {
+                    // اختيار الاقتراح وتنفيذ كل شيء بنقرة واحدة
+                    _selectPackagingSuggestion(
+                        _packagingSuggestions[index], rowIndex);
+                  },
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: index == 0
+                          ? Colors.green[100] // تمييز أول اقتراح
+                          : Colors.green[50],
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: Colors.green[100]!),
+                    ),
+                    child: Text(
+                      _packagingSuggestions[index],
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.green,
+                        fontWeight:
+                            index == 0 ? FontWeight.bold : FontWeight.normal,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                );
+              },
+            ),
     );
   }
 
-  // بناء قائمة اقتراحات الموردين
-  Widget _buildSupplierSuggestions(int rowIndex) {
+// بناء قائمة اقتراحات الموردين بشكل أفقي - معدلة لاختيار بنقرة واحدة
+  Widget _buildHorizontalSupplierSuggestions(int rowIndex) {
     return Container(
-      constraints: const BoxConstraints(maxHeight: 150),
+      height: 30, // ارتفاع ثابت لعدم حجب المحتوى
       decoration: BoxDecoration(
         color: Colors.white,
         border: Border.all(color: Colors.grey[300]!),
@@ -970,19 +1096,46 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           ),
         ],
       ),
-      child: ListView.builder(
-        shrinkWrap: true,
-        itemCount: _supplierSuggestions.length,
-        itemBuilder: (context, index) {
-          return ListTile(
-            title: Text(_supplierSuggestions[index]),
-            onTap: () => _selectSupplierSuggestion(
-                _supplierSuggestions[index], rowIndex),
-            dense: true,
-            visualDensity: VisualDensity.compact,
-          );
-        },
-      ),
+      child: _supplierSuggestions.isEmpty
+          ? Container()
+          : ListView.separated(
+              scrollDirection: Axis.horizontal,
+              controller: _supplierSuggestionsScrollController,
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              itemCount: _supplierSuggestions.length,
+              separatorBuilder: (context, index) => const SizedBox(width: 4),
+              itemBuilder: (context, index) {
+                return InkWell(
+                  onTap: () {
+                    // اختيار الاقتراح وتنفيذ كل شيء بنقرة واحدة
+                    _selectSupplierSuggestion(
+                        _supplierSuggestions[index], rowIndex);
+                  },
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: index == 0
+                          ? Colors.orange[100] // تمييز أول اقتراح
+                          : Colors.orange[50],
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: Colors.orange[100]!),
+                    ),
+                    child: Text(
+                      _supplierSuggestions[index],
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.orange,
+                        fontWeight:
+                            index == 0 ? FontWeight.bold : FontWeight.normal,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                );
+              },
+            ),
     );
   }
 
@@ -992,6 +1145,28 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       return; // لا تفعل شيئاً إذا لم يكن السجل مملوكاً للبائع الحالي
     }
 
+    // إخفاء الاقتراحات أولاً
+    _hideAllSuggestionsImmediately();
+
+    // إذا كان حقل المادة وEnter ضُغط وكانت هناك اقتراحات
+    if (colIndex == 1 && _materialSuggestions.isNotEmpty) {
+      _selectMaterialSuggestion(_materialSuggestions[0], rowIndex);
+      return;
+    }
+
+    // إذا كان حقل العائدية وEnter ضُغط وكانت هناك اقتراحات
+    if (colIndex == 2 && _supplierSuggestions.isNotEmpty) {
+      _selectSupplierSuggestion(_supplierSuggestions[0], rowIndex);
+      return;
+    }
+
+    // إذا كان حقل العبوة وEnter ضُغط وكانت هناك اقتراحات
+    if (colIndex == 4 && _packagingSuggestions.isNotEmpty) {
+      _selectPackagingSuggestion(_packagingSuggestions[0], rowIndex);
+      return;
+    }
+
+    // التنقل العادي بين الحقول
     if (colIndex == 0) {
       FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][1]);
     } else if (colIndex == 7) {
@@ -1022,6 +1197,15 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
         for (int i = 0; i < rowControllers.length; i++) {
           rowControllers[i][0].text = (i + 1).toString();
         }
+      }
+
+      // إذا بدأ المستخدم بالكتابة في حقل آخر، إخفاء اقتراحات الحقول الأخرى
+      if (colIndex == 1 && _activeMaterialRowIndex != rowIndex) {
+        _clearAllSuggestions();
+      } else if (colIndex == 2 && _activeSupplierRowIndex != rowIndex) {
+        _clearAllSuggestions();
+      } else if (colIndex == 4 && _activePackagingRowIndex != rowIndex) {
+        _clearAllSuggestions();
       }
     });
   }
@@ -1617,6 +1801,22 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       setState(() {
         serialNumber = '1'; // الرقم الافتراضي
         _currentJournalNumber = '1';
+      });
+    }
+  }
+
+  // دالة مساعدة لإخفاء جميع الاقتراحات
+  void _clearAllSuggestions() {
+    if (_materialSuggestions.isNotEmpty ||
+        _packagingSuggestions.isNotEmpty ||
+        _supplierSuggestions.isNotEmpty) {
+      setState(() {
+        _materialSuggestions = [];
+        _packagingSuggestions = [];
+        _supplierSuggestions = [];
+        _activeMaterialRowIndex = null;
+        _activePackagingRowIndex = null;
+        _activeSupplierRowIndex = null;
       });
     }
   }

@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/purchase_model.dart';
 import '../../services/purchase_storage_service.dart';
-import '../../widgets/table_builder.dart' as TableBuilder;
-import '../../widgets/table_components.dart' as TableComponents;
-import '../../widgets/common_dialogs.dart' as CommonDialogs;
+// استيراد خدمات الفهرس
 import '../../services/material_index_service.dart';
 import '../../services/packaging_index_service.dart';
 import '../../services/supplier_index_service.dart';
+import '../../widgets/table_builder.dart' as TableBuilder;
+import '../../widgets/table_components.dart' as TableComponents;
+import '../../widgets/common_dialogs.dart' as CommonDialogs;
 
 class PurchasesScreen extends StatefulWidget {
   final String sellerName;
@@ -28,6 +29,11 @@ class PurchasesScreen extends StatefulWidget {
 class _PurchasesScreenState extends State<PurchasesScreen> {
   // خدمة التخزين
   final PurchaseStorageService _storageService = PurchaseStorageService();
+
+  // خدمات الفهرس
+  final MaterialIndexService _materialIndexService = MaterialIndexService();
+  final PackagingIndexService _packagingIndexService = PackagingIndexService();
+  final SupplierIndexService _supplierIndexService = SupplierIndexService();
 
   // بيانات الحقول
   String dayName = '';
@@ -64,18 +70,16 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   String serialNumber = '';
   // ignore: unused_field
   String? _currentJournalNumber;
-  //الفهارس
-  final MaterialIndexService _materialIndex = MaterialIndexService();
-  final PackagingIndexService _packagingIndex = PackagingIndexService();
-  final SupplierIndexService _supplierIndex = SupplierIndexService();
-  OverlayEntry? _suggestionOverlayEntry;
-  List<String> _currentSuggestions = [];
-  String _currentSuggestionField = ''; // 'material', 'packaging', 'supplier'
-  int _currentSuggestionRowIndex = -1;
-  int _selectedSuggestionIndex = 0;
-  final LayerLink _suggestionLayerLink = LayerLink();
-  bool _isSuggestionsVisible = false;
-  int _currentSuggestionColumnIndex = -1;
+
+  // متغيرات للاقتراحات
+  List<String> _materialSuggestions = [];
+  List<String> _packagingSuggestions = [];
+  List<String> _supplierSuggestions = [];
+
+  // مؤشرات الصفوف النشطة للاقتراحات
+  int? _activeMaterialRowIndex;
+  int? _activePackagingRowIndex;
+  int? _activeSupplierRowIndex;
 
   @override
   void initState() {
@@ -98,7 +102,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
   @override
   void dispose() {
-    _hideSuggestions();
     _saveCurrentRecord(silent: true);
 
     for (var row in rowControllers) {
@@ -217,17 +220,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       rowFocusNodes.add(newFocusNodes);
       cashOrDebtValues.add('');
       emptiesValues.add('');
-
-      // التمرير إلى أسفل الجدول لرؤية السجل الجديد
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_verticalScrollController.hasClients) {
-          _verticalScrollController.animateTo(
-            _verticalScrollController.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOut,
-          );
-        }
-      });
     });
 
     // تركيز الماوس على حقل المادة في السجل الجديد
@@ -242,55 +234,22 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 // دالة مساعدة لإضافة المستمعات
   void _addChangeListenersToControllers(
       List<TextEditingController> controllers, int rowIndex) {
-    // حقل المادة والعائدية
-    controllers[1].addListener(() async {
+    // حقل المادة
+    controllers[1].addListener(() {
       _hasUnsavedChanges = true;
-      final query = controllers[1].text;
-
-      // إخفاء الاقتراحات عند حذف النص
-      if (query.isEmpty) {
-        _hideSuggestions();
-        return;
-      }
-
-      if (query.length >= 1) {
-        final suggestions = await _materialIndex.getSuggestions(query);
-        if (suggestions.isNotEmpty) {
-          _showSuggestions(
-              suggestions, rowIndex, 1, 'material', controllers[1]);
-        } else {
-          _hideSuggestions();
-        }
-      }
+      _updateMaterialSuggestions(rowIndex);
     });
 
-// أضف Focus listener لاخفاء الاقتراحات عند فقدان التركيز
-    rowFocusNodes[rowIndex][1].addListener(() {
-      if (!rowFocusNodes[rowIndex][1].hasFocus &&
-          _currentSuggestionRowIndex == rowIndex &&
-          _currentSuggestionColumnIndex == 1) {
-        Future.delayed(Duration(milliseconds: 100), () {
-          _hideSuggestions();
-        });
-      }
+    // حقل العائدية
+    controllers[2].addListener(() {
+      _hasUnsavedChanges = true;
+      _updateSupplierSuggestions(rowIndex);
     });
 
-    controllers[2].addListener(() async {
-      // حقل العائدية (المورد)
+    // حقل العبوة
+    controllers[4].addListener(() {
       _hasUnsavedChanges = true;
-
-      final query = controllers[2].text;
-      if (query.length >= 1) {
-        final suggestions = await _supplierIndex.getSuggestions(query);
-        if (suggestions.isNotEmpty) {
-          _showSuggestions(
-              suggestions, rowIndex, 2, 'supplier', controllers[2]);
-        } else {
-          _hideSuggestions();
-        }
-      } else {
-        _hideSuggestions();
-      }
+      _updatePackagingSuggestions(rowIndex);
     });
 
     // الحقول الرقمية مع التحديث التلقائي
@@ -300,23 +259,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       _calculateAllTotals();
     });
 
-    controllers[4].addListener(() async {
-      // حقل العبوة
-      _hasUnsavedChanges = true;
-
-      final query = controllers[4].text;
-      if (query.length >= 1) {
-        final suggestions = await _packagingIndex.getSuggestions(query);
-        if (suggestions.isNotEmpty) {
-          _showSuggestions(
-              suggestions, rowIndex, 4, 'packaging', controllers[4]);
-        } else {
-          _hideSuggestions();
-        }
-      } else {
-        _hideSuggestions();
-      }
-    });
     controllers[5].addListener(() {
       _hasUnsavedChanges = true;
       _validateStandingAndNet(rowIndex);
@@ -336,6 +278,126 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       _calculateRowValues(rowIndex);
       _calculateAllTotals();
     });
+  }
+
+  // تحديث اقتراحات المادة
+  void _updateMaterialSuggestions(int rowIndex) async {
+    final query = rowControllers[rowIndex][1].text;
+    if (query.length >= 1) {
+      final suggestions = await _materialIndexService.getSuggestions(query);
+      setState(() {
+        _materialSuggestions = suggestions;
+        _activeMaterialRowIndex = rowIndex;
+      });
+    } else {
+      setState(() {
+        _materialSuggestions = [];
+        _activeMaterialRowIndex = null;
+      });
+    }
+  }
+
+  // تحديث اقتراحات العبوة
+  void _updatePackagingSuggestions(int rowIndex) async {
+    final query = rowControllers[rowIndex][4].text;
+    if (query.length >= 1) {
+      final suggestions = await _packagingIndexService.getSuggestions(query);
+      setState(() {
+        _packagingSuggestions = suggestions;
+        _activePackagingRowIndex = rowIndex;
+      });
+    } else {
+      setState(() {
+        _packagingSuggestions = [];
+        _activePackagingRowIndex = null;
+      });
+    }
+  }
+
+  // تحديث اقتراحات الموردين (العائدية)
+  void _updateSupplierSuggestions(int rowIndex) async {
+    final query = rowControllers[rowIndex][2].text;
+    if (query.length >= 1) {
+      final suggestions = await _supplierIndexService.getSuggestions(query);
+      setState(() {
+        _supplierSuggestions = suggestions;
+        _activeSupplierRowIndex = rowIndex;
+      });
+    } else {
+      setState(() {
+        _supplierSuggestions = [];
+        _activeSupplierRowIndex = null;
+      });
+    }
+  }
+
+  // اختيار اقتراح للمادة
+  void _selectMaterialSuggestion(String suggestion, int rowIndex) {
+    setState(() {
+      rowControllers[rowIndex][1].text = suggestion;
+      _materialSuggestions = [];
+      _activeMaterialRowIndex = null;
+      _hasUnsavedChanges = true;
+
+      // حفظ المادة في الفهرس إذا لم تكن موجودة
+      _saveMaterialToIndex(suggestion);
+
+      // نقل التركيز إلى الحقل التالي
+      FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][2]);
+    });
+  }
+
+  // اختيار اقتراح للعبوة
+  void _selectPackagingSuggestion(String suggestion, int rowIndex) {
+    setState(() {
+      rowControllers[rowIndex][4].text = suggestion;
+      _packagingSuggestions = [];
+      _activePackagingRowIndex = null;
+      _hasUnsavedChanges = true;
+
+      // حفظ العبوة في الفهرس إذا لم تكن موجودة
+      _savePackagingToIndex(suggestion);
+
+      // نقل التركيز إلى الحقل التالي
+      FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][5]);
+    });
+  }
+
+  // اختيار اقتراح للمورد (العائدية)
+  void _selectSupplierSuggestion(String suggestion, int rowIndex) {
+    setState(() {
+      rowControllers[rowIndex][2].text = suggestion;
+      _supplierSuggestions = [];
+      _activeSupplierRowIndex = null;
+      _hasUnsavedChanges = true;
+
+      // حفظ المورد في الفهرس إذا لم يكن موجوداً
+      _saveSupplierToIndex(suggestion);
+
+      // نقل التركيز إلى الحقل التالي
+      FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][3]);
+    });
+  }
+
+  // حفظ المادة في الفهرس
+  void _saveMaterialToIndex(String material) {
+    if (material.trim().isNotEmpty) {
+      _materialIndexService.saveMaterial(material);
+    }
+  }
+
+  // حفظ العبوة في الفهرس
+  void _savePackagingToIndex(String packaging) {
+    if (packaging.trim().isNotEmpty) {
+      _packagingIndexService.savePackaging(packaging);
+    }
+  }
+
+  // حفظ المورد في الفهرس
+  void _saveSupplierToIndex(String supplier) {
+    if (supplier.trim().isNotEmpty) {
+      _supplierIndexService.saveSupplier(supplier);
+    }
   }
 
 // تعديل _validateStandingAndNet لإعادة الحساب بشكل صحيح
@@ -557,13 +619,13 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           children: [
             _buildTableCell(rowControllers[i][0], rowFocusNodes[i][0], i, 0,
                 isOwnedByCurrentSeller),
-            _buildTableCell(rowControllers[i][1], rowFocusNodes[i][1], i, 1,
+            _buildMaterialCell(rowControllers[i][1], rowFocusNodes[i][1], i, 1,
                 isOwnedByCurrentSeller),
-            _buildTableCell(rowControllers[i][2], rowFocusNodes[i][2], i, 2,
+            _buildSupplierCell(rowControllers[i][2], rowFocusNodes[i][2], i, 2,
                 isOwnedByCurrentSeller),
             _buildTableCell(rowControllers[i][3], rowFocusNodes[i][3], i, 3,
                 isOwnedByCurrentSeller),
-            _buildTableCell(rowControllers[i][4], rowFocusNodes[i][4], i, 4,
+            _buildPackagingCell(rowControllers[i][4], rowFocusNodes[i][4], i, 4,
                 isOwnedByCurrentSeller),
             _buildTableCell(rowControllers[i][5], rowFocusNodes[i][5], i, 5,
                 isOwnedByCurrentSeller),
@@ -613,68 +675,25 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     bool isNumericField =
         colIndex == 3 || colIndex == 5 || colIndex == 6 || colIndex == 7;
 
-    // إنشاء CompositedTransformTarget للمواد والعائدية والعبوات فقط
-    bool shouldShowSuggestions =
-        colIndex == 1 || colIndex == 2 || colIndex == 4;
-
-    Widget cell = shouldShowSuggestions && isOwnedByCurrentSeller
-        ? CompositedTransformTarget(
-            link: colIndex == _currentSuggestionColumnIndex &&
-                    rowIndex == _currentSuggestionRowIndex
-                ? _suggestionLayerLink
-                : LayerLink(),
-            child: TableBuilder.buildTableCell(
-              controller: controller,
-              focusNode: focusNode,
-              isSerialField: isSerialField,
-              isNumericField: isNumericField,
-              rowIndex: rowIndex,
-              colIndex: colIndex,
-              scrollToField: _scrollToField,
-              onFieldSubmitted: (value, rIndex, cIndex) =>
-                  _handleFieldSubmitted(value, rIndex, cIndex),
-              onFieldChanged: (value, rIndex, cIndex) =>
-                  _handleFieldChanged(value, rIndex, cIndex),
-              inputFormatters: isNumericField
-                  ? [
-                      TableComponents.PositiveDecimalInputFormatter(),
-                      FilteringTextInputFormatter.deny(RegExp(r'\.\d{3,}')),
-                    ]
-                  : null,
-            ),
-          )
-        : TableBuilder.buildTableCell(
-            controller: controller,
-            focusNode: focusNode,
-            isSerialField: isSerialField,
-            isNumericField: isNumericField,
-            rowIndex: rowIndex,
-            colIndex: colIndex,
-            scrollToField: _scrollToField,
-            onFieldSubmitted: (value, rIndex, cIndex) =>
-                _handleFieldSubmitted(value, rIndex, cIndex),
-            onFieldChanged: (value, rIndex, cIndex) =>
-                _handleFieldChanged(value, rIndex, cIndex),
-            inputFormatters: isNumericField
-                ? [
-                    TableComponents.PositiveDecimalInputFormatter(),
-                    FilteringTextInputFormatter.deny(RegExp(r'\.\d{3,}')),
-                  ]
-                : null,
-          );
-
-    // إضافة معالج المفاتيح للحقول التي تدعم الاقتراحات
-    if (shouldShowSuggestions && isOwnedByCurrentSeller) {
-      cell = RawKeyboardListener(
-        focusNode: FocusNode(skipTraversal: true),
-        onKey: (event) {
-          if (event is RawKeyDownEvent) {
-            _handleKeyNavigation(event, controller);
-          }
-        },
-        child: cell,
-      );
-    }
+    Widget cell = TableBuilder.buildTableCell(
+      controller: controller,
+      focusNode: focusNode,
+      isSerialField: isSerialField,
+      isNumericField: isNumericField,
+      rowIndex: rowIndex,
+      colIndex: colIndex,
+      scrollToField: _scrollToField,
+      onFieldSubmitted: (value, rIndex, cIndex) =>
+          _handleFieldSubmitted(value, rIndex, cIndex),
+      onFieldChanged: (value, rIndex, cIndex) =>
+          _handleFieldChanged(value, rIndex, cIndex),
+      inputFormatters: isNumericField
+          ? [
+              TableComponents.PositiveDecimalInputFormatter(),
+              FilteringTextInputFormatter.deny(RegExp(r'\.\d{3,}')),
+            ]
+          : null,
+    );
 
     // إذا لم يكن السجل مملوكاً للبائع الحالي، جعل الخلية للقراءة فقط
     if (!isOwnedByCurrentSeller) {
@@ -692,6 +711,279 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     }
 
     return cell;
+  }
+
+  // خلية خاصة لحقل المادة مع الاقتراحات
+  Widget _buildMaterialCell(
+      TextEditingController controller,
+      FocusNode focusNode,
+      int rowIndex,
+      int colIndex,
+      bool isOwnedByCurrentSeller) {
+    Widget cell = TableBuilder.buildTableCell(
+      controller: controller,
+      focusNode: focusNode,
+      isSerialField: false,
+      isNumericField: false,
+      rowIndex: rowIndex,
+      colIndex: colIndex,
+      scrollToField: _scrollToField,
+      onFieldSubmitted: (value, rIndex, cIndex) {
+        _handleFieldSubmitted(value, rIndex, cIndex);
+        // حفظ المادة في الفهرس عند الإنتهاء من الكتابة
+        if (value.trim().isNotEmpty) {
+          _saveMaterialToIndex(value);
+        }
+      },
+      onFieldChanged: (value, rIndex, cIndex) =>
+          _handleFieldChanged(value, rIndex, cIndex),
+    );
+
+    // إضافة الاقتراحات
+    Widget cellWithSuggestions = Stack(
+      children: [
+        cell,
+        if (_activeMaterialRowIndex == rowIndex &&
+            _materialSuggestions.isNotEmpty)
+          Positioned(
+            top: 25,
+            left: 0,
+            right: 0,
+            child: _buildMaterialSuggestions(rowIndex),
+          ),
+      ],
+    );
+
+    // إذا لم يكن السجل مملوكاً للبائع الحالي، جعل الخلية للقراءة فقط
+    if (!isOwnedByCurrentSeller) {
+      return IgnorePointer(
+        child: Opacity(
+          opacity: 0.7,
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+            ),
+            child: cellWithSuggestions,
+          ),
+        ),
+      );
+    }
+
+    return cellWithSuggestions;
+  }
+
+  // خلية خاصة لحقل العبوة مع الاقتراحات
+  Widget _buildPackagingCell(
+      TextEditingController controller,
+      FocusNode focusNode,
+      int rowIndex,
+      int colIndex,
+      bool isOwnedByCurrentSeller) {
+    Widget cell = TableBuilder.buildTableCell(
+      controller: controller,
+      focusNode: focusNode,
+      isSerialField: false,
+      isNumericField: false,
+      rowIndex: rowIndex,
+      colIndex: colIndex,
+      scrollToField: _scrollToField,
+      onFieldSubmitted: (value, rIndex, cIndex) {
+        _handleFieldSubmitted(value, rIndex, cIndex);
+        // حفظ العبوة في الفهرس عند الإنتهاء من الكتابة
+        if (value.trim().isNotEmpty) {
+          _savePackagingToIndex(value);
+        }
+      },
+      onFieldChanged: (value, rIndex, cIndex) =>
+          _handleFieldChanged(value, rIndex, cIndex),
+    );
+
+    // إضافة الاقتراحات
+    Widget cellWithSuggestions = Stack(
+      children: [
+        cell,
+        if (_activePackagingRowIndex == rowIndex &&
+            _packagingSuggestions.isNotEmpty)
+          Positioned(
+            top: 25,
+            left: 0,
+            right: 0,
+            child: _buildPackagingSuggestions(rowIndex),
+          ),
+      ],
+    );
+
+    // إذا لم يكن السجل مملوكاً للبائع الحالي، جعل الخلية للقراءة فقط
+    if (!isOwnedByCurrentSeller) {
+      return IgnorePointer(
+        child: Opacity(
+          opacity: 0.7,
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+            ),
+            child: cellWithSuggestions,
+          ),
+        ),
+      );
+    }
+
+    return cellWithSuggestions;
+  }
+
+  // خلية خاصة لحقل العائدية (الموردين) مع الاقتراحات
+  Widget _buildSupplierCell(
+      TextEditingController controller,
+      FocusNode focusNode,
+      int rowIndex,
+      int colIndex,
+      bool isOwnedByCurrentSeller) {
+    Widget cell = TableBuilder.buildTableCell(
+      controller: controller,
+      focusNode: focusNode,
+      isSerialField: false,
+      isNumericField: false,
+      rowIndex: rowIndex,
+      colIndex: colIndex,
+      scrollToField: _scrollToField,
+      onFieldSubmitted: (value, rIndex, cIndex) {
+        _handleFieldSubmitted(value, rIndex, cIndex);
+        // حفظ المورد في الفهرس عند الإنتهاء من الكتابة
+        if (value.trim().isNotEmpty) {
+          _saveSupplierToIndex(value);
+        }
+      },
+      onFieldChanged: (value, rIndex, cIndex) =>
+          _handleFieldChanged(value, rIndex, cIndex),
+    );
+
+    // إضافة الاقتراحات
+    Widget cellWithSuggestions = Stack(
+      children: [
+        cell,
+        if (_activeSupplierRowIndex == rowIndex &&
+            _supplierSuggestions.isNotEmpty)
+          Positioned(
+            top: 25,
+            left: 0,
+            right: 0,
+            child: _buildSupplierSuggestions(rowIndex),
+          ),
+      ],
+    );
+
+    // إذا لم يكن السجل مملوكاً للبائع الحالي، جعل الخلية للقراءة فقط
+    if (!isOwnedByCurrentSeller) {
+      return IgnorePointer(
+        child: Opacity(
+          opacity: 0.7,
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+            ),
+            child: cellWithSuggestions,
+          ),
+        ),
+      );
+    }
+
+    return cellWithSuggestions;
+  }
+
+  // بناء قائمة اقتراحات المادة
+  Widget _buildMaterialSuggestions(int rowIndex) {
+    return Container(
+      constraints: const BoxConstraints(maxHeight: 150),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: Colors.grey[300]!),
+        borderRadius: BorderRadius.circular(4),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: ListView.builder(
+        shrinkWrap: true,
+        itemCount: _materialSuggestions.length,
+        itemBuilder: (context, index) {
+          return ListTile(
+            title: Text(_materialSuggestions[index]),
+            onTap: () => _selectMaterialSuggestion(
+                _materialSuggestions[index], rowIndex),
+            dense: true,
+            visualDensity: VisualDensity.compact,
+          );
+        },
+      ),
+    );
+  }
+
+  // بناء قائمة اقتراحات العبوة
+  Widget _buildPackagingSuggestions(int rowIndex) {
+    return Container(
+      constraints: const BoxConstraints(maxHeight: 150),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: Colors.grey[300]!),
+        borderRadius: BorderRadius.circular(4),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: ListView.builder(
+        shrinkWrap: true,
+        itemCount: _packagingSuggestions.length,
+        itemBuilder: (context, index) {
+          return ListTile(
+            title: Text(_packagingSuggestions[index]),
+            onTap: () => _selectPackagingSuggestion(
+                _packagingSuggestions[index], rowIndex),
+            dense: true,
+            visualDensity: VisualDensity.compact,
+          );
+        },
+      ),
+    );
+  }
+
+  // بناء قائمة اقتراحات الموردين
+  Widget _buildSupplierSuggestions(int rowIndex) {
+    return Container(
+      constraints: const BoxConstraints(maxHeight: 150),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: Colors.grey[300]!),
+        borderRadius: BorderRadius.circular(4),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: ListView.builder(
+        shrinkWrap: true,
+        itemCount: _supplierSuggestions.length,
+        itemBuilder: (context, index) {
+          return ListTile(
+            title: Text(_supplierSuggestions[index]),
+            onTap: () => _selectSupplierSuggestion(
+                _supplierSuggestions[index], rowIndex),
+            dense: true,
+            visualDensity: VisualDensity.compact,
+          );
+        },
+      ),
+    );
   }
 
   void _handleFieldSubmitted(String value, int rowIndex, int colIndex) {
@@ -1230,18 +1522,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
         ),
       );
     }
-    // حفظ القيم في الفهارس
-    for (var purchase in currentSellerPurchases) {
-      if (purchase.material.isNotEmpty) {
-        await _materialIndex.saveMaterial(purchase.material);
-      }
-      if (purchase.affiliation.isNotEmpty) {
-        await _supplierIndex.saveSupplier(purchase.affiliation);
-      }
-      if (purchase.packaging.isNotEmpty) {
-        await _packagingIndex.savePackaging(purchase.packaging);
-      }
-    }
   }
 
   Future<void> _shareFile() async {
@@ -1338,174 +1618,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
         serialNumber = '1'; // الرقم الافتراضي
         _currentJournalNumber = '1';
       });
-    }
-  }
-
-  // دالة لإظهار الاقتراحات
-  void _showSuggestions(List<String> suggestions, int rowIndex, int colIndex,
-      String fieldType, TextEditingController controller) {
-    // إخفاء الاقتراحات الحالية إذا كانت هناك اقتراحات ظاهرة
-    if (_isSuggestionsVisible) {
-      _hideSuggestions();
-    }
-
-    if (suggestions.isEmpty) return;
-
-    setState(() {
-      _currentSuggestions = suggestions;
-      _currentSuggestionField = fieldType;
-      _currentSuggestionRowIndex = rowIndex;
-      _currentSuggestionColumnIndex = colIndex;
-      _selectedSuggestionIndex = 0;
-      _isSuggestionsVisible = true;
-    });
-
-    // إنشاء OverlayEntry جديد
-    _suggestionOverlayEntry = OverlayEntry(
-      builder: (context) {
-        return CompositedTransformFollower(
-          link: _suggestionLayerLink,
-          showWhenUnlinked: false,
-          offset: Offset(0, 30), // المسافة تحت الحقل
-          child: Material(
-            elevation: 4.0,
-            child: Container(
-              width: 200, // عرض ثابت
-              constraints: BoxConstraints(
-                maxHeight: 200.0,
-              ),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                border: Border.all(color: Colors.grey[300]!),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: ListView.builder(
-                padding: EdgeInsets.zero,
-                shrinkWrap: true,
-                itemCount: suggestions.length,
-                itemBuilder: (context, index) {
-                  return InkWell(
-                    onTap: () {
-                      _selectSuggestion(suggestions[index], controller);
-                    },
-                    child: Container(
-                      padding:
-                          EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      color: index == _selectedSuggestionIndex
-                          ? Colors.blue[50]
-                          : Colors.white,
-                      child: Text(
-                        suggestions[index],
-                        style: TextStyle(
-                          color: index == _selectedSuggestionIndex
-                              ? Colors.blue[700]
-                              : Colors.black,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ),
-        );
-      },
-    );
-
-    // إضافة Overlay بعد تأكد وجود Context
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _isSuggestionsVisible) {
-        Overlay.of(context).insert(_suggestionOverlayEntry!);
-      }
-    });
-  }
-
-// دالة لإخفاء الاقتراحات
-  void _hideSuggestions() {
-    if (_suggestionOverlayEntry != null) {
-      _suggestionOverlayEntry!.remove();
-      _suggestionOverlayEntry = null;
-    }
-    setState(() {
-      _currentSuggestions.clear();
-      _currentSuggestionField = '';
-      _currentSuggestionRowIndex = -1;
-      _currentSuggestionColumnIndex = -1;
-      _selectedSuggestionIndex = 0;
-      _isSuggestionsVisible = false;
-    });
-  }
-
-// دالة لاختيار اقتراح
-  void _selectSuggestion(String suggestion, TextEditingController controller) {
-    controller.text = suggestion;
-    _hideSuggestions();
-
-    // حفظ في الفهرس إذا لم يكن موجوداً
-    if (_currentSuggestionField == 'material') {
-      _materialIndex.saveMaterial(suggestion);
-    } else if (_currentSuggestionField == 'packaging') {
-      _packagingIndex.savePackaging(suggestion);
-    } else if (_currentSuggestionField == 'supplier') {
-      _supplierIndex.saveSupplier(suggestion);
-    }
-
-    // الانتقال للحقل التالي
-    _moveToNextField();
-  }
-
-  void _moveToNextField() {
-    if (_currentSuggestionRowIndex >= 0 &&
-        _currentSuggestionColumnIndex >= 0 &&
-        _currentSuggestionRowIndex < rowFocusNodes.length) {
-      if (_currentSuggestionColumnIndex == 1) {
-        // المادة
-        FocusScope.of(context)
-            .requestFocus(rowFocusNodes[_currentSuggestionRowIndex][2]);
-      } else if (_currentSuggestionColumnIndex == 2) {
-        // العائدية
-        FocusScope.of(context)
-            .requestFocus(rowFocusNodes[_currentSuggestionRowIndex][3]);
-      } else if (_currentSuggestionColumnIndex == 4) {
-        // العبوة
-        FocusScope.of(context)
-            .requestFocus(rowFocusNodes[_currentSuggestionRowIndex][5]);
-      }
-    }
-  }
-
-  void _handleKeyNavigation(
-      RawKeyEvent event, TextEditingController controller) {
-    if (!_isSuggestionsVisible || _currentSuggestions.isEmpty) return;
-
-    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      setState(() {
-        _selectedSuggestionIndex =
-            (_selectedSuggestionIndex + 1) % _currentSuggestions.length;
-      });
-      _updateOverlay();
-    } else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-      setState(() {
-        _selectedSuggestionIndex =
-            (_selectedSuggestionIndex - 1 + _currentSuggestions.length) %
-                _currentSuggestions.length;
-      });
-      _updateOverlay();
-    } else if (event.logicalKey == LogicalKeyboardKey.enter) {
-      if (_selectedSuggestionIndex >= 0 &&
-          _selectedSuggestionIndex < _currentSuggestions.length) {
-        _selectSuggestion(
-            _currentSuggestions[_selectedSuggestionIndex], controller);
-      }
-    } else if (event.logicalKey == LogicalKeyboardKey.escape) {
-      _hideSuggestions();
-    }
-  }
-
-  void _updateOverlay() {
-    if (_suggestionOverlayEntry != null) {
-      _suggestionOverlayEntry!.markNeedsBuild();
     }
   }
 }

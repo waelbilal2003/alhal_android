@@ -452,7 +452,6 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.lock, size: 60, color: Colors.white),
           const SizedBox(height: 20),
           const Text(
             'تسجيل الدخول',

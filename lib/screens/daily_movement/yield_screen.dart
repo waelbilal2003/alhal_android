@@ -43,6 +43,8 @@ class _YieldScreenState extends State<YieldScreen> {
 
   double _yield = 0;
   String _status = '';
+  List<String> _sellersList = [];
+  String? _selectedSeller;
 
   void _calculateYield() {
     final double cashSales = double.tryParse(_cashSalesController.text) ?? 0;
@@ -82,23 +84,24 @@ class _YieldScreenState extends State<YieldScreen> {
     _paymentsController.addListener(() => setState(_calculateYield));
     _collectedController.addListener(() => setState(_calculateYield));
 
-    // إضافة Listener لحفظ القيمة عند التغيير
-    _collectedController.addListener(() async {
-      // استخدام debounce لتجنب الحفظ المستمر مع كل ضغطة زر
-      await Future.delayed(const Duration(milliseconds: 500));
-      if (_isLoggedIn && _collectedController.text.isNotEmpty) {
-        await _saveCollectedAmount();
+    // تحميل القيمة المخزنة للمقبوض منه
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await Future.delayed(Duration(milliseconds: 100));
+      if (mounted) {
+        await _loadCollectedAmount();
       }
     });
 
     // تحميل البيانات تلقائياً إذا توفر التاريخ
     if (widget.selectedDate != null) {
       _loadCashPurchases();
-      _loadCashSales(); // تحميل المبيعات النقدية
-      _loadBoxData(); // تحميل بيانات الصندوق
-      _loadReceiptData(); // تحميل بيانات الاستلام
-      // تحميل قيمة المقبوض منه المحفوظة
-      _loadCollectedAmount(); // إضافة هذا السطر هنا أيضًا
+      _loadCashSales();
+      _loadBoxData();
+      _loadReceiptData();
+      // تحميل قائمة البائعين
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        await _loadSellers();
+      });
     }
   }
 
@@ -241,6 +244,9 @@ class _YieldScreenState extends State<YieldScreen> {
         _sellerNameController.text = savedSellerName;
       });
 
+      // تحميل قيمة المقبوض منه المحفوظة
+      await _loadCollectedAmount();
+
       // إذا تم تسجيل الدخول، تحميل البيانات
       if (widget.selectedDate != null) {
         _loadCashPurchases();
@@ -280,13 +286,14 @@ class _YieldScreenState extends State<YieldScreen> {
             _isLoading = false;
           });
 
-          // بعد تسجيل الدخول، تحميل البيانات
+          // تحميل جميع البيانات بعد تسجيل الدخول
+          await _loadCollectedAmount();
+
           if (widget.selectedDate != null) {
             _loadCashPurchases();
             _loadCashSales();
             _loadBoxData();
             _loadReceiptData();
-            _loadCollectedAmount(); // <-- إضافة هذا السطر
           }
         } else {
           setState(() {
@@ -333,7 +340,7 @@ class _YieldScreenState extends State<YieldScreen> {
           const Icon(Icons.lock, size: 60, color: Colors.white),
           const SizedBox(height: 20),
           const Text(
-            'تسجيل الدخول',
+            'تسجيل الدخول - شاشة الغلة',
             style: TextStyle(
               fontSize: 28,
               fontWeight: FontWeight.bold,
@@ -341,13 +348,69 @@ class _YieldScreenState extends State<YieldScreen> {
             ),
           ),
           const SizedBox(height: 40),
+
+          // قائمة اختيار البائعين (مشابهة لـ login_screen.dart)
+          if (_sellersList.isNotEmpty) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 50),
+              child: DropdownButtonFormField<String>(
+                value: _selectedSeller,
+                hint: Text(
+                  'اختر اسم البائع',
+                  style: TextStyle(color: Colors.white70),
+                  textAlign: TextAlign.center,
+                ),
+                items: _sellersList.map((seller) {
+                  return DropdownMenuItem<String>(
+                    value: seller,
+                    child: Text(
+                      seller,
+                      style: TextStyle(
+                        color: Colors.teal[700],
+                        fontSize: 16,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  setState(() {
+                    _selectedSeller = value;
+                    _sellerNameController.text = value ?? '';
+                    if (value != null) {
+                      FocusScope.of(context).requestFocus(_loginPasswordFocus);
+                    }
+                  });
+                },
+                decoration: InputDecoration(
+                  filled: true,
+                  fillColor: Colors.white.withOpacity(0.2),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.white, width: 2),
+                  ),
+                ),
+                dropdownColor: Colors.white,
+                icon: Icon(Icons.arrow_drop_down, color: Colors.white),
+                style: TextStyle(color: Colors.teal[700], fontSize: 16),
+              ),
+            ),
+            const SizedBox(height: 20),
+          ],
+
+          // بقية الحقول كما هي...
           Row(
             textDirection: TextDirection.rtl,
             children: [
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                  child: _buildInputField(
+                  child: _buildLoginInputField(
                     _sellerNameController,
                     'أدخل اسم البائع',
                     false,
@@ -362,7 +425,7 @@ class _YieldScreenState extends State<YieldScreen> {
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                  child: _buildInputField(
+                  child: _buildLoginInputField(
                     _passwordController,
                     'أدخل كلمة المرور',
                     true,
@@ -397,6 +460,53 @@ class _YieldScreenState extends State<YieldScreen> {
                 ),
         ],
       ),
+    );
+  }
+
+// دالة جديدة لحقول الإدخال في شاشة تسجيل الدخول
+  Widget _buildLoginInputField(
+    TextEditingController controller,
+    String hint,
+    bool obscure, {
+    FocusNode? focusNode,
+    FocusNode? nextFocusNode,
+    bool isLastInRow = false,
+    String? errorText,
+  }) {
+    return TextFormField(
+      controller: controller,
+      obscureText: obscure,
+      textAlign: TextAlign.center,
+      focusNode: focusNode,
+      textDirection: TextDirection.rtl,
+      style: const TextStyle(color: Colors.white),
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: const TextStyle(color: Colors.white70),
+        filled: true,
+        fillColor: Colors.white.withOpacity(0.2),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Colors.white, width: 2),
+        ),
+        errorText: errorText,
+        errorStyle: const TextStyle(color: Colors.yellowAccent),
+      ),
+      validator: (value) {
+        if (value == null || value.isEmpty) return 'هذا الحقل مطلوب';
+        return null;
+      },
+      onFieldSubmitted: (_) {
+        if (isLastInRow) {
+          _login();
+        } else if (nextFocusNode != null) {
+          FocusScope.of(context).requestFocus(nextFocusNode);
+        }
+      },
     );
   }
 
@@ -449,8 +559,19 @@ class _YieldScreenState extends State<YieldScreen> {
   Widget _buildYieldScreen() {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('شاشة الغلة',
-            style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(
+          widget.selectedDate != null
+              ? 'غلة البائع: ${_sellerNameController.text} بتاريخ ${widget.selectedDate}'
+              : 'غلة البائع: ${_sellerNameController.text}',
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+          textAlign: TextAlign.center,
+          overflow: TextOverflow.ellipsis, // تقصير النص إذا كان طويلاً
+          maxLines: 1, // تحديد سطر واحد فقط
+        ),
         centerTitle: true,
         backgroundColor: Colors.teal[600],
         foregroundColor: Colors.white,
@@ -488,28 +609,6 @@ class _YieldScreenState extends State<YieldScreen> {
                   crossAxisAlignment: CrossAxisAlignment.center,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // عنوان الغلة
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 8,
-                        horizontal: 12,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.teal[50],
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.teal[200]!),
-                      ),
-                      child: Text(
-                        'غلة البائع: ${_sellerNameController.text}',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.teal,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-
                     // الصف الأول: مبيعات نقدية - مقبوضات
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -550,7 +649,6 @@ class _YieldScreenState extends State<YieldScreen> {
                             'مدفوعات',
                             _paymentsController,
                             icon: Icons.payment,
-                            infoText: 'مدفوعات الصندوق + دفعة وحمولة الاستلام',
                           ),
                         ),
                       ],
@@ -883,19 +981,6 @@ class _YieldScreenState extends State<YieldScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.only(bottom: 4.0, right: 8.0),
-            child: Text(
-              'سيتم حفظ القيمة تلقائياً عند التعديل',
-              style: TextStyle(
-                fontSize: 9,
-                color: Colors.teal[600],
-                fontStyle: FontStyle.italic,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
           TextField(
             controller: controller,
             textAlign: TextAlign.center,
@@ -942,16 +1027,23 @@ class _YieldScreenState extends State<YieldScreen> {
               setState(() {
                 _calculateYield();
               });
+
+              // حفظ القيمة فوراً عند تغييرها
+              if (_isLoggedIn && value.isNotEmpty) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  _saveCollectedAmount();
+                });
+              }
             },
             onTapOutside: (_) {
-              // حفظ القيمة عند النقر خارج الحقل
-              if (_isLoggedIn) {
+              // فقدان التركيز - الحفظ
+              if (_isLoggedIn && _collectedController.text.isNotEmpty) {
                 _saveCollectedAmount();
               }
             },
             onEditingComplete: () {
-              // حفظ القيمة عند الضغط على Enter
-              if (_isLoggedIn) {
+              // عند الضغط على Enter
+              if (_isLoggedIn && _collectedController.text.isNotEmpty) {
                 _saveCollectedAmount();
               }
             },
@@ -1029,18 +1121,6 @@ class _YieldScreenState extends State<YieldScreen> {
         final formattedValue = doubleValue?.toStringAsFixed(2) ?? '0.00';
         await prefs.setString(uniqueKey, formattedValue);
       }
-
-      // تحديث واجهة المستخدم
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-                'تم حفظ قيمة المقبوض منه: ${collectedValue.isNotEmpty ? collectedValue : "0.00"}'),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 1),
-          ),
-        );
-      }
     }
   }
 
@@ -1062,6 +1142,22 @@ class _YieldScreenState extends State<YieldScreen> {
           // إعادة حساب الغلة بعد تحميل القيمة
           _calculateYield();
         });
+      }
+    }
+  }
+
+  Future<void> _loadSellers() async {
+    final prefs = await SharedPreferences.getInstance();
+    final accountsJson = prefs.getString('accounts');
+
+    if (accountsJson != null && mounted) {
+      try {
+        final accounts = json.decode(accountsJson) as Map<String, dynamic>;
+        setState(() {
+          _sellersList = accounts.keys.toList();
+        });
+      } catch (e) {
+        print('Error loading sellers: $e');
       }
     }
   }

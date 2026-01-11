@@ -5,6 +5,9 @@ import '../../services/purchase_storage_service.dart';
 import '../../widgets/table_builder.dart' as TableBuilder;
 import '../../widgets/table_components.dart' as TableComponents;
 import '../../widgets/common_dialogs.dart' as CommonDialogs;
+import '../../services/material_index_service.dart';
+import '../../services/packaging_index_service.dart';
+import '../../services/supplier_index_service.dart';
 
 class PurchasesScreen extends StatefulWidget {
   final String sellerName;
@@ -61,6 +64,18 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   String serialNumber = '';
   // ignore: unused_field
   String? _currentJournalNumber;
+  //الفهارس
+  final MaterialIndexService _materialIndex = MaterialIndexService();
+  final PackagingIndexService _packagingIndex = PackagingIndexService();
+  final SupplierIndexService _supplierIndex = SupplierIndexService();
+  OverlayEntry? _suggestionOverlayEntry;
+  List<String> _currentSuggestions = [];
+  String _currentSuggestionField = ''; // 'material', 'packaging', 'supplier'
+  int _currentSuggestionRowIndex = -1;
+  int _selectedSuggestionIndex = 0;
+  final LayerLink _suggestionLayerLink = LayerLink();
+  bool _isSuggestionsVisible = false;
+  int _currentSuggestionColumnIndex = -1;
 
   @override
   void initState() {
@@ -83,6 +98,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
   @override
   void dispose() {
+    _hideSuggestions();
     _saveCurrentRecord(silent: true);
 
     for (var row in rowControllers) {
@@ -227,12 +243,54 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   void _addChangeListenersToControllers(
       List<TextEditingController> controllers, int rowIndex) {
     // حقل المادة والعائدية
-    controllers[1].addListener(() {
+    controllers[1].addListener(() async {
       _hasUnsavedChanges = true;
+      final query = controllers[1].text;
+
+      // إخفاء الاقتراحات عند حذف النص
+      if (query.isEmpty) {
+        _hideSuggestions();
+        return;
+      }
+
+      if (query.length >= 1) {
+        final suggestions = await _materialIndex.getSuggestions(query);
+        if (suggestions.isNotEmpty) {
+          _showSuggestions(
+              suggestions, rowIndex, 1, 'material', controllers[1]);
+        } else {
+          _hideSuggestions();
+        }
+      }
     });
 
-    controllers[2].addListener(() {
+// أضف Focus listener لاخفاء الاقتراحات عند فقدان التركيز
+    rowFocusNodes[rowIndex][1].addListener(() {
+      if (!rowFocusNodes[rowIndex][1].hasFocus &&
+          _currentSuggestionRowIndex == rowIndex &&
+          _currentSuggestionColumnIndex == 1) {
+        Future.delayed(Duration(milliseconds: 100), () {
+          _hideSuggestions();
+        });
+      }
+    });
+
+    controllers[2].addListener(() async {
+      // حقل العائدية (المورد)
       _hasUnsavedChanges = true;
+
+      final query = controllers[2].text;
+      if (query.length >= 1) {
+        final suggestions = await _supplierIndex.getSuggestions(query);
+        if (suggestions.isNotEmpty) {
+          _showSuggestions(
+              suggestions, rowIndex, 2, 'supplier', controllers[2]);
+        } else {
+          _hideSuggestions();
+        }
+      } else {
+        _hideSuggestions();
+      }
     });
 
     // الحقول الرقمية مع التحديث التلقائي
@@ -242,12 +300,23 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       _calculateAllTotals();
     });
 
-    controllers[4].addListener(() {
+    controllers[4].addListener(() async {
+      // حقل العبوة
       _hasUnsavedChanges = true;
-      _calculateRowValues(rowIndex);
-      _calculateAllTotals();
-    });
 
+      final query = controllers[4].text;
+      if (query.length >= 1) {
+        final suggestions = await _packagingIndex.getSuggestions(query);
+        if (suggestions.isNotEmpty) {
+          _showSuggestions(
+              suggestions, rowIndex, 4, 'packaging', controllers[4]);
+        } else {
+          _hideSuggestions();
+        }
+      } else {
+        _hideSuggestions();
+      }
+    });
     controllers[5].addListener(() {
       _hasUnsavedChanges = true;
       _validateStandingAndNet(rowIndex);
@@ -544,25 +613,68 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     bool isNumericField =
         colIndex == 3 || colIndex == 5 || colIndex == 6 || colIndex == 7;
 
-    Widget cell = TableBuilder.buildTableCell(
-      controller: controller,
-      focusNode: focusNode,
-      isSerialField: isSerialField,
-      isNumericField: isNumericField,
-      rowIndex: rowIndex,
-      colIndex: colIndex,
-      scrollToField: _scrollToField,
-      onFieldSubmitted: (value, rIndex, cIndex) =>
-          _handleFieldSubmitted(value, rIndex, cIndex),
-      onFieldChanged: (value, rIndex, cIndex) =>
-          _handleFieldChanged(value, rIndex, cIndex),
-      inputFormatters: isNumericField
-          ? [
-              TableComponents.PositiveDecimalInputFormatter(),
-              FilteringTextInputFormatter.deny(RegExp(r'\.\d{3,}')),
-            ]
-          : null,
-    );
+    // إنشاء CompositedTransformTarget للمواد والعائدية والعبوات فقط
+    bool shouldShowSuggestions =
+        colIndex == 1 || colIndex == 2 || colIndex == 4;
+
+    Widget cell = shouldShowSuggestions && isOwnedByCurrentSeller
+        ? CompositedTransformTarget(
+            link: colIndex == _currentSuggestionColumnIndex &&
+                    rowIndex == _currentSuggestionRowIndex
+                ? _suggestionLayerLink
+                : LayerLink(),
+            child: TableBuilder.buildTableCell(
+              controller: controller,
+              focusNode: focusNode,
+              isSerialField: isSerialField,
+              isNumericField: isNumericField,
+              rowIndex: rowIndex,
+              colIndex: colIndex,
+              scrollToField: _scrollToField,
+              onFieldSubmitted: (value, rIndex, cIndex) =>
+                  _handleFieldSubmitted(value, rIndex, cIndex),
+              onFieldChanged: (value, rIndex, cIndex) =>
+                  _handleFieldChanged(value, rIndex, cIndex),
+              inputFormatters: isNumericField
+                  ? [
+                      TableComponents.PositiveDecimalInputFormatter(),
+                      FilteringTextInputFormatter.deny(RegExp(r'\.\d{3,}')),
+                    ]
+                  : null,
+            ),
+          )
+        : TableBuilder.buildTableCell(
+            controller: controller,
+            focusNode: focusNode,
+            isSerialField: isSerialField,
+            isNumericField: isNumericField,
+            rowIndex: rowIndex,
+            colIndex: colIndex,
+            scrollToField: _scrollToField,
+            onFieldSubmitted: (value, rIndex, cIndex) =>
+                _handleFieldSubmitted(value, rIndex, cIndex),
+            onFieldChanged: (value, rIndex, cIndex) =>
+                _handleFieldChanged(value, rIndex, cIndex),
+            inputFormatters: isNumericField
+                ? [
+                    TableComponents.PositiveDecimalInputFormatter(),
+                    FilteringTextInputFormatter.deny(RegExp(r'\.\d{3,}')),
+                  ]
+                : null,
+          );
+
+    // إضافة معالج المفاتيح للحقول التي تدعم الاقتراحات
+    if (shouldShowSuggestions && isOwnedByCurrentSeller) {
+      cell = RawKeyboardListener(
+        focusNode: FocusNode(skipTraversal: true),
+        onKey: (event) {
+          if (event is RawKeyDownEvent) {
+            _handleKeyNavigation(event, controller);
+          }
+        },
+        child: cell,
+      );
+    }
 
     // إذا لم يكن السجل مملوكاً للبائع الحالي، جعل الخلية للقراءة فقط
     if (!isOwnedByCurrentSeller) {
@@ -1118,6 +1230,18 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
         ),
       );
     }
+    // حفظ القيم في الفهارس
+    for (var purchase in currentSellerPurchases) {
+      if (purchase.material.isNotEmpty) {
+        await _materialIndex.saveMaterial(purchase.material);
+      }
+      if (purchase.affiliation.isNotEmpty) {
+        await _supplierIndex.saveSupplier(purchase.affiliation);
+      }
+      if (purchase.packaging.isNotEmpty) {
+        await _packagingIndex.savePackaging(purchase.packaging);
+      }
+    }
   }
 
   Future<void> _shareFile() async {
@@ -1214,6 +1338,174 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
         serialNumber = '1'; // الرقم الافتراضي
         _currentJournalNumber = '1';
       });
+    }
+  }
+
+  // دالة لإظهار الاقتراحات
+  void _showSuggestions(List<String> suggestions, int rowIndex, int colIndex,
+      String fieldType, TextEditingController controller) {
+    // إخفاء الاقتراحات الحالية إذا كانت هناك اقتراحات ظاهرة
+    if (_isSuggestionsVisible) {
+      _hideSuggestions();
+    }
+
+    if (suggestions.isEmpty) return;
+
+    setState(() {
+      _currentSuggestions = suggestions;
+      _currentSuggestionField = fieldType;
+      _currentSuggestionRowIndex = rowIndex;
+      _currentSuggestionColumnIndex = colIndex;
+      _selectedSuggestionIndex = 0;
+      _isSuggestionsVisible = true;
+    });
+
+    // إنشاء OverlayEntry جديد
+    _suggestionOverlayEntry = OverlayEntry(
+      builder: (context) {
+        return CompositedTransformFollower(
+          link: _suggestionLayerLink,
+          showWhenUnlinked: false,
+          offset: Offset(0, 30), // المسافة تحت الحقل
+          child: Material(
+            elevation: 4.0,
+            child: Container(
+              width: 200, // عرض ثابت
+              constraints: BoxConstraints(
+                maxHeight: 200.0,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: Border.all(color: Colors.grey[300]!),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: ListView.builder(
+                padding: EdgeInsets.zero,
+                shrinkWrap: true,
+                itemCount: suggestions.length,
+                itemBuilder: (context, index) {
+                  return InkWell(
+                    onTap: () {
+                      _selectSuggestion(suggestions[index], controller);
+                    },
+                    child: Container(
+                      padding:
+                          EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      color: index == _selectedSuggestionIndex
+                          ? Colors.blue[50]
+                          : Colors.white,
+                      child: Text(
+                        suggestions[index],
+                        style: TextStyle(
+                          color: index == _selectedSuggestionIndex
+                              ? Colors.blue[700]
+                              : Colors.black,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    // إضافة Overlay بعد تأكد وجود Context
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _isSuggestionsVisible) {
+        Overlay.of(context).insert(_suggestionOverlayEntry!);
+      }
+    });
+  }
+
+// دالة لإخفاء الاقتراحات
+  void _hideSuggestions() {
+    if (_suggestionOverlayEntry != null) {
+      _suggestionOverlayEntry!.remove();
+      _suggestionOverlayEntry = null;
+    }
+    setState(() {
+      _currentSuggestions.clear();
+      _currentSuggestionField = '';
+      _currentSuggestionRowIndex = -1;
+      _currentSuggestionColumnIndex = -1;
+      _selectedSuggestionIndex = 0;
+      _isSuggestionsVisible = false;
+    });
+  }
+
+// دالة لاختيار اقتراح
+  void _selectSuggestion(String suggestion, TextEditingController controller) {
+    controller.text = suggestion;
+    _hideSuggestions();
+
+    // حفظ في الفهرس إذا لم يكن موجوداً
+    if (_currentSuggestionField == 'material') {
+      _materialIndex.saveMaterial(suggestion);
+    } else if (_currentSuggestionField == 'packaging') {
+      _packagingIndex.savePackaging(suggestion);
+    } else if (_currentSuggestionField == 'supplier') {
+      _supplierIndex.saveSupplier(suggestion);
+    }
+
+    // الانتقال للحقل التالي
+    _moveToNextField();
+  }
+
+  void _moveToNextField() {
+    if (_currentSuggestionRowIndex >= 0 &&
+        _currentSuggestionColumnIndex >= 0 &&
+        _currentSuggestionRowIndex < rowFocusNodes.length) {
+      if (_currentSuggestionColumnIndex == 1) {
+        // المادة
+        FocusScope.of(context)
+            .requestFocus(rowFocusNodes[_currentSuggestionRowIndex][2]);
+      } else if (_currentSuggestionColumnIndex == 2) {
+        // العائدية
+        FocusScope.of(context)
+            .requestFocus(rowFocusNodes[_currentSuggestionRowIndex][3]);
+      } else if (_currentSuggestionColumnIndex == 4) {
+        // العبوة
+        FocusScope.of(context)
+            .requestFocus(rowFocusNodes[_currentSuggestionRowIndex][5]);
+      }
+    }
+  }
+
+  void _handleKeyNavigation(
+      RawKeyEvent event, TextEditingController controller) {
+    if (!_isSuggestionsVisible || _currentSuggestions.isEmpty) return;
+
+    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      setState(() {
+        _selectedSuggestionIndex =
+            (_selectedSuggestionIndex + 1) % _currentSuggestions.length;
+      });
+      _updateOverlay();
+    } else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      setState(() {
+        _selectedSuggestionIndex =
+            (_selectedSuggestionIndex - 1 + _currentSuggestions.length) %
+                _currentSuggestions.length;
+      });
+      _updateOverlay();
+    } else if (event.logicalKey == LogicalKeyboardKey.enter) {
+      if (_selectedSuggestionIndex >= 0 &&
+          _selectedSuggestionIndex < _currentSuggestions.length) {
+        _selectSuggestion(
+            _currentSuggestions[_selectedSuggestionIndex], controller);
+      }
+    } else if (event.logicalKey == LogicalKeyboardKey.escape) {
+      _hideSuggestions();
+    }
+  }
+
+  void _updateOverlay() {
+    if (_suggestionOverlayEntry != null) {
+      _suggestionOverlayEntry!.markNeedsBuild();
     }
   }
 }

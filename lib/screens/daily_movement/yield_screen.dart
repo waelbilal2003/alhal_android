@@ -337,7 +337,6 @@ class _YieldScreenState extends State<YieldScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.lock, size: 60, color: Colors.white),
           const SizedBox(height: 20),
           const Text(
             'تسجيل الدخول - شاشة الغلة',
@@ -465,52 +464,6 @@ class _YieldScreenState extends State<YieldScreen> {
 
 // دالة جديدة لحقول الإدخال في شاشة تسجيل الدخول
   Widget _buildLoginInputField(
-    TextEditingController controller,
-    String hint,
-    bool obscure, {
-    FocusNode? focusNode,
-    FocusNode? nextFocusNode,
-    bool isLastInRow = false,
-    String? errorText,
-  }) {
-    return TextFormField(
-      controller: controller,
-      obscureText: obscure,
-      textAlign: TextAlign.center,
-      focusNode: focusNode,
-      textDirection: TextDirection.rtl,
-      style: const TextStyle(color: Colors.white),
-      decoration: InputDecoration(
-        hintText: hint,
-        hintStyle: const TextStyle(color: Colors.white70),
-        filled: true,
-        fillColor: Colors.white.withOpacity(0.2),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Colors.white, width: 2),
-        ),
-        errorText: errorText,
-        errorStyle: const TextStyle(color: Colors.yellowAccent),
-      ),
-      validator: (value) {
-        if (value == null || value.isEmpty) return 'هذا الحقل مطلوب';
-        return null;
-      },
-      onFieldSubmitted: (_) {
-        if (isLastInRow) {
-          _login();
-        } else if (nextFocusNode != null) {
-          FocusScope.of(context).requestFocus(nextFocusNode);
-        }
-      },
-    );
-  }
-
-  Widget _buildInputField(
     TextEditingController controller,
     String hint,
     bool obscure, {

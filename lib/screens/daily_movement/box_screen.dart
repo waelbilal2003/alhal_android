@@ -5,6 +5,7 @@ import '../../services/box_storage_service.dart';
 import '../../widgets/table_builder.dart' as TableBuilder;
 import '../../widgets/table_components.dart' as TableComponents;
 import '../../widgets/common_dialogs.dart' as CommonDialogs;
+import '../../services/customer_index_service.dart';
 
 class BoxScreen extends StatefulWidget {
   final String sellerName;
@@ -25,6 +26,14 @@ class BoxScreen extends StatefulWidget {
 class _BoxScreenState extends State<BoxScreen> {
   // خدمة التخزين
   final BoxStorageService _storageService = BoxStorageService();
+
+  //  خدمة فهرس الزبائن
+  final CustomerIndexService _customerIndexService = CustomerIndexService();
+
+  List<String> _customerSuggestions = [];
+  int? _activeCustomerRowIndex;
+  final ScrollController _customerSuggestionsScrollController =
+      ScrollController();
 
   // بيانات الحقول
   String dayName = '';
@@ -107,6 +116,7 @@ class _BoxScreenState extends State<BoxScreen> {
     _horizontalScrollController.dispose();
     _scrollController.dispose();
 
+    _customerSuggestionsScrollController.dispose();
     super.dispose();
   }
 
@@ -212,6 +222,8 @@ class _BoxScreenState extends State<BoxScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         setState(() {});
+        _customerSuggestions = [];
+        _activeCustomerRowIndex = null;
       }
     });
   }
@@ -237,8 +249,13 @@ class _BoxScreenState extends State<BoxScreen> {
       _calculateAllTotals();
     });
 
-    // حقل اسم الحساب
-    controllers[3].addListener(() => _hasUnsavedChanges = true);
+    // حقل اسم الحساب (الحقل رقم 3)
+    controllers[3].addListener(() {
+      _hasUnsavedChanges = true;
+      if (accountTypeValues[rowIndex] == 'زبون') {
+        _updateCustomerSuggestions(rowIndex);
+      }
+    });
 
     // حقل الملاحظات
     controllers[4].addListener(() => _hasUnsavedChanges = true);
@@ -595,89 +612,107 @@ class _BoxScreenState extends State<BoxScreen> {
     final FocusNode accountNameFocusNode = rowFocusNodes[rowIndex][3];
 
     if (accountType.isNotEmpty) {
-      Widget cell = Container(
-        padding: const EdgeInsets.all(1),
-        constraints: const BoxConstraints(minHeight: 25),
-        child: Row(
-          children: [
-            Expanded(
-              flex: 2,
-              child: InkWell(
-                onTap: isOwnedByCurrentSeller
-                    ? () {
-                        _showAccountTypeDialog(rowIndex);
-                        _scrollToField(rowIndex, colIndex);
-                      }
-                    : null,
-                child: Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(
-                      color: _getAccountTypeColor(accountType),
-                      width: 0.5,
-                    ),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                  child: Center(
-                    child: Text(
-                      accountType,
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: _getAccountTypeColor(accountType),
-                        fontWeight: FontWeight.bold,
+      Widget cell = Stack(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(1),
+            constraints: const BoxConstraints(minHeight: 25),
+            child: Row(
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: InkWell(
+                    onTap: isOwnedByCurrentSeller
+                        ? () {
+                            _showAccountTypeDialog(rowIndex);
+                            _scrollToField(rowIndex, colIndex);
+                          }
+                        : null,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: _getAccountTypeColor(accountType),
+                          width: 0.5,
+                        ),
+                        borderRadius: BorderRadius.circular(2),
                       ),
-                      textAlign: TextAlign.center,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 4, vertical: 2),
+                      child: Center(
+                        child: Text(
+                          accountType,
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: _getAccountTypeColor(accountType),
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ),
-            const SizedBox(width: 4),
-            Expanded(
-              flex: 5,
-              child: TextField(
-                controller: accountNameController,
-                focusNode: accountNameFocusNode,
-                textAlign: TextAlign.right,
-                enabled: isOwnedByCurrentSeller,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.black,
-                ),
-                decoration: InputDecoration(
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
-                  border: const OutlineInputBorder(
-                    borderSide: BorderSide(color: Colors.grey, width: 0.5),
+                const SizedBox(width: 4),
+                Expanded(
+                  flex: 5,
+                  child: TextField(
+                    controller: accountNameController,
+                    focusNode: accountNameFocusNode,
+                    textAlign: TextAlign.right,
+                    enabled: isOwnedByCurrentSeller,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black,
+                    ),
+                    decoration: InputDecoration(
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 2, vertical: 1),
+                      border: const OutlineInputBorder(
+                        borderSide: BorderSide(color: Colors.grey, width: 0.5),
+                      ),
+                      hintText: _getAccountHintText(accountType),
+                      hintStyle: const TextStyle(
+                        fontSize: 10,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    onSubmitted: (value) {
+                      if (isOwnedByCurrentSeller) {
+                        if (value.trim().isNotEmpty &&
+                            value.trim().length > 1 &&
+                            accountType == 'زبون') {
+                          _saveCustomerToIndex(value);
+                        }
+                        FocusScope.of(context)
+                            .requestFocus(rowFocusNodes[rowIndex][4]);
+                      }
+                    },
+                    onChanged: (value) {
+                      if (isOwnedByCurrentSeller) {
+                        _hasUnsavedChanges = true;
+                      }
+                    },
+                    onTap: () {
+                      _scrollToField(rowIndex, colIndex);
+                    },
                   ),
-                  hintText: _getAccountHintText(accountType),
-                  hintStyle: const TextStyle(
-                    fontSize: 10,
-                    color: Colors.grey,
-                  ),
                 ),
-                onSubmitted: (value) {
-                  if (isOwnedByCurrentSeller) {
-                    FocusScope.of(context)
-                        .requestFocus(rowFocusNodes[rowIndex][4]);
-                  }
-                },
-                onChanged: (value) {
-                  if (isOwnedByCurrentSeller) {
-                    _hasUnsavedChanges = true;
-                  }
-                },
-                onTap: () {
-                  _scrollToField(rowIndex, colIndex);
-                },
-              ),
+              ],
             ),
-          ],
-        ),
+          ),
+          if (_activeCustomerRowIndex == rowIndex &&
+              _customerSuggestions.isNotEmpty &&
+              accountType == 'زبون')
+            Positioned(
+              top: 25,
+              left: 0,
+              right: 0,
+              child: _buildHorizontalCustomerSuggestions(rowIndex),
+            ),
+        ],
       );
 
       if (!isOwnedByCurrentSeller) {
@@ -871,6 +906,19 @@ class _BoxScreenState extends State<BoxScreen> {
     } else if (colIndex == 2) {
       _showAccountTypeDialog(rowIndex);
     } else if (colIndex == 3) {
+      // إذا كان نوع الحساب زبون وكانت هناك اقتراحات
+      if (accountTypeValues[rowIndex] == 'زبون' &&
+          _customerSuggestions.isNotEmpty) {
+        _selectCustomerSuggestion(_customerSuggestions[0], rowIndex);
+        return;
+      }
+
+      if (value.trim().isNotEmpty &&
+          value.trim().length > 1 &&
+          accountTypeValues[rowIndex] == 'زبون') {
+        _saveCustomerToIndex(value);
+      }
+
       FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][4]);
     } else if (colIndex == 4) {
       _addNewRow();
@@ -1347,6 +1395,106 @@ class _BoxScreenState extends State<BoxScreen> {
         _currentJournalNumber = '1';
       });
     }
+  }
+
+  // تحديث اقتراحات الزبائن
+  void _updateCustomerSuggestions(int rowIndex) async {
+    final query = rowControllers[rowIndex][3].text;
+    if (query.length >= 1 && accountTypeValues[rowIndex] == 'زبون') {
+      final suggestions = await _customerIndexService.getSuggestions(query);
+      setState(() {
+        _customerSuggestions = suggestions;
+        _activeCustomerRowIndex = rowIndex;
+      });
+    } else {
+      // إخفاء الاقتراحات إذا كان الحقل فارغاً أو نوع الحساب ليس زبون
+      setState(() {
+        _customerSuggestions = [];
+        _activeCustomerRowIndex = null;
+      });
+    }
+  }
+
+// اختيار اقتراح للزبون
+  void _selectCustomerSuggestion(String suggestion, int rowIndex) {
+    _hideAllSuggestionsImmediately();
+    rowControllers[rowIndex][3].text = suggestion;
+    _hasUnsavedChanges = true;
+
+    if (suggestion.trim().length > 1) {
+      _saveCustomerToIndex(suggestion);
+    }
+
+    Future.delayed(const Duration(milliseconds: 50), () {
+      if (mounted) {
+        FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][4]);
+      }
+    });
+  }
+
+  // حفظ الزبون في الفهرس
+  void _saveCustomerToIndex(String customer) {
+    final trimmedCustomer = customer.trim();
+    if (trimmedCustomer.length > 1) {
+      _customerIndexService.saveCustomer(trimmedCustomer);
+    }
+  }
+
+  // بناء قائمة اقتراحات الزبائن بشكل أفقي
+  Widget _buildHorizontalCustomerSuggestions(int rowIndex) {
+    return Container(
+      height: 30,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: Colors.grey[300]!),
+        borderRadius: BorderRadius.circular(4),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: _customerSuggestions.isEmpty
+          ? Container()
+          : ListView.separated(
+              scrollDirection: Axis.horizontal,
+              controller: _customerSuggestionsScrollController,
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              itemCount: _customerSuggestions.length,
+              separatorBuilder: (context, index) => const SizedBox(width: 4),
+              itemBuilder: (context, index) {
+                return InkWell(
+                  onTap: () {
+                    _selectCustomerSuggestion(
+                        _customerSuggestions[index], rowIndex);
+                  },
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color:
+                          index == 0 ? Colors.purple[100] : Colors.purple[50],
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: Colors.purple[100]!),
+                    ),
+                    child: Text(
+                      _customerSuggestions[index],
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.purple,
+                        fontWeight:
+                            index == 0 ? FontWeight.bold : FontWeight.normal,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                );
+              },
+            ),
+    );
   }
 }
 

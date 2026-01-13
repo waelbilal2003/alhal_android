@@ -6,6 +6,8 @@ import '../../services/sales_storage_service.dart';
 import '../../services/material_index_service.dart';
 import '../../services/packaging_index_service.dart';
 import '../../services/supplier_index_service.dart';
+import '../../services/customer_index_service.dart';
+
 import '../../widgets/table_builder.dart' as TableBuilder;
 import '../../widgets/table_components.dart' as TableComponents;
 import '../../widgets/common_dialogs.dart' as CommonDialogs;
@@ -34,6 +36,7 @@ class _SalesScreenState extends State<SalesScreen> {
   final MaterialIndexService _materialIndexService = MaterialIndexService();
   final PackagingIndexService _packagingIndexService = PackagingIndexService();
   final SupplierIndexService _supplierIndexService = SupplierIndexService();
+  final CustomerIndexService _customerIndexService = CustomerIndexService();
 
   // بيانات الحقول
   String dayName = '';
@@ -75,11 +78,13 @@ class _SalesScreenState extends State<SalesScreen> {
   List<String> _materialSuggestions = [];
   List<String> _packagingSuggestions = [];
   List<String> _supplierSuggestions = [];
+  List<String> _customerSuggestions = [];
 
   // مؤشرات الصفوف النشطة للاقتراحات
   int? _activeMaterialRowIndex;
   int? _activePackagingRowIndex;
   int? _activeSupplierRowIndex;
+  int? _activeCustomerRowIndex;
 
   // متحكمات التمرير الأفقي للاقتراحات
   final ScrollController _materialSuggestionsScrollController =
@@ -87,6 +92,8 @@ class _SalesScreenState extends State<SalesScreen> {
   final ScrollController _packagingSuggestionsScrollController =
       ScrollController();
   final ScrollController _supplierSuggestionsScrollController =
+      ScrollController();
+  final ScrollController _customerSuggestionsScrollController =
       ScrollController();
 
   @override
@@ -145,6 +152,7 @@ class _SalesScreenState extends State<SalesScreen> {
     _materialSuggestionsScrollController.dispose();
     _packagingSuggestionsScrollController.dispose();
     _supplierSuggestionsScrollController.dispose();
+    _customerSuggestionsScrollController.dispose();
 
     super.dispose();
   }
@@ -257,9 +265,11 @@ class _SalesScreenState extends State<SalesScreen> {
           _materialSuggestions = [];
           _packagingSuggestions = [];
           _supplierSuggestions = [];
+          _customerSuggestions = [];
           _activeMaterialRowIndex = null;
           _activePackagingRowIndex = null;
           _activeSupplierRowIndex = null;
+          _activeCustomerRowIndex = null;
         });
       }
     });
@@ -311,6 +321,11 @@ class _SalesScreenState extends State<SalesScreen> {
       _hasUnsavedChanges = true;
       _calculateRowValues(rowIndex);
       _calculateAllTotals();
+    });
+
+    controllers[10].addListener(() {
+      _hasUnsavedChanges = true;
+      _updateCustomerSuggestions(rowIndex);
     });
   }
 
@@ -1170,6 +1185,14 @@ class _SalesScreenState extends State<SalesScreen> {
       return;
     }
 
+    // إذا كان حقل اسم الزبون (الحقل 10) وEnter ضُغط وكانت هناك اقتراحات وكانت القيمة "دين"
+    if (colIndex == 10 &&
+        _customerSuggestions.isNotEmpty &&
+        cashOrDebtValues[rowIndex] == 'دين') {
+      _selectCustomerSuggestion(_customerSuggestions[0], rowIndex);
+      return;
+    }
+
     // التنقل العادي بين الحقول
     if (colIndex == 0) {
       FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][1]);
@@ -1209,6 +1232,8 @@ class _SalesScreenState extends State<SalesScreen> {
         _clearAllSuggestions();
       } else if (colIndex == 5 && _activePackagingRowIndex != rowIndex) {
         _clearAllSuggestions();
+      } else if (colIndex == 10 && _activeCustomerRowIndex != rowIndex) {
+        _clearAllSuggestions();
       }
     });
   }
@@ -1231,28 +1256,44 @@ class _SalesScreenState extends State<SalesScreen> {
 
   Widget _buildCashOrDebtCell(
       int rowIndex, int colIndex, bool isOwnedByCurrentSeller) {
-    Widget cell = TableBuilder.buildCashOrDebtCell(
-      rowIndex: rowIndex,
-      colIndex: colIndex,
-      cashOrDebtValue: cashOrDebtValues[rowIndex],
-      customerName: customerNames[rowIndex],
-      customerController: rowControllers[rowIndex][10],
-      focusNode: rowFocusNodes[rowIndex][colIndex],
-      hasUnsavedChanges: _hasUnsavedChanges,
-      setHasUnsavedChanges: (value) =>
-          setState(() => _hasUnsavedChanges = value),
-      onTap: () => _showCashOrDebtDialog(rowIndex),
-      scrollToField: _scrollToField,
-      onCustomerNameChanged: (value) {
-        setState(() {
-          customerNames[rowIndex] = value;
-          _hasUnsavedChanges = true;
-        });
-      },
-      onCustomerSubmitted: (value, rIndex, cIndex) {
-        _showEmptiesDialog(rowIndex);
-      },
-      isSalesScreen: true,
+    Widget cell = Stack(
+      children: [
+        TableBuilder.buildCashOrDebtCell(
+          rowIndex: rowIndex,
+          colIndex: colIndex,
+          cashOrDebtValue: cashOrDebtValues[rowIndex],
+          customerName: customerNames[rowIndex],
+          customerController: rowControllers[rowIndex][10],
+          focusNode: rowFocusNodes[rowIndex][colIndex],
+          hasUnsavedChanges: _hasUnsavedChanges,
+          setHasUnsavedChanges: (value) =>
+              setState(() => _hasUnsavedChanges = value),
+          onTap: () => _showCashOrDebtDialog(rowIndex),
+          scrollToField: _scrollToField,
+          onCustomerNameChanged: (value) {
+            setState(() {
+              customerNames[rowIndex] = value;
+              _hasUnsavedChanges = true;
+            });
+          },
+          onCustomerSubmitted: (value, rIndex, cIndex) {
+            if (value.trim().isNotEmpty && value.trim().length > 1) {
+              _saveCustomerToIndex(value);
+            }
+            _showEmptiesDialog(rowIndex);
+          },
+          isSalesScreen: true,
+        ),
+        if (_activeCustomerRowIndex == rowIndex &&
+            _customerSuggestions.isNotEmpty &&
+            cashOrDebtValues[rowIndex] == 'دين')
+          Positioned(
+            top: 25,
+            left: 0,
+            right: 0,
+            child: _buildHorizontalCustomerSuggestions(rowIndex),
+          ),
+      ],
     );
 
     // إذا لم يكن السجل مملوكاً للبائع الحالي، جعل الخلية للقراءة فقط
@@ -1861,14 +1902,17 @@ class _SalesScreenState extends State<SalesScreen> {
   void _clearAllSuggestions() {
     if (_materialSuggestions.isNotEmpty ||
         _packagingSuggestions.isNotEmpty ||
-        _supplierSuggestions.isNotEmpty) {
+        _supplierSuggestions.isNotEmpty ||
+        _customerSuggestions.isNotEmpty) {
       setState(() {
         _materialSuggestions = [];
         _packagingSuggestions = [];
         _supplierSuggestions = [];
+        _customerSuggestions = [];
         _activeMaterialRowIndex = null;
         _activePackagingRowIndex = null;
         _activeSupplierRowIndex = null;
+        _activeCustomerRowIndex = null;
       });
     }
   }
@@ -1901,6 +1945,106 @@ class _SalesScreenState extends State<SalesScreen> {
         _isLoadingRecords = false;
       });
     }
+  }
+
+  // تحديث اقتراحات الزبائن
+  void _updateCustomerSuggestions(int rowIndex) async {
+    final query = rowControllers[rowIndex][10].text;
+    if (query.length >= 1) {
+      final suggestions = await _customerIndexService.getSuggestions(query);
+      setState(() {
+        _customerSuggestions = suggestions;
+        _activeCustomerRowIndex = rowIndex;
+      });
+    } else {
+      // إخفاء الاقتراحات إذا كان الحقل فارغاً
+      setState(() {
+        _customerSuggestions = [];
+        _activeCustomerRowIndex = null;
+      });
+    }
+  }
+
+  // اختيار اقتراح للزبون
+  void _selectCustomerSuggestion(String suggestion, int rowIndex) {
+    _hideAllSuggestionsImmediately();
+    rowControllers[rowIndex][10].text = suggestion;
+    _hasUnsavedChanges = true;
+
+    if (suggestion.trim().length > 1) {
+      _saveCustomerToIndex(suggestion);
+    }
+
+    Future.delayed(const Duration(milliseconds: 50), () {
+      if (mounted) {
+        _showEmptiesDialog(rowIndex);
+      }
+    });
+  }
+
+  // حفظ الزبون في الفهرس
+  void _saveCustomerToIndex(String customer) {
+    final trimmedCustomer = customer.trim();
+    if (trimmedCustomer.length > 1) {
+      _customerIndexService.saveCustomer(trimmedCustomer);
+    }
+  }
+
+  // بناء قائمة اقتراحات الزبائن بشكل أفقي
+  Widget _buildHorizontalCustomerSuggestions(int rowIndex) {
+    return Container(
+      height: 30,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: Colors.grey[300]!),
+        borderRadius: BorderRadius.circular(4),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: _customerSuggestions.isEmpty
+          ? Container()
+          : ListView.separated(
+              scrollDirection: Axis.horizontal,
+              controller: _customerSuggestionsScrollController,
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              itemCount: _customerSuggestions.length,
+              separatorBuilder: (context, index) => const SizedBox(width: 4),
+              itemBuilder: (context, index) {
+                return InkWell(
+                  onTap: () {
+                    _selectCustomerSuggestion(
+                        _customerSuggestions[index], rowIndex);
+                  },
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color:
+                          index == 0 ? Colors.purple[100] : Colors.purple[50],
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: Colors.purple[100]!),
+                    ),
+                    child: Text(
+                      _customerSuggestions[index],
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.purple,
+                        fontWeight:
+                            index == 0 ? FontWeight.bold : FontWeight.normal,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                );
+              },
+            ),
+    );
   }
 }
 

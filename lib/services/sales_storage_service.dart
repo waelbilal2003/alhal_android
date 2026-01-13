@@ -407,4 +407,57 @@ class SalesStorageService {
 
     return totalSales;
   }
+
+  Future<List<Map<String, String>>> getAvailableDatesWithNumbers() async {
+    try {
+      final basePath = await _getBasePath();
+      final folderPath = '$basePath/AlhalJournals';
+
+      final folder = Directory(folderPath);
+      if (!await folder.exists()) {
+        return [];
+      }
+
+      final files = await folder.list().toList();
+      final datesWithNumbers = <Map<String, String>>[];
+
+      for (var file in files) {
+        if (file is File && file.path.endsWith('.json')) {
+          try {
+            final jsonString = await file.readAsString();
+            final jsonMap = jsonDecode(jsonString) as Map<String, dynamic>;
+            final date = jsonMap['date']?.toString() ?? '';
+            final journalNumber = jsonMap['recordNumber']?.toString() ?? '1';
+            final fileName = file.path.split('/').last;
+
+            if (fileName.startsWith('sales-') && date.isNotEmpty) {
+              datesWithNumbers.add({
+                'date': date,
+                'journalNumber': journalNumber,
+                'fileName': fileName,
+              });
+            }
+          } catch (e) {
+            if (kDebugMode) {
+              debugPrint('❌ خطأ في قراءة ملف: ${file.path}, $e');
+            }
+          }
+        }
+      }
+
+      // ترتيب حسب رقم اليومية (تصاعدي)
+      datesWithNumbers.sort((a, b) {
+        final numA = int.tryParse(a['journalNumber'] ?? '0') ?? 0;
+        final numB = int.tryParse(b['journalNumber'] ?? '0') ?? 0;
+        return numA.compareTo(numB);
+      });
+
+      return datesWithNumbers;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ خطأ في قراءة التواريخ: $e');
+      }
+      return [];
+    }
+  }
 }

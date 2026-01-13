@@ -112,7 +112,7 @@ class _SalesScreenState extends State<SalesScreen> {
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadOrCreateRecord();
-      _loadAvailableRecords();
+      _loadAvailableDates(); // تغيير هذه الدالة
     });
   }
 
@@ -161,39 +161,6 @@ class _SalesScreenState extends State<SalesScreen> {
     ];
     final now = DateTime.now();
     return days[now.weekday % 7];
-  }
-
-  // تحميل السجلات المتاحة
-  Future<void> _loadAvailableRecords() async {
-    if (_isLoadingRecords) return;
-
-    setState(() {
-      _isLoadingRecords = true;
-    });
-
-    try {
-      final recordNumbers =
-          await _storageService.getAvailableRecords(widget.selectedDate);
-
-      // تحويل إلى نفس تنسيق المشتريات للحفاظ على التوحيد
-      final records = recordNumbers
-          .map((recordNum) => {
-                'date': widget.selectedDate,
-                'recordNumber': recordNum,
-                'type': 'مبيعات'
-              })
-          .toList();
-
-      setState(() {
-        _availableRecords = records;
-        _isLoadingRecords = false;
-      });
-    } catch (e) {
-      setState(() {
-        _availableRecords = [];
-        _isLoadingRecords = false;
-      });
-    }
   }
 
   // تحميل السجل إذا كان موجوداً، أو إنشاء جديد
@@ -1477,11 +1444,10 @@ class _SalesScreenState extends State<SalesScreen> {
                   },
           ),
           PopupMenuButton<String>(
-            icon: const Icon(Icons.folder_open),
+            icon: const Icon(Icons.calendar_today),
             tooltip: 'فتح يومية سابقة',
-            onSelected: (selectedRecordNumber) async {
-              if (selectedRecordNumber != 'new' &&
-                  selectedRecordNumber != serialNumber) {
+            onSelected: (selectedDate) async {
+              if (selectedDate != widget.selectedDate) {
                 // التحقق من وجود تغييرات غير محفوظة
                 if (_hasUnsavedChanges) {
                   final shouldSave = await _showUnsavedChangesDialog();
@@ -1490,9 +1456,17 @@ class _SalesScreenState extends State<SalesScreen> {
                   }
                 }
 
-                await _loadRecord(selectedRecordNumber);
-              } else if (selectedRecordNumber == 'new') {
-                await _createNewRecordAutomatically();
+                // الانتقال إلى الشاشة الجديدة بالتاريخ المحدد
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => SalesScreen(
+                      sellerName: widget.sellerName,
+                      selectedDate: selectedDate,
+                      storeName: widget.storeName,
+                    ),
+                  ),
+                );
               }
             },
             itemBuilder: (BuildContext context) {
@@ -1515,6 +1489,18 @@ class _SalesScreenState extends State<SalesScreen> {
                   ),
                 );
               } else {
+                // تجميع التواريخ الفريدة
+                final uniqueDates = <String, String>{};
+                for (var record in _availableRecords) {
+                  final date = record['date']!;
+                  if (!uniqueDates.containsKey(date)) {
+                    // الحصول على رقم اليومية لهذا التاريخ (نأخذ الأول)
+                    final journalNumber = record['recordNumber']!;
+                    uniqueDates[date] = journalNumber;
+                  }
+                }
+
+                // إضافة عنوان
                 items.add(
                   const PopupMenuItem<String>(
                     value: '',
@@ -1527,42 +1513,26 @@ class _SalesScreenState extends State<SalesScreen> {
                 );
                 items.add(const PopupMenuDivider());
 
-                for (var recordInfo in _availableRecords) {
-                  final recordNumber = recordInfo['recordNumber']!;
-                  final date = recordInfo['date']!;
-
+                // إضافة كل تاريخ مع رقم يوميته
+                uniqueDates.forEach((date, journalNumber) {
                   items.add(
                     PopupMenuItem<String>(
-                      value: recordNumber,
+                      value: date,
                       child: Text(
-                        'يومية رقم $recordNumber - تاريخ $date',
+                        'يومية رقم $journalNumber - تاريخ $date',
                         style: TextStyle(
-                          fontWeight: recordNumber == serialNumber
+                          fontWeight: date == widget.selectedDate
                               ? FontWeight.bold
                               : FontWeight.normal,
-                          color: recordNumber == serialNumber
+                          color: date == widget.selectedDate
                               ? Colors.orange
                               : Colors.black,
                         ),
                       ),
                     ),
                   );
-                }
+                });
               }
-
-              items.add(const PopupMenuDivider());
-              items.add(
-                PopupMenuItem<String>(
-                  value: 'new',
-                  child: Row(
-                    children: [
-                      const Icon(Icons.add_circle_outline, color: Colors.green),
-                      const SizedBox(width: 8),
-                      const Text('يومية جديدة'),
-                    ],
-                  ),
-                ),
-              );
 
               return items;
             },
@@ -1899,6 +1869,36 @@ class _SalesScreenState extends State<SalesScreen> {
         _activeMaterialRowIndex = null;
         _activePackagingRowIndex = null;
         _activeSupplierRowIndex = null;
+      });
+    }
+  }
+
+  // دالة لتحميل التواريخ المتاحة (مشابهة للمشتريات)
+  Future<void> _loadAvailableDates() async {
+    if (_isLoadingRecords) return;
+
+    setState(() {
+      _isLoadingRecords = true;
+    });
+
+    try {
+      // جلب التواريخ مع أرقام اليوميات
+      final dates = await _storageService.getAvailableDatesWithNumbers();
+      setState(() {
+        // تحويل التنسيق لتتوافق مع ما نعرضه
+        _availableRecords = dates
+            .map((dateInfo) => {
+                  'date': dateInfo['date']!,
+                  'recordNumber': dateInfo['journalNumber']!,
+                  'type': 'مبيعات'
+                })
+            .toList();
+        _isLoadingRecords = false;
+      });
+    } catch (e) {
+      setState(() {
+        _availableRecords = [];
+        _isLoadingRecords = false;
       });
     }
   }

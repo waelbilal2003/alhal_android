@@ -81,7 +81,7 @@ class BoxStorageService {
     }
   }
 
-  // قراءة مستند الصندوق
+  // قراءة مستند الصندوق (النسخة القديمة - للحفاظ على التوافق)
   Future<BoxDocument?> loadBoxDocument(String date, String recordNumber) async {
     try {
       // الحصول على المسار الأساسي
@@ -122,6 +122,41 @@ class BoxStorageService {
     }
   }
 
+  // نسخة جديدة - تحميل يومية الصندوق لتاريخ معين
+  Future<BoxDocument?> loadBoxDocumentForDate(String date) async {
+    try {
+      final basePath = await _getBasePath();
+      final folderName = _createFolderName(date);
+      final folderPath = '$basePath/BoxTransactions/$folderName';
+
+      final folder = Directory(folderPath);
+      if (!await folder.exists()) {
+        return null;
+      }
+
+      final files = await folder.list().toList();
+      if (files.isEmpty) {
+        return null;
+      }
+
+      // البحث عن أول ملف
+      for (var fileEntry in files) {
+        if (fileEntry is File && fileEntry.path.endsWith('.json')) {
+          final jsonString = await fileEntry.readAsString();
+          final jsonMap = jsonDecode(jsonString) as Map<String, dynamic>;
+          return BoxDocument.fromJson(jsonMap);
+        }
+      }
+
+      return null;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ خطأ في قراءة يومية الصندوق: $e');
+      }
+      return null;
+    }
+  }
+
   // الحصول على قائمة أرقام السجلات المتاحة لتاريخ معين
   Future<List<String>> getAvailableRecords(String date) async {
     try {
@@ -139,7 +174,7 @@ class BoxStorageService {
       }
 
       // قراءة قائمة الملفات
-      final files = await folder.list().toList();
+      final List<FileSystemEntity> files = await folder.list().toList();
       final recordNumbers = <String>[];
 
       for (var file in files) {
@@ -205,7 +240,8 @@ class BoxStorageService {
 
         // التحقق من وجود ملفات أخرى في المجلد
         final folder = Directory(folderPath);
-        final remainingFiles = await folder.list().toList();
+        final List<FileSystemEntity> remainingFiles =
+            await folder.list().toList();
 
         // إذا كان المجلد فارغاً، احذفه
         if (remainingFiles.isEmpty) {
@@ -228,7 +264,7 @@ class BoxStorageService {
   }
 
   // الحصول على مسار الملف لمشاركته
-  Future<String?> getFilePath(String date, String recordNumber) async {
+  Future<String?> getFilePath(String date, [String? recordNumber]) async {
     try {
       // الحصول على المسار الأساسي
       final basePath = await _getBasePath();
@@ -237,14 +273,29 @@ class BoxStorageService {
       final folderName = _createFolderName(date);
       final folderPath = '$basePath/BoxTransactions/$folderName';
 
-      // إنشاء اسم الملف
-      final fileName = _createFileName(date, recordNumber);
-      final filePath = '$folderPath/$fileName';
+      if (recordNumber != null) {
+        // إنشاء اسم الملف
+        final fileName = _createFileName(date, recordNumber);
+        final filePath = '$folderPath/$fileName';
 
-      // التحقق من وجود الملف
-      final file = File(filePath);
-      if (await file.exists()) {
-        return filePath;
+        // التحقق من وجود الملف
+        final file = File(filePath);
+        if (await file.exists()) {
+          return filePath;
+        }
+      } else {
+        // إذا لم يتم تحديد رقم السجل، نرجع أول ملف
+        final folder = Directory(folderPath);
+        if (!await folder.exists()) {
+          return null;
+        }
+
+        final List<FileSystemEntity> files = await folder.list().toList();
+        for (var fileEntry in files) {
+          if (fileEntry is File && fileEntry.path.endsWith('.json')) {
+            return fileEntry.path;
+          }
+        }
       }
 
       return null;
@@ -301,6 +352,154 @@ class BoxStorageService {
         debugPrint('❌ خطأ في حساب إجمالي المدفوعات: $e');
       }
       return 0;
+    }
+  }
+
+  // الحصول على تواريخ اليوميات المتاحة
+  Future<List<Map<String, String>>> getAvailableDatesWithNumbers() async {
+    try {
+      final basePath = await _getBasePath();
+      final boxPath = '$basePath/BoxTransactions';
+
+      final folder = Directory(boxPath);
+      if (!await folder.exists()) {
+        return [];
+      }
+
+      final List<FileSystemEntity> folders = await folder.list().toList();
+      final datesWithNumbers = <Map<String, String>>[];
+
+      for (var folderEntry in folders) {
+        if (folderEntry is Directory) {
+          final folderName = folderEntry.path.split('/').last;
+          if (folderName.startsWith('box-')) {
+            final date = folderName.replaceFirst('box-', '');
+            final formattedDate = date.replaceAll('-', '/');
+
+            final List<FileSystemEntity> files =
+                await folderEntry.list().toList();
+            if (files.isNotEmpty) {
+              File? firstFile;
+              for (var fileEntry in files) {
+                if (fileEntry is File && fileEntry.path.endsWith('.json')) {
+                  firstFile = fileEntry;
+                  break;
+                }
+              }
+
+              if (firstFile != null) {
+                final jsonString = await firstFile.readAsString();
+                final jsonMap = jsonDecode(jsonString) as Map<String, dynamic>;
+                final journalNumber =
+                    jsonMap['recordNumber']?.toString() ?? '1';
+
+                datesWithNumbers.add({
+                  'date': formattedDate,
+                  'journalNumber': journalNumber,
+                });
+              }
+            }
+          }
+        }
+      }
+
+      datesWithNumbers.sort((a, b) {
+        final numA = int.tryParse(a['journalNumber'] ?? '0') ?? 0;
+        final numB = int.tryParse(b['journalNumber'] ?? '0') ?? 0;
+        return numA.compareTo(numB);
+      });
+
+      return datesWithNumbers;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ خطأ في قراءة تواريخ الصندوق: $e');
+      }
+      return [];
+    }
+  }
+
+/*
+  // حساب المجاميع
+  Map<String, String> _calculateTotals(List<BoxTransaction> transactions) {
+    double totalReceived = 0;
+    double totalPaid = 0;
+
+    for (var transaction in transactions) {
+      try {
+        totalReceived += double.tryParse(transaction.received) ?? 0;
+        totalPaid += double.tryParse(transaction.paid) ?? 0;
+      } catch (e) {}
+    }
+
+    return {
+      'totalReceived': totalReceived.toStringAsFixed(2),
+      'totalPaid': totalPaid.toStringAsFixed(2),
+    };
+  }
+*/
+  // الحصول على رقم اليومية لتاريخ معين
+  Future<String> getJournalNumberForDate(String date) async {
+    try {
+      final document = await loadBoxDocumentForDate(date);
+      if (document != null) {
+        return document.recordNumber;
+      }
+      return '1';
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ خطأ في الحصول على رقم يومية الصندوق: $e');
+      }
+      return '1';
+    }
+  }
+
+  // الحصول على الرقم التسلسلي التالي
+  Future<String> getNextJournalNumber() async {
+    try {
+      final basePath = await _getBasePath();
+      final boxPath = '$basePath/BoxTransactions';
+
+      final folder = Directory(boxPath);
+      if (!await folder.exists()) {
+        return '1';
+      }
+
+      final List<FileSystemEntity> folders = await folder.list().toList();
+      int maxJournalNumber = 0;
+
+      for (var folderEntry in folders) {
+        if (folderEntry is Directory) {
+          final List<FileSystemEntity> files =
+              await folderEntry.list().toList();
+          if (files.isNotEmpty) {
+            File? firstFile;
+            for (var fileEntry in files) {
+              if (fileEntry is File && fileEntry.path.endsWith('.json')) {
+                firstFile = fileEntry;
+                break;
+              }
+            }
+
+            if (firstFile != null) {
+              final jsonString = await firstFile.readAsString();
+              final jsonMap = jsonDecode(jsonString) as Map<String, dynamic>;
+              final journalNumber =
+                  int.tryParse(jsonMap['recordNumber'] ?? '0') ?? 0;
+
+              if (journalNumber > maxJournalNumber) {
+                maxJournalNumber = journalNumber;
+              }
+            }
+          }
+        }
+      }
+
+      return (maxJournalNumber + 1).toString();
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ خطأ في الحصول على الرقم التسلسلي التالي للصندوق: $e');
+      }
+      return '1';
     }
   }
 }

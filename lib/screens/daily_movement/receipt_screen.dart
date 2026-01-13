@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/receipt_model.dart';
 import '../../services/receipt_storage_service.dart';
+// استيراد خدمات الفهرس
+import '../../services/material_index_service.dart';
+import '../../services/packaging_index_service.dart';
+import '../../services/supplier_index_service.dart';
 import '../../widgets/table_builder.dart' as TableBuilder;
 import '../../widgets/table_components.dart' as TableComponents;
 import '../../widgets/common_dialogs.dart' as CommonDialogs;
@@ -26,13 +30,18 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
   // خدمة التخزين
   final ReceiptStorageService _storageService = ReceiptStorageService();
 
+  // خدمات الفهرس
+  final MaterialIndexService _materialIndexService = MaterialIndexService();
+  final PackagingIndexService _packagingIndexService = PackagingIndexService();
+  final SupplierIndexService _supplierIndexService = SupplierIndexService();
+
   // بيانات الحقول
-  String serialNumber = '';
   String dayName = '';
 
   // قائمة لتخزين صفوف الجدول
   List<List<TextEditingController>> rowControllers = [];
   List<List<FocusNode>> rowFocusNodes = [];
+  List<String> sellerNames = []; // <-- تخزين اسم البائع لكل صف
 
   // متحكمات صف المجموع
   late TextEditingController totalCountController;
@@ -43,11 +52,37 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
   // متحكمات للتمرير
   final ScrollController _verticalScrollController = ScrollController();
   final ScrollController _horizontalScrollController = ScrollController();
+  final _scrollController = ScrollController(); // للتمرير
 
   // حالة الحفظ
   bool _isSaving = false;
   bool _hasUnsavedChanges = false;
-  String? _recordCreator; // منشئ السجل الحالي
+
+  // التواريخ المتاحة
+  List<Map<String, String>> _availableDates = [];
+  bool _isLoadingDates = false;
+
+  String serialNumber = '';
+  // ignore: unused_field
+  String? _currentJournalNumber;
+
+  // متغيرات للاقتراحات
+  List<String> _materialSuggestions = [];
+  List<String> _packagingSuggestions = [];
+  List<String> _supplierSuggestions = [];
+
+  // مؤشرات الصفوف النشطة للاقتراحات
+  int? _activeMaterialRowIndex;
+  int? _activePackagingRowIndex;
+  int? _activeSupplierRowIndex;
+
+  // متحكمات التمرير الأفقي للاقتراحات
+  final ScrollController _materialSuggestionsScrollController =
+      ScrollController();
+  final ScrollController _packagingSuggestionsScrollController =
+      ScrollController();
+  final ScrollController _supplierSuggestionsScrollController =
+      ScrollController();
 
   @override
   void initState() {
@@ -61,8 +96,19 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
 
     _resetTotalValues();
 
+    // إخفاء الاقتراحات عند التمرير
+    _verticalScrollController.addListener(() {
+      _hideAllSuggestionsImmediately();
+    });
+
+    _horizontalScrollController.addListener(() {
+      _hideAllSuggestionsImmediately();
+    });
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _createNewRecordAutomatically();
+      _loadOrCreateJournal();
+      _loadAvailableDates();
+      _loadJournalNumber();
     });
   }
 
@@ -89,6 +135,12 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
 
     _verticalScrollController.dispose();
     _horizontalScrollController.dispose();
+    _scrollController.dispose();
+
+    // تحرير متحكمات اقتراحات التمرير
+    _materialSuggestionsScrollController.dispose();
+    _packagingSuggestionsScrollController.dispose();
+    _supplierSuggestionsScrollController.dispose();
 
     super.dispose();
   }
@@ -107,11 +159,39 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     return days[now.weekday % 7];
   }
 
-  Future<void> _createNewRecordAutomatically() async {
-    final nextNumber =
-        await _storageService.getNextRecordNumber(widget.selectedDate);
-    if (mounted) {
-      _createNewRecord(nextNumber);
+  // تحميل التواريخ المتاحة
+  Future<void> _loadAvailableDates() async {
+    if (_isLoadingDates) return;
+
+    setState(() {
+      _isLoadingDates = true;
+    });
+
+    try {
+      final dates = await _storageService.getAvailableDatesWithNumbers();
+      setState(() {
+        _availableDates = dates;
+        _isLoadingDates = false;
+      });
+    } catch (e) {
+      setState(() {
+        _availableDates = [];
+        _isLoadingDates = false;
+      });
+    }
+  }
+
+  // تحميل اليومية إذا كانت موجودة، أو إنشاء جديدة
+  Future<void> _loadOrCreateJournal() async {
+    final document =
+        await _storageService.loadReceiptDocumentForDate(widget.selectedDate);
+
+    if (document != null && document.receipts.isNotEmpty) {
+      // تحميل اليومية الموجودة
+      _loadJournal(document);
+    } else {
+      // إنشاء يومية جديدة
+      _createNewJournal();
     }
   }
 
@@ -122,72 +202,348 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     totalLoadController.text = '0.00';
   }
 
+  void _createNewJournal() {
+    setState(() {
+      rowControllers.clear();
+      rowFocusNodes.clear();
+      sellerNames.clear();
+      _resetTotalValues();
+      _hasUnsavedChanges = false;
+      _addNewRow();
+    });
+  }
+
+  // تعديل _addNewRow لتحسين المستمعات
   void _addNewRow() {
     setState(() {
-      // 8 حقول: (مسلسل، المادة، العائدية، العدد، العبوة، القائم، الدفعة، الحمولة)
+      final newSerialNumber = (rowControllers.length + 1).toString();
+
       List<TextEditingController> newControllers =
           List.generate(8, (index) => TextEditingController());
 
       List<FocusNode> newFocusNodes = List.generate(8, (index) => FocusNode());
 
-      newControllers[0].text = (rowControllers.length + 1).toString();
+      newControllers[0].text = newSerialNumber;
 
-      // إضافة مستمعات للتغيرات للحقول النصية
-      newControllers[1].addListener(() => _hasUnsavedChanges = true); // المادة
-      newControllers[2]
-          .addListener(() => _hasUnsavedChanges = true); // العائدية
-      newControllers[4]
-          .addListener(() => _hasUnsavedChanges = true); // العبوة (نصي)
+      // إضافة مستمعات للتغيير باستخدام دالة مساعدة
+      _addChangeListenersToControllers(newControllers, rowControllers.length);
 
-      // المستمعات للحقول الرقمية فقط
-      newControllers[3].addListener(() {
-        // العدد
-        _hasUnsavedChanges = true;
-        _calculateAllTotals();
-      });
-      newControllers[5].addListener(() {
-        // القائم
-        _hasUnsavedChanges = true;
-        _calculateAllTotals();
-      });
-      newControllers[6].addListener(() {
-        // الدفعة
-        _hasUnsavedChanges = true;
-        _calculateAllTotals();
-      });
-      newControllers[7].addListener(() {
-        // الحمولة
-        _hasUnsavedChanges = true;
-        _calculateAllTotals();
-      });
+      // تخزين اسم البائع للصف الجديد
+      sellerNames.add(widget.sellerName);
 
       rowControllers.add(newControllers);
       rowFocusNodes.add(newFocusNodes);
     });
+
+    // تركيز الماوس على حقل المادة في السجل الجديد
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (rowFocusNodes.isNotEmpty) {
+        final newRowIndex = rowFocusNodes.length - 1;
+        FocusScope.of(context).requestFocus(rowFocusNodes[newRowIndex][1]);
+      }
+    });
   }
 
-  void _calculateAllTotals() {
-    setState(() {
-      double totalCount = 0;
-      double totalStanding = 0;
-      double totalPayment = 0;
-      double totalLoad = 0;
+  // دالة مساعدة لإخفاء جميع الاقتراحات فوراً
+  void _hideAllSuggestionsImmediately() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        setState(() {
+          _materialSuggestions = [];
+          _packagingSuggestions = [];
+          _supplierSuggestions = [];
+          _activeMaterialRowIndex = null;
+          _activePackagingRowIndex = null;
+          _activeSupplierRowIndex = null;
+        });
+      }
+    });
+  }
 
-      for (var controllers in rowControllers) {
-        try {
-          totalCount += double.tryParse(controllers[3].text) ?? 0; // العدد
-          totalStanding += double.tryParse(controllers[5].text) ?? 0; // القائم
-          totalPayment += double.tryParse(controllers[6].text) ?? 0; // الدفعة
-          totalLoad += double.tryParse(controllers[7].text) ?? 0; // الحمولة
-        } catch (e) {
-          // تجاهل الأخطاء في التحويل
+  // دالة مساعدة لإضافة المستمعات
+  void _addChangeListenersToControllers(
+      List<TextEditingController> controllers, int rowIndex) {
+    // حقل المادة
+    controllers[1].addListener(() {
+      _hasUnsavedChanges = true;
+      _updateMaterialSuggestions(rowIndex);
+    });
+
+    // حقل العائدية
+    controllers[2].addListener(() {
+      _hasUnsavedChanges = true;
+      _updateSupplierSuggestions(rowIndex);
+    });
+
+    // حقل العبوة
+    controllers[4].addListener(() {
+      _hasUnsavedChanges = true;
+      _updatePackagingSuggestions(rowIndex);
+    });
+
+    // الحقول الرقمية مع التحديث التلقائي
+    controllers[3].addListener(() {
+      _hasUnsavedChanges = true;
+      _calculateAllTotals();
+    });
+
+    controllers[5].addListener(() {
+      _hasUnsavedChanges = true;
+      _calculateAllTotals();
+    });
+
+    controllers[6].addListener(() {
+      _hasUnsavedChanges = true;
+      _calculateAllTotals();
+    });
+
+    controllers[7].addListener(() {
+      _hasUnsavedChanges = true;
+      _calculateAllTotals();
+    });
+  }
+
+  // تحديث اقتراحات المادة
+  void _updateMaterialSuggestions(int rowIndex) async {
+    final query = rowControllers[rowIndex][1].text;
+    if (query.length >= 1) {
+      final suggestions = await _materialIndexService.getSuggestions(query);
+      setState(() {
+        _materialSuggestions = suggestions;
+        _activeMaterialRowIndex = rowIndex;
+      });
+    } else {
+      // إخفاء الاقتراحات إذا كان الحقل فارغاً
+      setState(() {
+        _materialSuggestions = [];
+        _activeMaterialRowIndex = null;
+      });
+    }
+  }
+
+  // تحديث اقتراحات العبوة
+  void _updatePackagingSuggestions(int rowIndex) async {
+    final query = rowControllers[rowIndex][4].text;
+    if (query.length >= 1) {
+      final suggestions = await _packagingIndexService.getSuggestions(query);
+      setState(() {
+        _packagingSuggestions = suggestions;
+        _activePackagingRowIndex = rowIndex;
+      });
+    } else {
+      // إخفاء الاقتراحات إذا كان الحقل فارغاً
+      setState(() {
+        _packagingSuggestions = [];
+        _activePackagingRowIndex = null;
+      });
+    }
+  }
+
+  // تحديث اقتراحات الموردين (العائدية)
+  void _updateSupplierSuggestions(int rowIndex) async {
+    final query = rowControllers[rowIndex][2].text;
+    if (query.length >= 1) {
+      final suggestions = await _supplierIndexService.getSuggestions(query);
+      setState(() {
+        _supplierSuggestions = suggestions;
+        _activeSupplierRowIndex = rowIndex;
+      });
+    } else {
+      // إخفاء الاقتراحات إذا كان الحقل فارغاً
+      setState(() {
+        _supplierSuggestions = [];
+        _activeSupplierRowIndex = null;
+      });
+    }
+  }
+
+  // اختيار اقتراح للمادة - معدلة تماماً
+  void _selectMaterialSuggestion(String suggestion, int rowIndex) {
+    // إخفاء الاقتراحات أولاً وفوراً
+    _hideAllSuggestionsImmediately();
+
+    // ثم تعيين النص
+    rowControllers[rowIndex][1].text = suggestion;
+    _hasUnsavedChanges = true;
+
+    // حفظ المادة في الفهرس إذا لم تكن موجودة (مع شرط الطول)
+    if (suggestion.trim().length > 1) {
+      _saveMaterialToIndex(suggestion);
+    }
+
+    // نقل التركيز إلى الحقل التالي بعد تأخير بسيط
+    Future.delayed(const Duration(milliseconds: 50), () {
+      if (mounted) {
+        FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][2]);
+      }
+    });
+  }
+
+  // اختيار اقتراح للعبوة - معدلة تماماً
+  void _selectPackagingSuggestion(String suggestion, int rowIndex) {
+    // إخفاء الاقتراحات أولاً وفوراً
+    _hideAllSuggestionsImmediately();
+
+    // ثم تعيين النص
+    rowControllers[rowIndex][4].text = suggestion;
+    _hasUnsavedChanges = true;
+
+    // حفظ العبوة في الفهرس إذا لم تكن موجودة (مع شرط الطول)
+    if (suggestion.trim().length > 1) {
+      _savePackagingToIndex(suggestion);
+    }
+
+    // نقل التركيز إلى الحقل التالي بعد تأخير بسيط
+    Future.delayed(const Duration(milliseconds: 50), () {
+      if (mounted) {
+        FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][5]);
+      }
+    });
+  }
+
+  // اختيار اقتراح للمورد (العائدية) - معدلة تماماً
+  void _selectSupplierSuggestion(String suggestion, int rowIndex) {
+    // إخفاء الاقتراحات أولاً وفوراً
+    _hideAllSuggestionsImmediately();
+
+    // ثم تعيين النص
+    rowControllers[rowIndex][2].text = suggestion;
+    _hasUnsavedChanges = true;
+
+    // حفظ المورد في الفهرس إذا لم يكن موجوداً (مع شرط الطول)
+    if (suggestion.trim().length > 1) {
+      _saveSupplierToIndex(suggestion);
+    }
+
+    // نقل التركيز إلى الحقل التالي بعد تأخير بسيط
+    Future.delayed(const Duration(milliseconds: 50), () {
+      if (mounted) {
+        FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][3]);
+      }
+    });
+  }
+
+  // حفظ المادة في الفهرس - معدلة لمنع تخزين حرف واحد
+  void _saveMaterialToIndex(String material) {
+    final trimmedMaterial = material.trim();
+    // منع تخزين حرف واحد أو قيمة فارغة
+    if (trimmedMaterial.length > 1) {
+      _materialIndexService.saveMaterial(trimmedMaterial);
+    }
+  }
+
+  // حفظ العبوة في الفهرس - معدلة لمنع تخزين حرف واحد
+  void _savePackagingToIndex(String packaging) {
+    final trimmedPackaging = packaging.trim();
+    // منع تخزين حرف واحد أو قيمة فارغة
+    if (trimmedPackaging.length > 1) {
+      _packagingIndexService.savePackaging(trimmedPackaging);
+    }
+  }
+
+  // حفظ المورد في الفهرس - معدلة لمنع تخزين حرف واحد
+  void _saveSupplierToIndex(String supplier) {
+    final trimmedSupplier = supplier.trim();
+    // منع تخزين حرف واحد أو قيمة فارغة
+    if (trimmedSupplier.length > 1) {
+      _supplierIndexService.saveSupplier(trimmedSupplier);
+    }
+  }
+
+  // تحسين _calculateAllTotals
+  void _calculateAllTotals() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        setState(() {
+          double totalCount = 0;
+          double totalStanding = 0;
+          double totalPayment = 0;
+          double totalLoad = 0;
+
+          for (var controllers in rowControllers) {
+            try {
+              totalCount += double.tryParse(controllers[3].text) ?? 0;
+              totalStanding += double.tryParse(controllers[5].text) ?? 0;
+              totalPayment += double.tryParse(controllers[6].text) ?? 0;
+              totalLoad += double.tryParse(controllers[7].text) ?? 0;
+            } catch (e) {
+              // تجاهل الأخطاء
+            }
+          }
+
+          totalCountController.text = totalCount.toStringAsFixed(0);
+          totalStandingController.text = totalStanding.toStringAsFixed(2);
+          totalPaymentController.text = totalPayment.toStringAsFixed(2);
+          totalLoadController.text = totalLoad.toStringAsFixed(2);
+        });
+      }
+    });
+  }
+
+  // تعديل _loadJournal لاستخدام الدالة المساعدة
+  void _loadJournal(ReceiptDocument document) {
+    setState(() {
+      // تنظيف المتحكمات القديمة
+      for (var row in rowControllers) {
+        for (var controller in row) {
+          controller.dispose();
+        }
+      }
+      for (var row in rowFocusNodes) {
+        for (var node in row) {
+          node.dispose();
         }
       }
 
-      totalCountController.text = totalCount.toStringAsFixed(0);
-      totalStandingController.text = totalStanding.toStringAsFixed(2);
-      totalPaymentController.text = totalPayment.toStringAsFixed(2);
-      totalLoadController.text = totalLoad.toStringAsFixed(2);
+      // إعادة تهيئة القوائم
+      rowControllers.clear();
+      rowFocusNodes.clear();
+      sellerNames.clear();
+
+      // تحميل السجلات من الوثيقة
+      for (int i = 0; i < document.receipts.length; i++) {
+        var receipt = document.receipts[i];
+
+        List<TextEditingController> newControllers = [
+          TextEditingController(text: receipt.serialNumber),
+          TextEditingController(text: receipt.material),
+          TextEditingController(text: receipt.affiliation),
+          TextEditingController(text: receipt.count),
+          TextEditingController(text: receipt.packaging),
+          TextEditingController(text: receipt.standing),
+          TextEditingController(text: receipt.payment),
+          TextEditingController(text: receipt.load),
+        ];
+
+        List<FocusNode> newFocusNodes =
+            List.generate(8, (index) => FocusNode());
+
+        // تخزين اسم البائع لهذا الصف
+        sellerNames.add(receipt.sellerName);
+
+        // التحقق إذا كان السجل مملوكاً للبائع الحالي
+        final bool isOwnedByCurrentSeller =
+            receipt.sellerName == widget.sellerName;
+
+        // إضافة مستمعات للتغيير فقط إذا كان السجل مملوكاً للبائع الحالي
+        if (isOwnedByCurrentSeller) {
+          _addChangeListenersToControllers(newControllers, i);
+        }
+
+        rowControllers.add(newControllers);
+        rowFocusNodes.add(newFocusNodes);
+      }
+
+      // تحميل المجاميع
+      if (document.totals.isNotEmpty) {
+        totalCountController.text = document.totals['totalCount'] ?? '0';
+        totalStandingController.text =
+            document.totals['totalStanding'] ?? '0.00';
+        totalPaymentController.text = document.totals['totalPayment'] ?? '0.00';
+        totalLoadController.text = document.totals['totalLoad'] ?? '0.00';
+      }
+
+      _hasUnsavedChanges = false;
     });
   }
 
@@ -237,17 +593,28 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     List<TableRow> contentRows = [];
 
     for (int i = 0; i < rowControllers.length; i++) {
+      // التحقق إذا كان السجل مملوكاً للبائع الحالي
+      final bool isOwnedByCurrentSeller = sellerNames[i] == widget.sellerName;
+
       contentRows.add(
         TableRow(
           children: [
-            _buildTableCell(rowControllers[i][0], rowFocusNodes[i][0], i, 0),
-            _buildTableCell(rowControllers[i][1], rowFocusNodes[i][1], i, 1),
-            _buildTableCell(rowControllers[i][2], rowFocusNodes[i][2], i, 2),
-            _buildTableCell(rowControllers[i][3], rowFocusNodes[i][3], i, 3),
-            _buildTableCell(rowControllers[i][4], rowFocusNodes[i][4], i, 4),
-            _buildTableCell(rowControllers[i][5], rowFocusNodes[i][5], i, 5),
-            _buildTableCell(rowControllers[i][6], rowFocusNodes[i][6], i, 6),
-            _buildTableCell(rowControllers[i][7], rowFocusNodes[i][7], i, 7),
+            _buildTableCell(rowControllers[i][0], rowFocusNodes[i][0], i, 0,
+                isOwnedByCurrentSeller),
+            _buildMaterialCell(rowControllers[i][1], rowFocusNodes[i][1], i, 1,
+                isOwnedByCurrentSeller),
+            _buildSupplierCell(rowControllers[i][2], rowFocusNodes[i][2], i, 2,
+                isOwnedByCurrentSeller),
+            _buildTableCell(rowControllers[i][3], rowFocusNodes[i][3], i, 3,
+                isOwnedByCurrentSeller),
+            _buildPackagingCell(rowControllers[i][4], rowFocusNodes[i][4], i, 4,
+                isOwnedByCurrentSeller),
+            _buildTableCell(rowControllers[i][5], rowFocusNodes[i][5], i, 5,
+                isOwnedByCurrentSeller),
+            _buildTableCell(rowControllers[i][6], rowFocusNodes[i][6], i, 6,
+                isOwnedByCurrentSeller),
+            _buildTableCell(rowControllers[i][7], rowFocusNodes[i][7], i, 7,
+                isOwnedByCurrentSeller),
           ],
         ),
       );
@@ -279,13 +646,12 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
   }
 
   Widget _buildTableCell(TextEditingController controller, FocusNode focusNode,
-      int rowIndex, int colIndex) {
+      int rowIndex, int colIndex, bool isOwnedByCurrentSeller) {
     bool isSerialField = colIndex == 0;
-    // تعديل: حقل العبوة (المؤشر 4) ليس رقمية، فقط الحقول 3،5،6،7 رقمية
     bool isNumericField =
         colIndex == 3 || colIndex == 5 || colIndex == 6 || colIndex == 7;
 
-    return TableBuilder.buildTableCell(
+    Widget cell = TableBuilder.buildTableCell(
       controller: controller,
       focusNode: focusNode,
       isSerialField: isSerialField,
@@ -304,11 +670,411 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
             ]
           : null,
     );
+
+    // إذا لم يكن السجل مملوكاً للبائع الحالي، جعل الخلية للقراءة فقط
+    if (!isOwnedByCurrentSeller) {
+      return IgnorePointer(
+        child: Opacity(
+          opacity: 0.7,
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+            ),
+            child: cell,
+          ),
+        ),
+      );
+    }
+
+    return cell;
+  }
+
+  // خلية خاصة لحقل المادة مع الاقتراحات - معدلة
+  Widget _buildMaterialCell(
+      TextEditingController controller,
+      FocusNode focusNode,
+      int rowIndex,
+      int colIndex,
+      bool isOwnedByCurrentSeller) {
+    // إضافة مستمع لفقدان التركيز
+    focusNode.addListener(() {
+      if (!focusNode.hasFocus) {
+        _hideAllSuggestionsImmediately();
+      }
+    });
+
+    Widget cell = TableBuilder.buildTableCell(
+      controller: controller,
+      focusNode: focusNode,
+      isSerialField: false,
+      isNumericField: false,
+      rowIndex: rowIndex,
+      colIndex: colIndex,
+      scrollToField: _scrollToField,
+      onFieldSubmitted: (value, rIndex, cIndex) {
+        _handleFieldSubmitted(value, rIndex, cIndex);
+        // حفظ المادة في الفهرس عند الإنتهاء من الكتابة
+        if (value.trim().isNotEmpty && value.trim().length > 1) {
+          _saveMaterialToIndex(value);
+        }
+      },
+      onFieldChanged: (value, rIndex, cIndex) =>
+          _handleFieldChanged(value, rIndex, cIndex),
+    );
+
+    // إضافة الاقتراحات
+    Widget cellWithSuggestions = Stack(
+      children: [
+        cell,
+        if (_activeMaterialRowIndex == rowIndex &&
+            _materialSuggestions.isNotEmpty)
+          Positioned(
+            top: 25,
+            left: 0,
+            right: 0,
+            child: _buildHorizontalMaterialSuggestions(rowIndex),
+          ),
+      ],
+    );
+
+    // إذا لم يكن السجل مملوكاً للبائع الحالي، جعل الخلية للقراءة فقط
+    if (!isOwnedByCurrentSeller) {
+      return IgnorePointer(
+        child: Opacity(
+          opacity: 0.7,
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+            ),
+            child: cellWithSuggestions,
+          ),
+        ),
+      );
+    }
+
+    return cellWithSuggestions;
+  }
+
+  // خلية خاصة لحقل العبوة مع الاقتراحات
+  Widget _buildPackagingCell(
+      TextEditingController controller,
+      FocusNode focusNode,
+      int rowIndex,
+      int colIndex,
+      bool isOwnedByCurrentSeller) {
+    Widget cell = TableBuilder.buildTableCell(
+      controller: controller,
+      focusNode: focusNode,
+      isSerialField: false,
+      isNumericField: false,
+      rowIndex: rowIndex,
+      colIndex: colIndex,
+      scrollToField: _scrollToField,
+      onFieldSubmitted: (value, rIndex, cIndex) {
+        _handleFieldSubmitted(value, rIndex, cIndex);
+        // حفظ العبوة في الفهرس عند الإنتهاء من الكتابة
+        if (value.trim().isNotEmpty) {
+          _savePackagingToIndex(value);
+        }
+      },
+      onFieldChanged: (value, rIndex, cIndex) =>
+          _handleFieldChanged(value, rIndex, cIndex),
+    );
+
+    // إضافة الاقتراحات
+    Widget cellWithSuggestions = Stack(
+      children: [
+        cell,
+        if (_activePackagingRowIndex == rowIndex &&
+            _packagingSuggestions.isNotEmpty)
+          Positioned(
+            top: 25,
+            left: 0,
+            right: 0,
+            child: _buildHorizontalPackagingSuggestions(rowIndex),
+          ),
+      ],
+    );
+
+    // إذا لم يكن السجل مملوكاً للبائع الحالي، جعل الخلية للقراءة فقط
+    if (!isOwnedByCurrentSeller) {
+      return IgnorePointer(
+        child: Opacity(
+          opacity: 0.7,
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+            ),
+            child: cellWithSuggestions,
+          ),
+        ),
+      );
+    }
+
+    return cellWithSuggestions;
+  }
+
+  // خلية خاصة لحقل العائدية (الموردين) مع الاقتراحات
+  Widget _buildSupplierCell(
+      TextEditingController controller,
+      FocusNode focusNode,
+      int rowIndex,
+      int colIndex,
+      bool isOwnedByCurrentSeller) {
+    Widget cell = TableBuilder.buildTableCell(
+      controller: controller,
+      focusNode: focusNode,
+      isSerialField: false,
+      isNumericField: false,
+      rowIndex: rowIndex,
+      colIndex: colIndex,
+      scrollToField: _scrollToField,
+      onFieldSubmitted: (value, rIndex, cIndex) {
+        _handleFieldSubmitted(value, rIndex, cIndex);
+        // حفظ المورد في الفهرس عند الإنتهاء من الكتابة
+        if (value.trim().isNotEmpty) {
+          _saveSupplierToIndex(value);
+        }
+      },
+      onFieldChanged: (value, rIndex, cIndex) =>
+          _handleFieldChanged(value, rIndex, cIndex),
+    );
+
+    // إضافة الاقتراحات
+    Widget cellWithSuggestions = Stack(
+      children: [
+        cell,
+        if (_activeSupplierRowIndex == rowIndex &&
+            _supplierSuggestions.isNotEmpty)
+          Positioned(
+            top: 25,
+            left: 0,
+            right: 0,
+            child: _buildHorizontalSupplierSuggestions(rowIndex),
+          ),
+      ],
+    );
+
+    // إذا لم يكن السجل مملوكاً للبائع الحالي، جعل الخلية للقراءة فقط
+    if (!isOwnedByCurrentSeller) {
+      return IgnorePointer(
+        child: Opacity(
+          opacity: 0.7,
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+            ),
+            child: cellWithSuggestions,
+          ),
+        ),
+      );
+    }
+
+    return cellWithSuggestions;
+  }
+
+  // بناء قائمة اقتراحات المادة بشكل أفقي - معدلة لاختيار بنقرة واحدة
+  Widget _buildHorizontalMaterialSuggestions(int rowIndex) {
+    return Container(
+      height: 30,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: Colors.grey[300]!),
+        borderRadius: BorderRadius.circular(4),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: _materialSuggestions.isEmpty
+          ? Container()
+          : ListView.separated(
+              scrollDirection: Axis.horizontal,
+              controller: _materialSuggestionsScrollController,
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              itemCount: _materialSuggestions.length,
+              separatorBuilder: (context, index) => const SizedBox(width: 4),
+              itemBuilder: (context, index) {
+                return InkWell(
+                  onTap: () {
+                    _selectMaterialSuggestion(
+                        _materialSuggestions[index], rowIndex);
+                  },
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: index == 0
+                          ? Colors.blue[100] // تمييز أول اقتراح
+                          : Colors.blue[50],
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: Colors.blue[100]!),
+                    ),
+                    child: Text(
+                      _materialSuggestions[index],
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.blue,
+                        fontWeight:
+                            index == 0 ? FontWeight.bold : FontWeight.normal,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                );
+              },
+            ),
+    );
+  }
+
+  // بناء قائمة اقتراحات العبوة بشكل أفقي - معدلة لاختيار بنقرة واحدة
+  Widget _buildHorizontalPackagingSuggestions(int rowIndex) {
+    return Container(
+      height: 30,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: Colors.grey[300]!),
+        borderRadius: BorderRadius.circular(4),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: _packagingSuggestions.isEmpty
+          ? Container()
+          : ListView.separated(
+              scrollDirection: Axis.horizontal,
+              controller: _packagingSuggestionsScrollController,
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              itemCount: _packagingSuggestions.length,
+              separatorBuilder: (context, index) => const SizedBox(width: 4),
+              itemBuilder: (context, index) {
+                return InkWell(
+                  onTap: () {
+                    _selectPackagingSuggestion(
+                        _packagingSuggestions[index], rowIndex);
+                  },
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: index == 0 ? Colors.green[100] : Colors.green[50],
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: Colors.green[100]!),
+                    ),
+                    child: Text(
+                      _packagingSuggestions[index],
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.green,
+                        fontWeight:
+                            index == 0 ? FontWeight.bold : FontWeight.normal,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                );
+              },
+            ),
+    );
+  }
+
+  // بناء قائمة اقتراحات الموردين بشكل أفقي - معدلة لاختيار بنقرة واحدة
+  Widget _buildHorizontalSupplierSuggestions(int rowIndex) {
+    return Container(
+      height: 30,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: Colors.grey[300]!),
+        borderRadius: BorderRadius.circular(4),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: _supplierSuggestions.isEmpty
+          ? Container()
+          : ListView.separated(
+              scrollDirection: Axis.horizontal,
+              controller: _supplierSuggestionsScrollController,
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              itemCount: _supplierSuggestions.length,
+              separatorBuilder: (context, index) => const SizedBox(width: 4),
+              itemBuilder: (context, index) {
+                return InkWell(
+                  onTap: () {
+                    _selectSupplierSuggestion(
+                        _supplierSuggestions[index], rowIndex);
+                  },
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color:
+                          index == 0 ? Colors.orange[100] : Colors.orange[50],
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: Colors.orange[100]!),
+                    ),
+                    child: Text(
+                      _supplierSuggestions[index],
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.orange,
+                        fontWeight:
+                            index == 0 ? FontWeight.bold : FontWeight.normal,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                );
+              },
+            ),
+    );
   }
 
   void _handleFieldSubmitted(String value, int rowIndex, int colIndex) {
-    if (colIndex == 7) {
-      // إذا وصلنا لآخر حقل (الحمولة)، نضيف سطر جديد
+    // التحقق إذا كان السجل مملوكاً للبائع الحالي
+    if (!_isRowOwnedByCurrentSeller(rowIndex)) {
+      return;
+    }
+
+    // إخفاء الاقتراحات أولاً
+    _hideAllSuggestionsImmediately();
+
+    // إذا كان حقل المادة وEnter ضُغط وكانت هناك اقتراحات
+    if (colIndex == 1 && _materialSuggestions.isNotEmpty) {
+      _selectMaterialSuggestion(_materialSuggestions[0], rowIndex);
+      return;
+    }
+
+    // إذا كان حقل العائدية وEnter ضُغط وكانت هناك اقتراحات
+    if (colIndex == 2 && _supplierSuggestions.isNotEmpty) {
+      _selectSupplierSuggestion(_supplierSuggestions[0], rowIndex);
+      return;
+    }
+
+    // إذا كان حقل العبوة وEnter ضُغط وكانت هناك اقتراحات
+    if (colIndex == 4 && _packagingSuggestions.isNotEmpty) {
+      _selectPackagingSuggestion(_packagingSuggestions[0], rowIndex);
+      return;
+    }
+
+    // التنقل العادي بين الحقول
+    if (colIndex == 0) {
+      FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][1]);
+    } else if (colIndex == 7) {
       _addNewRow();
       if (rowControllers.isNotEmpty) {
         final newRowIndex = rowControllers.length - 1;
@@ -321,17 +1087,30 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
   }
 
   void _handleFieldChanged(String value, int rowIndex, int colIndex) {
+    // التحقق إذا كان السجل مملوكاً للبائع الحالي
+    if (!_isRowOwnedByCurrentSeller(rowIndex)) {
+      return;
+    }
+
     setState(() {
       _hasUnsavedChanges = true;
 
       if (colIndex == 0) {
-        // تحديث الأرقام التسلسلية
         for (int i = 0; i < rowControllers.length; i++) {
           rowControllers[i][0].text = (i + 1).toString();
         }
       }
 
-      // الحقول الرقمية فقط التي تؤثر في الحسابات
+      // إذا بدأ المستخدم بالكتابة في حقل آخر، إخفاء اقتراحات الحقول الأخرى
+      if (colIndex == 1 && _activeMaterialRowIndex != rowIndex) {
+        _clearAllSuggestions();
+      } else if (colIndex == 2 && _activeSupplierRowIndex != rowIndex) {
+        _clearAllSuggestions();
+      } else if (colIndex == 4 && _activePackagingRowIndex != rowIndex) {
+        _clearAllSuggestions();
+      }
+
+      // تحديث المجاميع للحقول الرقمية
       if (colIndex == 3 || colIndex == 5 || colIndex == 6 || colIndex == 7) {
         _calculateAllTotals();
       }
@@ -352,6 +1131,12 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
         ),
       ),
     );
+  }
+
+  // التحقق إذا كان السجل مملوكاً للبائع الحالي
+  bool _isRowOwnedByCurrentSeller(int rowIndex) {
+    if (rowIndex >= sellerNames.length) return false;
+    return sellerNames[rowIndex] == widget.sellerName;
   }
 
   @override
@@ -416,20 +1201,110 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
                 ? null
                 : () {
                     _saveCurrentRecord();
-                    setState(() => _hasUnsavedChanges = false);
                   },
           ),
-          IconButton(
-            icon: const Icon(Icons.folder_open),
-            tooltip: 'فتح يومية',
-            onPressed: () async {
-              await _saveCurrentRecord(silent: true);
-              await _showRecordSelectionDialog();
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.calendar_today),
+            tooltip: 'فتح يومية سابقة',
+            onSelected: (selectedDate) async {
+              if (selectedDate != widget.selectedDate) {
+                // التحقق من وجود تغييرات غير محفوظة
+                if (_hasUnsavedChanges) {
+                  final shouldSave = await _showUnsavedChangesDialog();
+                  if (shouldSave) {
+                    await _saveCurrentRecord(silent: true);
+                  }
+                }
+
+                // الانتقال إلى الشاشة الجديدة بالتاريخ المحدد
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ReceiptScreen(
+                      sellerName: widget.sellerName,
+                      selectedDate: selectedDate,
+                      storeName: widget.storeName,
+                    ),
+                  ),
+                );
+              }
+            },
+            itemBuilder: (BuildContext context) {
+              List<PopupMenuEntry<String>> items = [];
+
+              if (_isLoadingDates) {
+                items.add(
+                  const PopupMenuItem<String>(
+                    value: '',
+                    enabled: false,
+                    child: Text('جاري التحميل...'),
+                  ),
+                );
+              } else if (_availableDates.isEmpty) {
+                items.add(
+                  const PopupMenuItem<String>(
+                    value: '',
+                    enabled: false,
+                    child: Text('لا توجد يوميات سابقة'),
+                  ),
+                );
+              } else {
+                items.add(
+                  const PopupMenuItem<String>(
+                    value: '',
+                    enabled: false,
+                    child: Text(
+                      'اليوميات المتاحة',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                );
+                items.add(const PopupMenuDivider());
+
+                for (var dateInfo in _availableDates) {
+                  final date = dateInfo['date']!;
+                  final journalNumber = dateInfo['journalNumber']!;
+
+                  items.add(
+                    PopupMenuItem<String>(
+                      value: date,
+                      child: Text(
+                        'يومية رقم $journalNumber - تاريخ $date',
+                        style: TextStyle(
+                          fontWeight: date == widget.selectedDate
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                          color: date == widget.selectedDate
+                              ? Colors.blue
+                              : Colors.black,
+                        ),
+                      ),
+                    ),
+                  );
+                }
+              }
+
+              return items;
             },
           ),
         ],
       ),
       body: _buildTableWithStickyHeader(),
+      // إضافة الزر العائم هنا
+      floatingActionButton: _buildFloatingActionButton(),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+    );
+  }
+
+  // دالة لبناء الزر العائم
+  Widget _buildFloatingActionButton() {
+    return FloatingActionButton(
+      onPressed: _addNewRow,
+      backgroundColor: Colors.blue[700],
+      foregroundColor: Colors.white,
+      child: const Icon(Icons.add),
+      tooltip: 'إضافة سجل جديد',
+      heroTag: 'receipt_fab',
     );
   }
 
@@ -477,42 +1352,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
   Future<void> _saveCurrentRecord({bool silent = false}) async {
     if (_isSaving) return;
 
-    // نظام الصلاحيات
-    if (_recordCreator != null && _recordCreator != widget.sellerName) {
-      if (!silent && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('هذا السجل ليس سجلك، لا يمكنك التعديل عليه'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
-      return;
-    }
-
-    // التحقق من أن السجل غير فارغ
-    bool isEmptyRecord = true;
-    for (var controllers in rowControllers) {
-      if (controllers[1].text.isNotEmpty || // المادة
-          controllers[3].text.isNotEmpty) {
-        // العدد
-        isEmptyRecord = false;
-        break;
-      }
-    }
-
-    if (isEmptyRecord) {
-      if (!silent && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('لا يمكن حفظ سجل فارغ'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-      return;
-    }
-
+    // التحقق من وجود سجلات للحفظ
     if (rowControllers.isEmpty) {
       if (!silent && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -525,30 +1365,60 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
       return;
     }
 
-    setState(() => _isSaving = true);
-    final receiptsList = <Receipt>[];
+    // إنشاء قائمة بالاستلام للبائع الحالي فقط
+    final currentSellerReceipts = <Receipt>[];
     for (int i = 0; i < rowControllers.length; i++) {
       final controllers = rowControllers[i];
-      receiptsList.add(Receipt(
-        serialNumber: controllers[0].text,
-        material: controllers[1].text,
-        affiliation: controllers[2].text,
-        count: controllers[3].text,
-        packaging: controllers[4].text,
-        standing: controllers[5].text,
-        payment: controllers[6].text,
-        load: controllers[7].text,
-        sellerName: widget.sellerName, // إضافة اسم البائع لكل سجل
-      ));
+
+      // التحقق إذا كان السجل فارغاً
+      if (controllers[1].text.isNotEmpty || controllers[3].text.isNotEmpty) {
+        currentSellerReceipts.add(Receipt(
+          serialNumber: controllers[0].text,
+          material: controllers[1].text,
+          affiliation: controllers[2].text,
+          count: controllers[3].text,
+          packaging: controllers[4].text,
+          standing: controllers[5].text,
+          payment: controllers[6].text,
+          load: controllers[7].text,
+          sellerName: sellerNames[i],
+        ));
+      }
+    }
+
+    if (currentSellerReceipts.isEmpty) {
+      if (!silent && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('لا توجد سجلات مضافة للحفظ'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
+    setState(() => _isSaving = true);
+
+    // الحصول على رقم اليومية الحالي أو الجديد
+    String journalNumber = serialNumber;
+    if (journalNumber.isEmpty || journalNumber == '1') {
+      final document =
+          await _storageService.loadReceiptDocumentForDate(widget.selectedDate);
+      if (document == null) {
+        journalNumber = await _storageService.getNextJournalNumber();
+      } else {
+        journalNumber = document.recordNumber;
+      }
     }
 
     final document = ReceiptDocument(
-      recordNumber: serialNumber,
+      recordNumber: journalNumber,
       date: widget.selectedDate,
       sellerName: widget.sellerName,
       storeName: widget.storeName,
       dayName: dayName,
-      receipts: receiptsList,
+      receipts: currentSellerReceipts,
       totals: {
         'totalCount': totalCountController.text,
         'totalStanding': totalStandingController.text,
@@ -560,7 +1430,10 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     final success = await _storageService.saveReceiptDocument(document);
 
     if (success) {
-      setState(() => _hasUnsavedChanges = false);
+      setState(() {
+        _hasUnsavedChanges = false;
+        serialNumber = journalNumber;
+      });
     }
 
     setState(() => _isSaving = false);
@@ -575,116 +1448,14 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     }
   }
 
-  Future<void> _showRecordSelectionDialog() async {
-    final availableRecords =
-        await _storageService.getAvailableRecords(widget.selectedDate);
-
-    if (!mounted) return;
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text(
-            'يومية سابقة',
-            style: TextStyle(fontWeight: FontWeight.bold),
-            textAlign: TextAlign.center,
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (availableRecords.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.all(16.0),
-                    child: Text(
-                      'لا توجد يومية محفوظة لهذا التاريخ',
-                      style: TextStyle(color: Colors.grey),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                if (availableRecords.isNotEmpty)
-                  ...availableRecords.map((recordNum) {
-                    return Card(
-                      elevation: 2,
-                      margin: const EdgeInsets.symmetric(vertical: 4),
-                      child: ListTile(
-                        leading:
-                            const Icon(Icons.description, color: Colors.blue),
-                        title: Text(
-                          'اليومية رقم $recordNum',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.delete, color: Colors.red),
-                              onPressed: () async {
-                                final confirm = await CommonDialogs
-                                    .showDeleteConfirmationDialog(
-                                  context: context,
-                                  recordNumber: recordNum,
-                                );
-
-                                if (confirm == true) {
-                                  await _storageService.deleteReceiptDocument(
-                                    widget.selectedDate,
-                                    recordNum,
-                                  );
-                                  Navigator.pop(context);
-                                  await _showRecordSelectionDialog();
-                                }
-                              },
-                            ),
-                          ],
-                        ),
-                        onTap: () async {
-                          Navigator.of(context).pop();
-                          await _loadRecord(recordNum);
-                        },
-                      ),
-                    );
-                  }).toList(),
-                const Divider(),
-                ElevatedButton.icon(
-                  onPressed: () async {
-                    final nextNumber = await _storageService
-                        .getNextRecordNumber(widget.selectedDate);
-                    if (mounted) {
-                      Navigator.of(context).pop();
-                      _createNewRecord(nextNumber);
-                    }
-                  },
-                  icon: const Icon(Icons.add_circle_outline),
-                  label: const Text('يومية جديدة'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green[600],
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 24, vertical: 12),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
   Future<void> _shareFile() async {
-    final filePath = await _storageService.getFilePath(
-      widget.selectedDate,
-      serialNumber,
-    );
+    final filePath = await _storageService.getFilePath(widget.selectedDate);
 
     if (filePath == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('الرجاء حفظ السجل أولاً'),
+            content: Text('الرجاء حفظ اليومية أولاً'),
             backgroundColor: Colors.orange,
           ),
         );
@@ -700,104 +1471,61 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     }
   }
 
-  void _createNewRecord(String recordNumber) {
-    setState(() {
-      serialNumber = recordNumber;
-      _recordCreator = widget.sellerName;
-      rowControllers.clear();
-      rowFocusNodes.clear();
-      _resetTotalValues();
-      _hasUnsavedChanges = false;
-      _addNewRow();
-    });
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (rowFocusNodes.isNotEmpty && rowFocusNodes[0].length > 1) {
-        FocusScope.of(context).requestFocus(rowFocusNodes[0][1]);
-      }
-    });
+  Future<bool> _showUnsavedChangesDialog() async {
+    return await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            title: const Text('تغييرات غير محفوظة'),
+            content: const Text(
+              'هناك تغييرات غير محفوظة. هل تريد حفظها قبل الانتقال؟',
+              textAlign: TextAlign.center,
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('تجاهل'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('حفظ'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
   }
 
-  Future<void> _loadRecord(String recordNumber) async {
-    final document = await _storageService.loadReceiptDocument(
-      widget.selectedDate,
-      recordNumber,
-    );
-
-    if (document == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('فشل تحميل السجل'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-      return;
+  Future<void> _loadJournalNumber() async {
+    try {
+      final journalNumber =
+          await _storageService.getJournalNumberForDate(widget.selectedDate);
+      setState(() {
+        serialNumber = journalNumber;
+        _currentJournalNumber = journalNumber;
+      });
+    } catch (e) {
+      setState(() {
+        serialNumber = '1';
+        _currentJournalNumber = '1';
+      });
     }
+  }
 
-    setState(() {
-      serialNumber = recordNumber;
-      _recordCreator = document.sellerName;
-
-      for (var row in rowControllers) {
-        for (var controller in row) {
-          controller.dispose();
-        }
-      }
-      for (var row in rowFocusNodes) {
-        for (var node in row) {
-          node.dispose();
-        }
-      }
-
-      rowControllers.clear();
-      rowFocusNodes.clear();
-
-      for (var receipt in document.receipts) {
-        List<TextEditingController> newControllers = [
-          TextEditingController(text: receipt.serialNumber),
-          TextEditingController(text: receipt.material),
-          TextEditingController(text: receipt.affiliation),
-          TextEditingController(text: receipt.count),
-          TextEditingController(text: receipt.packaging),
-          TextEditingController(text: receipt.standing),
-          TextEditingController(text: receipt.payment),
-          TextEditingController(text: receipt.load),
-        ];
-
-        List<FocusNode> newFocusNodes =
-            List.generate(8, (index) => FocusNode());
-
-        newControllers[1].addListener(() => _hasUnsavedChanges = true);
-        newControllers[2].addListener(() => _hasUnsavedChanges = true);
-        newControllers[4].addListener(() => _hasUnsavedChanges = true);
-
-        // المستمعات للحقول الرقمية فقط
-        newControllers[3].addListener(() {
-          _hasUnsavedChanges = true;
-          _calculateAllTotals();
-        });
-        newControllers[5].addListener(() {
-          _hasUnsavedChanges = true;
-          _calculateAllTotals();
-        });
-        newControllers[6].addListener(() {
-          _hasUnsavedChanges = true;
-          _calculateAllTotals();
-        });
-        newControllers[7].addListener(() {
-          _hasUnsavedChanges = true;
-          _calculateAllTotals();
-        });
-
-        rowControllers.add(newControllers);
-        rowFocusNodes.add(newFocusNodes);
-      }
-
-      _calculateAllTotals();
-      _hasUnsavedChanges = false;
-    });
+  // دالة مساعدة لإخفاء جميع الاقتراحات
+  void _clearAllSuggestions() {
+    if (_materialSuggestions.isNotEmpty ||
+        _packagingSuggestions.isNotEmpty ||
+        _supplierSuggestions.isNotEmpty) {
+      setState(() {
+        _materialSuggestions = [];
+        _packagingSuggestions = [];
+        _supplierSuggestions = [];
+        _activeMaterialRowIndex = null;
+        _activePackagingRowIndex = null;
+        _activeSupplierRowIndex = null;
+      });
+    }
   }
 }
 

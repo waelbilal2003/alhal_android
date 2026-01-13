@@ -44,12 +44,11 @@ class SalesStorageService {
   }
 
   // حفظ مستند المبيعات
-  Future<bool> saveSalesDocument(SalesDocument document) async {
+  // يجب إضافة هذه الدالة إلى SalesStorageService
+  Future<bool> saveSalesDocument(SalesDocument document,
+      {String? recordNumber}) async {
     try {
-      // الحصول على المسار الأساسي
       final basePath = await _getBasePath();
-
-      // إنشاء مسار المجلد
       final folderName = _createFolderName(document.date);
       final folderPath = '$basePath/AlhalSales/$folderName';
 
@@ -59,26 +58,131 @@ class SalesStorageService {
         await folder.create(recursive: true);
       }
 
-      // إنشاء اسم الملف
+      // اسم الملف: alhal-sales-{رقم السجل}-{التاريخ}.json
       final fileName = _createFileName(document.date, document.recordNumber);
       final filePath = '$folderPath/$fileName';
 
-      // تحويل المستند إلى JSON وحفظه
+      // قراءة الملف الحالي إذا كان موجوداً
       final file = File(filePath);
-      final jsonString = jsonEncode(document.toJson());
-      await file.writeAsString(jsonString);
+      SalesDocument? existingDocument;
+
+      if (await file.exists()) {
+        final jsonString = await file.readAsString();
+        final jsonMap = jsonDecode(jsonString) as Map<String, dynamic>;
+        existingDocument = SalesDocument.fromJson(jsonMap);
+      }
+
+      // دمج السجلات
+      List<Sale> mergedSales = [];
+      if (existingDocument != null) {
+        // الاحتفاظ بسجلات البائعين الآخرين
+        for (var existing in existingDocument.sales) {
+          bool found = false;
+          for (var newSale in document.sales) {
+            // إذا كان نفس السجل لنفس البائع، نستبدله
+            if (existing.serialNumber == newSale.serialNumber &&
+                existing.sellerName == newSale.sellerName) {
+              found = true;
+              break;
+            }
+          }
+          if (!found) {
+            mergedSales.add(existing);
+          }
+        }
+      }
+
+      // إضافة السجلات الجديدة/المعدلة
+      mergedSales.addAll(document.sales);
+
+      // ترتيب السجلات حسب الرقم المسلسل
+      mergedSales.sort((a, b) =>
+          int.parse(a.serialNumber).compareTo(int.parse(b.serialNumber)));
+
+      // تحديث الأرقام المسلسلة
+      for (int i = 0; i < mergedSales.length; i++) {
+        mergedSales[i] = Sale(
+          serialNumber: (i + 1).toString(),
+          material: mergedSales[i].material,
+          affiliation: mergedSales[i].affiliation,
+          sValue: mergedSales[i].sValue,
+          count: mergedSales[i].count,
+          packaging: mergedSales[i].packaging,
+          standing: mergedSales[i].standing,
+          net: mergedSales[i].net,
+          price: mergedSales[i].price,
+          total: mergedSales[i].total,
+          cashOrDebt: mergedSales[i].cashOrDebt,
+          empties: mergedSales[i].empties,
+          customerName: mergedSales[i].customerName,
+          sellerName: mergedSales[i].sellerName,
+        );
+      }
+
+      // الحصول على الرقم النهائي للسجل
+      final String finalRecordNumber;
+      if (recordNumber != null) {
+        finalRecordNumber = recordNumber;
+      } else if (existingDocument != null &&
+          existingDocument.recordNumber.isNotEmpty) {
+        finalRecordNumber = existingDocument.recordNumber;
+      } else {
+        finalRecordNumber = await getNextRecordNumber(document.date);
+      }
+
+      // تحديث المجاميع
+      final totals = _calculateSalesTotals(mergedSales);
+
+      final updatedDocument = SalesDocument(
+        recordNumber: finalRecordNumber,
+        date: document.date,
+        sellerName: document.sellerName,
+        storeName: document.storeName,
+        dayName: document.dayName,
+        sales: mergedSales,
+        totals: totals,
+      );
+
+      // حفظ المستند المحدث
+      final updatedJsonString = jsonEncode(updatedDocument.toJson());
+      await file.writeAsString(updatedJsonString);
 
       if (kDebugMode) {
-        debugPrint('✅ تم حفظ ملف المبيعات: $filePath');
+        debugPrint('✅ تم حفظ سجل المبيعات رقم $finalRecordNumber: $filePath');
+        debugPrint('📊 عدد السجلات: ${mergedSales.length}');
       }
 
       return true;
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('❌ خطأ في حفظ ملف المبيعات: $e');
+        debugPrint('❌ خطأ في حفظ سجل المبيعات: $e');
       }
       return false;
     }
+  }
+
+// دالة مساعدة لحساب مجاميع المبيعات
+  Map<String, String> _calculateSalesTotals(List<Sale> sales) {
+    double totalCount = 0;
+    double totalBase = 0;
+    double totalNet = 0;
+    double totalGrand = 0;
+
+    for (var sale in sales) {
+      try {
+        totalCount += double.tryParse(sale.count) ?? 0;
+        totalBase += double.tryParse(sale.standing) ?? 0;
+        totalNet += double.tryParse(sale.net) ?? 0;
+        totalGrand += double.tryParse(sale.total) ?? 0;
+      } catch (e) {}
+    }
+
+    return {
+      'totalCount': totalCount.toStringAsFixed(0),
+      'totalBase': totalBase.toStringAsFixed(2),
+      'totalNet': totalNet.toStringAsFixed(2),
+      'totalGrand': totalGrand.toStringAsFixed(2),
+    };
   }
 
   // قراءة مستند المبيعات

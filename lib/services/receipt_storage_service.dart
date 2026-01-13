@@ -43,7 +43,7 @@ class ReceiptStorageService {
     return 'receipt-$formattedDate';
   }
 
-  // حفظ مستند الاستلام
+  // حفظ مستند الاستلام (النسخة القديمة)
   Future<bool> saveReceiptDocument(ReceiptDocument document) async {
     try {
       // الحصول على المسار الأساسي
@@ -81,7 +81,7 @@ class ReceiptStorageService {
     }
   }
 
-  // قراءة مستند الاستلام
+  // قراءة مستند الاستلام (النسخة القديمة)
   Future<ReceiptDocument?> loadReceiptDocument(
       String date, String recordNumber) async {
     try {
@@ -140,7 +140,7 @@ class ReceiptStorageService {
       }
 
       // قراءة قائمة الملفات
-      final files = await folder.list().toList();
+      final List<FileSystemEntity> files = await folder.list().toList();
       final recordNumbers = <String>[];
 
       for (var file in files) {
@@ -206,7 +206,8 @@ class ReceiptStorageService {
 
         // التحقق من وجود ملفات أخرى في المجلد
         final folder = Directory(folderPath);
-        final remainingFiles = await folder.list().toList();
+        final List<FileSystemEntity> remainingFiles =
+            await folder.list().toList();
 
         // إذا كان المجلد فارغاً، احذفه
         if (remainingFiles.isEmpty) {
@@ -229,7 +230,7 @@ class ReceiptStorageService {
   }
 
   // الحصول على مسار الملف لمشاركته
-  Future<String?> getFilePath(String date, String recordNumber) async {
+  Future<String?> getFilePath(String date, [String? recordNumber]) async {
     try {
       // الحصول على المسار الأساسي
       final basePath = await _getBasePath();
@@ -238,14 +239,29 @@ class ReceiptStorageService {
       final folderName = _createFolderName(date);
       final folderPath = '$basePath/Receipts/$folderName';
 
-      // إنشاء اسم الملف
-      final fileName = _createFileName(date, recordNumber);
-      final filePath = '$folderPath/$fileName';
+      if (recordNumber != null) {
+        // إنشاء اسم الملف
+        final fileName = _createFileName(date, recordNumber);
+        final filePath = '$folderPath/$fileName';
 
-      // التحقق من وجود الملف
-      final file = File(filePath);
-      if (await file.exists()) {
-        return filePath;
+        // التحقق من وجود الملف
+        final file = File(filePath);
+        if (await file.exists()) {
+          return filePath;
+        }
+      } else {
+        // إذا لم يتم تحديد رقم السجل، نرجع أول ملف
+        final folder = Directory(folderPath);
+        if (!await folder.exists()) {
+          return null;
+        }
+
+        final List<FileSystemEntity> files = await folder.list().toList();
+        for (var fileEntry in files) {
+          if (fileEntry is File && fileEntry.path.endsWith('.json')) {
+            return fileEntry.path;
+          }
+        }
       }
 
       return null;
@@ -279,7 +295,7 @@ class ReceiptStorageService {
     return totalPayment;
   }
 
-// دالة جديدة: حساب إجمالي الحمولة من شاشة الاستلام
+  // دالة جديدة: حساب إجمالي الحمولة من شاشة الاستلام
   Future<double> getTotalLoad(String date) async {
     double totalLoad = 0;
 
@@ -298,5 +314,194 @@ class ReceiptStorageService {
     }
 
     return totalLoad;
+  }
+
+  // دالة جديدة: تحميل يومية الاستلام لتاريخ معين
+  Future<ReceiptDocument?> loadReceiptDocumentForDate(String date) async {
+    try {
+      final basePath = await _getBasePath();
+      final folderName = _createFolderName(date);
+      final folderPath = '$basePath/Receipts/$folderName';
+
+      final folder = Directory(folderPath);
+      if (!await folder.exists()) {
+        return null;
+      }
+
+      final List<FileSystemEntity> files = await folder.list().toList();
+      if (files.isEmpty) {
+        return null;
+      }
+
+      // البحث عن أول ملف
+      for (var fileEntry in files) {
+        if (fileEntry is File && fileEntry.path.endsWith('.json')) {
+          final jsonString = await fileEntry.readAsString();
+          final jsonMap = jsonDecode(jsonString) as Map<String, dynamic>;
+          return ReceiptDocument.fromJson(jsonMap);
+        }
+      }
+
+      return null;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ خطأ في قراءة يومية الاستلام: $e');
+      }
+      return null;
+    }
+  }
+
+  // الحصول على تواريخ اليوميات المتاحة
+  Future<List<Map<String, String>>> getAvailableDatesWithNumbers() async {
+    try {
+      final basePath = await _getBasePath();
+      final receiptsPath = '$basePath/Receipts';
+
+      final folder = Directory(receiptsPath);
+      if (!await folder.exists()) {
+        return [];
+      }
+
+      final List<FileSystemEntity> folders = await folder.list().toList();
+      final datesWithNumbers = <Map<String, String>>[];
+
+      for (var folderEntry in folders) {
+        if (folderEntry is Directory) {
+          final folderName = folderEntry.path.split('/').last;
+          if (folderName.startsWith('receipt-')) {
+            final date = folderName.replaceFirst('receipt-', '');
+            final formattedDate = date.replaceAll('-', '/');
+
+            final List<FileSystemEntity> files =
+                await folderEntry.list().toList();
+            if (files.isNotEmpty) {
+              File? firstFile;
+              for (var fileEntry in files) {
+                if (fileEntry is File && fileEntry.path.endsWith('.json')) {
+                  firstFile = fileEntry;
+                  break;
+                }
+              }
+
+              if (firstFile != null) {
+                final jsonString = await firstFile.readAsString();
+                final jsonMap = jsonDecode(jsonString) as Map<String, dynamic>;
+                final journalNumber =
+                    jsonMap['recordNumber']?.toString() ?? '1';
+
+                datesWithNumbers.add({
+                  'date': formattedDate,
+                  'journalNumber': journalNumber,
+                });
+              }
+            }
+          }
+        }
+      }
+
+      datesWithNumbers.sort((a, b) {
+        final numA = int.tryParse(a['journalNumber'] ?? '0') ?? 0;
+        final numB = int.tryParse(b['journalNumber'] ?? '0') ?? 0;
+        return numA.compareTo(numB);
+      });
+
+      return datesWithNumbers;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ خطأ في قراءة تواريخ الاستلام: $e');
+      }
+      return [];
+    }
+  }
+
+/*
+  // حساب المجاميع
+  Map<String, String> _calculateTotals(List<Receipt> receipts) {
+    double totalCount = 0;
+    double totalStanding = 0;
+    double totalPayment = 0;
+    double totalLoad = 0;
+
+    for (var receipt in receipts) {
+      try {
+        totalCount += double.tryParse(receipt.count) ?? 0;
+        totalStanding += double.tryParse(receipt.standing) ?? 0;
+        totalPayment += double.tryParse(receipt.payment) ?? 0;
+        totalLoad += double.tryParse(receipt.load) ?? 0;
+      } catch (e) {}
+    }
+
+    return {
+      'totalCount': totalCount.toStringAsFixed(0),
+      'totalStanding': totalStanding.toStringAsFixed(2),
+      'totalPayment': totalPayment.toStringAsFixed(2),
+      'totalLoad': totalLoad.toStringAsFixed(2),
+    };
+  }
+*/
+  // الحصول على رقم اليومية لتاريخ معين
+  Future<String> getJournalNumberForDate(String date) async {
+    try {
+      final document = await loadReceiptDocumentForDate(date);
+      if (document != null) {
+        return document.recordNumber;
+      }
+      return '1';
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ خطأ في الحصول على رقم يومية الاستلام: $e');
+      }
+      return '1';
+    }
+  }
+
+  // الحصول على الرقم التسلسلي التالي
+  Future<String> getNextJournalNumber() async {
+    try {
+      final basePath = await _getBasePath();
+      final receiptsPath = '$basePath/Receipts';
+
+      final folder = Directory(receiptsPath);
+      if (!await folder.exists()) {
+        return '1';
+      }
+
+      final List<FileSystemEntity> folders = await folder.list().toList();
+      int maxJournalNumber = 0;
+
+      for (var folderEntry in folders) {
+        if (folderEntry is Directory) {
+          final List<FileSystemEntity> files =
+              await folderEntry.list().toList();
+          if (files.isNotEmpty) {
+            File? firstFile;
+            for (var fileEntry in files) {
+              if (fileEntry is File && fileEntry.path.endsWith('.json')) {
+                firstFile = fileEntry;
+                break;
+              }
+            }
+
+            if (firstFile != null) {
+              final jsonString = await firstFile.readAsString();
+              final jsonMap = jsonDecode(jsonString) as Map<String, dynamic>;
+              final journalNumber =
+                  int.tryParse(jsonMap['recordNumber'] ?? '0') ?? 0;
+
+              if (journalNumber > maxJournalNumber) {
+                maxJournalNumber = journalNumber;
+              }
+            }
+          }
+        }
+      }
+
+      return (maxJournalNumber + 1).toString();
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ خطأ في الحصول على الرقم التسلسلي التالي للاستلام: $e');
+      }
+      return '1';
+    }
   }
 }

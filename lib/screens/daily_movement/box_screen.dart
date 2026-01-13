@@ -27,13 +27,13 @@ class _BoxScreenState extends State<BoxScreen> {
   final BoxStorageService _storageService = BoxStorageService();
 
   // بيانات الحقول
-  String serialNumber = '';
   String dayName = '';
 
   // قائمة لتخزين صفوف الجدول
   List<List<TextEditingController>> rowControllers = [];
   List<List<FocusNode>> rowFocusNodes = [];
   List<String> accountTypeValues = [];
+  List<String> sellerNames = []; // <-- تخزين اسم البائع لكل صف
 
   // متحكمات المجموع
   late TextEditingController totalReceivedController;
@@ -45,24 +45,42 @@ class _BoxScreenState extends State<BoxScreen> {
   // متحكمات للتمرير
   final ScrollController _verticalScrollController = ScrollController();
   final ScrollController _horizontalScrollController = ScrollController();
+  final _scrollController = ScrollController();
 
   // حالة الحفظ
   bool _isSaving = false;
   bool _hasUnsavedChanges = false;
-  String? _recordCreator;
+
+  // التواريخ المتاحة
+  List<Map<String, String>> _availableDates = [];
+  bool _isLoadingDates = false;
+
+  String serialNumber = '';
+  // ignore: unused_field
+  String? _currentJournalNumber;
 
   @override
   void initState() {
     super.initState();
     dayName = _extractDayName(widget.selectedDate);
 
-    // تهيئة متحكمات المجموع
     totalReceivedController = TextEditingController();
     totalPaidController = TextEditingController();
     _resetTotalValues();
 
+    // إخفاء الاقتراحات عند التمرير
+    _verticalScrollController.addListener(() {
+      _hideAllSuggestionsImmediately();
+    });
+
+    _horizontalScrollController.addListener(() {
+      _hideAllSuggestionsImmediately();
+    });
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _createNewRecordAutomatically();
+      _loadOrCreateJournal();
+      _loadAvailableDates();
+      _loadJournalNumber();
     });
   }
 
@@ -87,6 +105,7 @@ class _BoxScreenState extends State<BoxScreen> {
 
     _verticalScrollController.dispose();
     _horizontalScrollController.dispose();
+    _scrollController.dispose();
 
     super.dispose();
   }
@@ -105,31 +124,40 @@ class _BoxScreenState extends State<BoxScreen> {
     return days[now.weekday % 7];
   }
 
-  Future<void> _createNewRecordAutomatically() async {
-    final nextNumber =
-        await _storageService.getNextRecordNumber(widget.selectedDate);
-    if (mounted) {
-      _createNewRecord(nextNumber);
+  // تحميل التواريخ المتاحة
+  Future<void> _loadAvailableDates() async {
+    if (_isLoadingDates) return;
+
+    setState(() {
+      _isLoadingDates = true;
+    });
+
+    try {
+      final dates = await _storageService.getAvailableDatesWithNumbers();
+      setState(() {
+        _availableDates = dates;
+        _isLoadingDates = false;
+      });
+    } catch (e) {
+      setState(() {
+        _availableDates = [];
+        _isLoadingDates = false;
+      });
     }
   }
 
-  void _createNewRecord(String recordNumber) {
-    setState(() {
-      serialNumber = recordNumber;
-      _recordCreator = widget.sellerName;
-      rowControllers.clear();
-      rowFocusNodes.clear();
-      accountTypeValues.clear();
-      _resetTotalValues();
-      _hasUnsavedChanges = false;
-      _addNewRow(); // إضافة الصف الأول
-    });
+  // تحميل اليومية إذا كانت موجودة، أو إنشاء جديدة
+  Future<void> _loadOrCreateJournal() async {
+    final document =
+        await _storageService.loadBoxDocumentForDate(widget.selectedDate);
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (rowFocusNodes.isNotEmpty && rowFocusNodes[0].length > 1) {
-        FocusScope.of(context).requestFocus(rowFocusNodes[0][1]);
-      }
-    });
+    if (document != null && document.transactions.isNotEmpty) {
+      // تحميل اليومية الموجودة
+      _loadJournal(document);
+    } else {
+      // إنشاء يومية جديدة
+      _createNewJournal();
+    }
   }
 
   void _resetTotalValues() {
@@ -137,61 +165,167 @@ class _BoxScreenState extends State<BoxScreen> {
     totalPaidController.text = '0.00';
   }
 
+  void _createNewJournal() {
+    setState(() {
+      rowControllers.clear();
+      rowFocusNodes.clear();
+      accountTypeValues.clear();
+      sellerNames.clear();
+      _resetTotalValues();
+      _hasUnsavedChanges = false;
+      _addNewRow();
+    });
+  }
+
   void _addNewRow() {
     setState(() {
+      final newSerialNumber = (rowControllers.length + 1).toString();
+
       List<TextEditingController> newControllers =
           List.generate(5, (index) => TextEditingController());
 
       List<FocusNode> newFocusNodes = List.generate(5, (index) => FocusNode());
 
-      newControllers[0].text = (rowControllers.length + 1).toString();
+      newControllers[0].text = newSerialNumber;
 
-      // إضافة مستمعين للحقول
-      newControllers[1].addListener(() {
-        _hasUnsavedChanges = true;
-        // إذا كان هناك قيمة في المقبوض، جعل المدفوع غير قابل للكتابة
-        if (newControllers[1].text.isNotEmpty && mounted) {
-          setState(() {
-            newControllers[2].text = '';
-          });
-        }
-        _calculateAllTotals();
-      });
+      // إضافة مستمعات للتغيير
+      _addChangeListenersToControllers(newControllers, rowControllers.length);
 
-      newControllers[2].addListener(() {
-        _hasUnsavedChanges = true;
-        // إذا كان هناك قيمة في المدفوع، جعل المقبوض غير قابل للكتابة
-        if (newControllers[2].text.isNotEmpty && mounted) {
-          setState(() {
-            newControllers[1].text = '';
-          });
-        }
-        _calculateAllTotals();
-      });
-
-      newControllers[3].addListener(() => _hasUnsavedChanges = true);
-      newControllers[4].addListener(() => _hasUnsavedChanges = true);
+      // تخزين اسم البائع للصف الجديد
+      sellerNames.add(widget.sellerName);
 
       rowControllers.add(newControllers);
       rowFocusNodes.add(newFocusNodes);
       accountTypeValues.add('');
     });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (rowFocusNodes.isNotEmpty) {
+        final newRowIndex = rowFocusNodes.length - 1;
+        FocusScope.of(context).requestFocus(rowFocusNodes[newRowIndex][1]);
+      }
+    });
+  }
+
+  // دالة مساعدة لإخفاء جميع الاقتراحات فوراً
+  void _hideAllSuggestionsImmediately() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        setState(() {});
+      }
+    });
+  }
+
+  // دالة مساعدة لإضافة المستمعات
+  void _addChangeListenersToControllers(
+      List<TextEditingController> controllers, int rowIndex) {
+    // حقل المقبوض
+    controllers[1].addListener(() {
+      _hasUnsavedChanges = true;
+      if (controllers[1].text.isNotEmpty) {
+        controllers[2].text = '';
+      }
+      _calculateAllTotals();
+    });
+
+    // حقل المدفوع
+    controllers[2].addListener(() {
+      _hasUnsavedChanges = true;
+      if (controllers[2].text.isNotEmpty) {
+        controllers[1].text = '';
+      }
+      _calculateAllTotals();
+    });
+
+    // حقل اسم الحساب
+    controllers[3].addListener(() => _hasUnsavedChanges = true);
+
+    // حقل الملاحظات
+    controllers[4].addListener(() => _hasUnsavedChanges = true);
   }
 
   void _calculateAllTotals() {
-    setState(() {
-      double totalReceived = 0;
-      double totalPaid = 0;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        setState(() {
+          double totalReceived = 0;
+          double totalPaid = 0;
 
-      for (var controllers in rowControllers) {
-        try {
-          totalReceived += double.tryParse(controllers[1].text) ?? 0;
-          totalPaid += double.tryParse(controllers[2].text) ?? 0;
-        } catch (e) {}
+          for (var controllers in rowControllers) {
+            try {
+              totalReceived += double.tryParse(controllers[1].text) ?? 0;
+              totalPaid += double.tryParse(controllers[2].text) ?? 0;
+            } catch (e) {}
+          }
+
+          totalReceivedController.text = totalReceived.toStringAsFixed(2);
+          totalPaidController.text = totalPaid.toStringAsFixed(2);
+        });
+      }
+    });
+  }
+
+  // تعديل _loadJournal لاستخدام الدالة المساعدة
+  void _loadJournal(BoxDocument document) {
+    setState(() {
+      // تنظيف المتحكمات القديمة
+      for (var row in rowControllers) {
+        for (var controller in row) {
+          controller.dispose();
+        }
+      }
+      for (var row in rowFocusNodes) {
+        for (var node in row) {
+          node.dispose();
+        }
       }
 
-      totalReceivedController.text = totalReceived.toStringAsFixed(2);
-      totalPaidController.text = totalPaid.toStringAsFixed(2);
+      // إعادة تهيئة القوائم
+      rowControllers.clear();
+      rowFocusNodes.clear();
+      accountTypeValues.clear();
+      sellerNames.clear();
+
+      // تحميل السجلات من الوثيقة
+      for (int i = 0; i < document.transactions.length; i++) {
+        var transaction = document.transactions[i];
+
+        List<TextEditingController> newControllers = [
+          TextEditingController(text: transaction.serialNumber),
+          TextEditingController(text: transaction.received),
+          TextEditingController(text: transaction.paid),
+          TextEditingController(text: transaction.accountName),
+          TextEditingController(text: transaction.notes),
+        ];
+
+        List<FocusNode> newFocusNodes =
+            List.generate(5, (index) => FocusNode());
+
+        // تخزين اسم البائع لهذا الصف
+        sellerNames.add(transaction.sellerName);
+
+        // التحقق إذا كان السجل مملوكاً للبائع الحالي
+        final bool isOwnedByCurrentSeller =
+            transaction.sellerName == widget.sellerName;
+
+        // إضافة مستمعات للتغيير فقط إذا كان السجل مملوكاً للبائع الحالي
+        if (isOwnedByCurrentSeller) {
+          _addChangeListenersToControllers(newControllers, i);
+        }
+
+        rowControllers.add(newControllers);
+        rowFocusNodes.add(newFocusNodes);
+        accountTypeValues.add(transaction.accountType);
+      }
+
+      // تحميل المجاميع
+      if (document.totals.isNotEmpty) {
+        totalReceivedController.text =
+            document.totals['totalReceived'] ?? '0.00';
+        totalPaidController.text = document.totals['totalPaid'] ?? '0.00';
+      }
+
+      _hasUnsavedChanges = false;
     });
   }
 
@@ -218,11 +352,11 @@ class _BoxScreenState extends State<BoxScreen> {
   Widget _buildTableHeader() {
     return Table(
       columnWidths: {
-        0: FlexColumnWidth(0.09), // مسلسل
-        1: FlexColumnWidth(0.18), // مقبوض
-        2: FlexColumnWidth(0.18), // مدفوع
-        3: FlexColumnWidth(0.37), // الحساب
-        4: FlexColumnWidth(0.18), // ملاحظات
+        0: FlexColumnWidth(0.09),
+        1: FlexColumnWidth(0.18),
+        2: FlexColumnWidth(0.18),
+        3: FlexColumnWidth(0.37),
+        4: FlexColumnWidth(0.18),
       },
       border: TableBorder.all(color: Colors.grey, width: 0.5),
       children: [
@@ -244,30 +378,35 @@ class _BoxScreenState extends State<BoxScreen> {
     List<TableRow> contentRows = [];
 
     for (int i = 0; i < rowControllers.length; i++) {
+      final bool isOwnedByCurrentSeller = sellerNames[i] == widget.sellerName;
+
       contentRows.add(
         TableRow(
           children: [
-            _buildTableCell(rowControllers[i][0], rowFocusNodes[i][0], i, 0),
-            _buildReceivedCell(rowControllers[i][1], rowFocusNodes[i][1], i, 1),
-            _buildPaidCell(rowControllers[i][2], rowFocusNodes[i][2], i, 2),
-            _buildAccountCell(i, 3),
-            _buildNotesCell(rowControllers[i][4], rowFocusNodes[i][4], i, 4),
+            _buildTableCell(rowControllers[i][0], rowFocusNodes[i][0], i, 0,
+                isOwnedByCurrentSeller),
+            _buildReceivedCell(rowControllers[i][1], rowFocusNodes[i][1], i, 1,
+                isOwnedByCurrentSeller),
+            _buildPaidCell(rowControllers[i][2], rowFocusNodes[i][2], i, 2,
+                isOwnedByCurrentSeller),
+            _buildAccountCell(i, 3, isOwnedByCurrentSeller),
+            _buildNotesCell(rowControllers[i][4], rowFocusNodes[i][4], i, 4,
+                isOwnedByCurrentSeller),
           ],
         ),
       );
     }
 
-    // إضافة صف المجموع (مشابه لـ purchases_screen)
     if (rowControllers.length >= 1) {
       contentRows.add(
         TableRow(
           decoration: BoxDecoration(color: Colors.yellow[50]),
           children: [
-            _buildEmptyCell(), // مسلسل
-            TableComponents.buildTotalCell(totalReceivedController), // مقبوض
-            TableComponents.buildTotalCell(totalPaidController), // مدفوع
-            _buildEmptyCell(), // الحساب
-            _buildEmptyCell(), // ملاحظات
+            _buildEmptyCell(),
+            TableComponents.buildTotalCell(totalReceivedController),
+            TableComponents.buildTotalCell(totalPaidController),
+            _buildEmptyCell(),
+            _buildEmptyCell(),
           ],
         ),
       );
@@ -287,10 +426,10 @@ class _BoxScreenState extends State<BoxScreen> {
   }
 
   Widget _buildTableCell(TextEditingController controller, FocusNode focusNode,
-      int rowIndex, int colIndex) {
+      int rowIndex, int colIndex, bool isOwnedByCurrentSeller) {
     bool isSerialField = colIndex == 0;
 
-    return TableBuilder.buildTableCell(
+    Widget cell = TableBuilder.buildTableCell(
       controller: controller,
       focusNode: focusNode,
       isSerialField: isSerialField,
@@ -304,11 +443,31 @@ class _BoxScreenState extends State<BoxScreen> {
           _handleFieldChanged(value, rIndex, cIndex),
       inputFormatters: null,
     );
+
+    if (!isOwnedByCurrentSeller) {
+      return IgnorePointer(
+        child: Opacity(
+          opacity: 0.7,
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+            ),
+            child: cell,
+          ),
+        ),
+      );
+    }
+
+    return cell;
   }
 
-  Widget _buildReceivedCell(TextEditingController controller,
-      FocusNode focusNode, int rowIndex, int colIndex) {
-    return Container(
+  Widget _buildReceivedCell(
+      TextEditingController controller,
+      FocusNode focusNode,
+      int rowIndex,
+      int colIndex,
+      bool isOwnedByCurrentSeller) {
+    Widget cell = Container(
       padding: const EdgeInsets.all(1),
       constraints: const BoxConstraints(minHeight: 25),
       child: TextField(
@@ -316,9 +475,8 @@ class _BoxScreenState extends State<BoxScreen> {
         focusNode: focusNode,
         textAlign: TextAlign.center,
         keyboardType: TextInputType.number,
-        enabled: rowControllers[rowIndex][2]
-            .text
-            .isEmpty, // غير قابل للكتابة إذا كان المدفوع به قيمة
+        enabled:
+            isOwnedByCurrentSeller && rowControllers[rowIndex][2].text.isEmpty,
         style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w600,
@@ -336,16 +494,13 @@ class _BoxScreenState extends State<BoxScreen> {
         ],
         onSubmitted: (value) {
           if (value.isNotEmpty) {
-            // إذا كتب في المقبوض، انتقل مباشرة إلى الحساب
             _showAccountTypeDialog(rowIndex);
           } else {
-            // إذا كان فارغاً، انتقل إلى المدفوع
             FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][2]);
           }
         },
         onChanged: (value) {
           _hasUnsavedChanges = true;
-          // منع الكتابة في المدفوع إذا كان المقبوض به قيمة
           if (value.isNotEmpty && mounted) {
             setState(() {
               rowControllers[rowIndex][2].text = '';
@@ -355,11 +510,27 @@ class _BoxScreenState extends State<BoxScreen> {
         },
       ),
     );
+
+    if (!isOwnedByCurrentSeller) {
+      return IgnorePointer(
+        child: Opacity(
+          opacity: 0.7,
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+            ),
+            child: cell,
+          ),
+        ),
+      );
+    }
+
+    return cell;
   }
 
   Widget _buildPaidCell(TextEditingController controller, FocusNode focusNode,
-      int rowIndex, int colIndex) {
-    return Container(
+      int rowIndex, int colIndex, bool isOwnedByCurrentSeller) {
+    Widget cell = Container(
       padding: const EdgeInsets.all(1),
       constraints: const BoxConstraints(minHeight: 25),
       child: TextField(
@@ -367,9 +538,8 @@ class _BoxScreenState extends State<BoxScreen> {
         focusNode: focusNode,
         textAlign: TextAlign.center,
         keyboardType: TextInputType.number,
-        enabled: rowControllers[rowIndex][1]
-            .text
-            .isEmpty, // غير قابل للكتابة إذا كان المقبوض به قيمة
+        enabled:
+            isOwnedByCurrentSeller && rowControllers[rowIndex][1].text.isEmpty,
         style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w600,
@@ -390,7 +560,6 @@ class _BoxScreenState extends State<BoxScreen> {
         },
         onChanged: (value) {
           _hasUnsavedChanges = true;
-          // منع الكتابة في المقبوض إذا كان المدفوع به قيمة
           if (value.isNotEmpty && mounted) {
             setState(() {
               rowControllers[rowIndex][1].text = '';
@@ -400,29 +569,46 @@ class _BoxScreenState extends State<BoxScreen> {
         },
       ),
     );
+
+    if (!isOwnedByCurrentSeller) {
+      return IgnorePointer(
+        child: Opacity(
+          opacity: 0.7,
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+            ),
+            child: cell,
+          ),
+        ),
+      );
+    }
+
+    return cell;
   }
 
-  Widget _buildAccountCell(int rowIndex, int colIndex) {
+  Widget _buildAccountCell(
+      int rowIndex, int colIndex, bool isOwnedByCurrentSeller) {
     final String accountType = accountTypeValues[rowIndex];
     final TextEditingController accountNameController =
         rowControllers[rowIndex][3];
     final FocusNode accountNameFocusNode = rowFocusNodes[rowIndex][3];
 
-    // إذا كان نوع الحساب محدداً، نعرض حقل كتابة
     if (accountType.isNotEmpty) {
-      return Container(
+      Widget cell = Container(
         padding: const EdgeInsets.all(1),
         constraints: const BoxConstraints(minHeight: 25),
         child: Row(
           children: [
-            // زر الاختيار (مشابه لـ purchases_screen)
             Expanded(
               flex: 2,
               child: InkWell(
-                onTap: () {
-                  _showAccountTypeDialog(rowIndex);
-                  _scrollToField(rowIndex, colIndex);
-                },
+                onTap: isOwnedByCurrentSeller
+                    ? () {
+                        _showAccountTypeDialog(rowIndex);
+                        _scrollToField(rowIndex, colIndex);
+                      }
+                    : null,
                 child: Container(
                   decoration: BoxDecoration(
                     border: Border.all(
@@ -450,13 +636,13 @@ class _BoxScreenState extends State<BoxScreen> {
               ),
             ),
             const SizedBox(width: 4),
-            // حقل كتابة اسم الحساب (لجميع الخيارات)
             Expanded(
               flex: 5,
               child: TextField(
                 controller: accountNameController,
                 focusNode: accountNameFocusNode,
                 textAlign: TextAlign.right,
+                enabled: isOwnedByCurrentSeller,
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
@@ -475,12 +661,15 @@ class _BoxScreenState extends State<BoxScreen> {
                   ),
                 ),
                 onSubmitted: (value) {
-                  // عند الانتهاء من الكتابة، انتقل إلى الملاحظات
-                  FocusScope.of(context)
-                      .requestFocus(rowFocusNodes[rowIndex][4]);
+                  if (isOwnedByCurrentSeller) {
+                    FocusScope.of(context)
+                        .requestFocus(rowFocusNodes[rowIndex][4]);
+                  }
                 },
                 onChanged: (value) {
-                  _hasUnsavedChanges = true;
+                  if (isOwnedByCurrentSeller) {
+                    _hasUnsavedChanges = true;
+                  }
                 },
                 onTap: () {
                   _scrollToField(rowIndex, colIndex);
@@ -490,17 +679,34 @@ class _BoxScreenState extends State<BoxScreen> {
           ],
         ),
       );
+
+      if (!isOwnedByCurrentSeller) {
+        return IgnorePointer(
+          child: Opacity(
+            opacity: 0.7,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+              ),
+              child: cell,
+            ),
+          ),
+        );
+      }
+
+      return cell;
     }
 
-    // إذا لم يتم تحديد نوع الحساب بعد، نعرض خلية اختيار فقط
-    return Container(
+    Widget cell = Container(
       padding: const EdgeInsets.all(1),
       constraints: const BoxConstraints(minHeight: 25),
       child: InkWell(
-        onTap: () {
-          _showAccountTypeDialog(rowIndex);
-          _scrollToField(rowIndex, colIndex);
-        },
+        onTap: isOwnedByCurrentSeller
+            ? () {
+                _showAccountTypeDialog(rowIndex);
+                _scrollToField(rowIndex, colIndex);
+              }
+            : null,
         child: Container(
           decoration: BoxDecoration(
             border: Border.all(color: Colors.grey[300]!),
@@ -533,6 +739,22 @@ class _BoxScreenState extends State<BoxScreen> {
         ),
       ),
     );
+
+    if (!isOwnedByCurrentSeller) {
+      return IgnorePointer(
+        child: Opacity(
+          opacity: 0.7,
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+            ),
+            child: cell,
+          ),
+        ),
+      );
+    }
+
+    return cell;
   }
 
   Widget _buildEmptyCell() {
@@ -552,14 +774,15 @@ class _BoxScreenState extends State<BoxScreen> {
   }
 
   Widget _buildNotesCell(TextEditingController controller, FocusNode focusNode,
-      int rowIndex, int colIndex) {
-    return Container(
+      int rowIndex, int colIndex, bool isOwnedByCurrentSeller) {
+    Widget cell = Container(
       padding: const EdgeInsets.all(1),
       constraints: const BoxConstraints(minHeight: 25),
       child: TextField(
         controller: controller,
         focusNode: focusNode,
         textAlign: TextAlign.center,
+        enabled: isOwnedByCurrentSeller,
         style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w600,
@@ -572,17 +795,38 @@ class _BoxScreenState extends State<BoxScreen> {
           hintText: '...',
         ),
         onSubmitted: (value) {
-          _addNewRow();
-          if (rowControllers.isNotEmpty) {
-            final newRowIndex = rowControllers.length - 1;
-            FocusScope.of(context).requestFocus(rowFocusNodes[newRowIndex][1]);
+          if (isOwnedByCurrentSeller) {
+            _addNewRow();
+            if (rowControllers.isNotEmpty) {
+              final newRowIndex = rowControllers.length - 1;
+              FocusScope.of(context)
+                  .requestFocus(rowFocusNodes[newRowIndex][1]);
+            }
           }
         },
         onChanged: (value) {
-          _hasUnsavedChanges = true;
+          if (isOwnedByCurrentSeller) {
+            _hasUnsavedChanges = true;
+          }
         },
       ),
     );
+
+    if (!isOwnedByCurrentSeller) {
+      return IgnorePointer(
+        child: Opacity(
+          opacity: 0.7,
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+            ),
+            child: cell,
+          ),
+        ),
+      );
+    }
+
+    return cell;
   }
 
   Color _getAccountTypeColor(String accountType) {
@@ -612,6 +856,10 @@ class _BoxScreenState extends State<BoxScreen> {
   }
 
   void _handleFieldSubmitted(String value, int rowIndex, int colIndex) {
+    if (!_isRowOwnedByCurrentSeller(rowIndex)) {
+      return;
+    }
+
     if (colIndex == 0) {
       FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][1]);
     } else if (colIndex == 1) {
@@ -634,6 +882,10 @@ class _BoxScreenState extends State<BoxScreen> {
   }
 
   void _handleFieldChanged(String value, int rowIndex, int colIndex) {
+    if (!_isRowOwnedByCurrentSeller(rowIndex)) {
+      return;
+    }
+
     setState(() {
       _hasUnsavedChanges = true;
 
@@ -643,7 +895,6 @@ class _BoxScreenState extends State<BoxScreen> {
         }
       }
 
-      // التحقق من عدم السماح بالكتابة في كلا الحقلين (المقبوض والمدفوع)
       if (colIndex == 1 && value.isNotEmpty) {
         rowControllers[rowIndex][2].text = '';
         _calculateAllTotals();
@@ -651,14 +902,14 @@ class _BoxScreenState extends State<BoxScreen> {
         rowControllers[rowIndex][1].text = '';
         _calculateAllTotals();
       }
-
-      if (colIndex == 3) {
-        _hasUnsavedChanges = true;
-      }
     });
   }
 
   void _showAccountTypeDialog(int rowIndex) {
+    if (!_isRowOwnedByCurrentSeller(rowIndex)) {
+      return;
+    }
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -673,8 +924,8 @@ class _BoxScreenState extends State<BoxScreen> {
             width: double.maxFinite,
             child: Wrap(
               alignment: WrapAlignment.center,
-              spacing: 8.0, // المسافة الأفقية بين العناصر
-              runSpacing: 8.0, // المسافة العمودية بين الأسطر
+              spacing: 8.0,
+              runSpacing: 8.0,
               children: accountTypeOptions.map((option) {
                 return ChoiceChip(
                   label: Text(option),
@@ -710,7 +961,6 @@ class _BoxScreenState extends State<BoxScreen> {
       accountTypeValues[rowIndex] = value;
       _hasUnsavedChanges = true;
 
-      // إذا تم اختيار نوع الحساب، ركز على حقل اسم الحساب للكتابة
       if (value.isNotEmpty) {
         Future.delayed(const Duration(milliseconds: 150), () {
           if (mounted) {
@@ -723,12 +973,17 @@ class _BoxScreenState extends State<BoxScreen> {
   }
 
   void _onAccountTypeCancelled(int rowIndex) {
-    // إذا تم الإلغاء، نرجع التركيز إلى حقل المقبوض/المدفوع
     if (rowControllers[rowIndex][1].text.isNotEmpty) {
       FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][1]);
     } else if (rowControllers[rowIndex][2].text.isNotEmpty) {
       FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][2]);
     }
+  }
+
+  // التحقق إذا كان السجل مملوكاً للبائع الحالي
+  bool _isRowOwnedByCurrentSeller(int rowIndex) {
+    if (rowIndex >= sellerNames.length) return false;
+    return sellerNames[rowIndex] == widget.sellerName;
   }
 
   @override
@@ -793,20 +1048,106 @@ class _BoxScreenState extends State<BoxScreen> {
                 ? null
                 : () {
                     _saveCurrentRecord();
-                    setState(() => _hasUnsavedChanges = false);
                   },
           ),
-          IconButton(
-            icon: const Icon(Icons.folder_open),
-            tooltip: 'فتح يومية',
-            onPressed: () async {
-              await _saveCurrentRecord(silent: true);
-              await _showRecordSelectionDialog();
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.calendar_today),
+            tooltip: 'فتح يومية سابقة',
+            onSelected: (selectedDate) async {
+              if (selectedDate != widget.selectedDate) {
+                if (_hasUnsavedChanges) {
+                  final shouldSave = await _showUnsavedChangesDialog();
+                  if (shouldSave) {
+                    await _saveCurrentRecord(silent: true);
+                  }
+                }
+
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => BoxScreen(
+                      sellerName: widget.sellerName,
+                      selectedDate: selectedDate,
+                      storeName: widget.storeName,
+                    ),
+                  ),
+                );
+              }
+            },
+            itemBuilder: (BuildContext context) {
+              List<PopupMenuEntry<String>> items = [];
+
+              if (_isLoadingDates) {
+                items.add(
+                  const PopupMenuItem<String>(
+                    value: '',
+                    enabled: false,
+                    child: Text('جاري التحميل...'),
+                  ),
+                );
+              } else if (_availableDates.isEmpty) {
+                items.add(
+                  const PopupMenuItem<String>(
+                    value: '',
+                    enabled: false,
+                    child: Text('لا توجد يوميات سابقة'),
+                  ),
+                );
+              } else {
+                items.add(
+                  const PopupMenuItem<String>(
+                    value: '',
+                    enabled: false,
+                    child: Text(
+                      'اليوميات المتاحة',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                );
+                items.add(const PopupMenuDivider());
+
+                for (var dateInfo in _availableDates) {
+                  final date = dateInfo['date']!;
+                  final journalNumber = dateInfo['journalNumber']!;
+
+                  items.add(
+                    PopupMenuItem<String>(
+                      value: date,
+                      child: Text(
+                        'يومية رقم $journalNumber - تاريخ $date',
+                        style: TextStyle(
+                          fontWeight: date == widget.selectedDate
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                          color: date == widget.selectedDate
+                              ? Colors.blue
+                              : Colors.black,
+                        ),
+                      ),
+                    ),
+                  );
+                }
+              }
+
+              return items;
             },
           ),
         ],
       ),
       body: _buildTableWithStickyHeader(),
+      floatingActionButton: _buildFloatingActionButton(),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+    );
+  }
+
+  Widget _buildFloatingActionButton() {
+    return FloatingActionButton(
+      onPressed: _addNewRow,
+      backgroundColor: Colors.blue[700],
+      foregroundColor: Colors.white,
+      child: const Icon(Icons.add),
+      tooltip: 'إضافة سجل جديد',
+      heroTag: 'box_fab',
     );
   }
 
@@ -854,43 +1195,6 @@ class _BoxScreenState extends State<BoxScreen> {
   Future<void> _saveCurrentRecord({bool silent = false}) async {
     if (_isSaving) return;
 
-    if (_recordCreator != null && _recordCreator != widget.sellerName) {
-      if (!silent && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('هذا السجل ليس سجلك، لا يمكنك التعديل عليه'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
-      return;
-    }
-
-    // التحقق من أن السجل غير فارغ
-    bool isEmptyRecord = true;
-    for (var controllers in rowControllers) {
-      if (controllers[1].text.isNotEmpty ||
-          controllers[2].text.isNotEmpty ||
-          (controllers[3].text.isNotEmpty &&
-              accountTypeValues[rowControllers.indexOf(controllers)]
-                  .isNotEmpty)) {
-        isEmptyRecord = false;
-        break;
-      }
-    }
-
-    if (isEmptyRecord) {
-      if (!silent && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('لا يمكن حفظ سجل فارغ'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-      return;
-    }
-
     if (rowControllers.isEmpty) {
       if (!silent && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -903,46 +1207,70 @@ class _BoxScreenState extends State<BoxScreen> {
       return;
     }
 
-    setState(() => _isSaving = true);
-    final transactionsList = <BoxTransaction>[];
+    final currentSellerTransactions = <BoxTransaction>[];
     for (int i = 0; i < rowControllers.length; i++) {
       final controllers = rowControllers[i];
-      transactionsList.add(BoxTransaction(
-        serialNumber: controllers[0].text,
-        received: controllers[1].text,
-        paid: controllers[2].text,
-        accountType: accountTypeValues[i],
-        accountName: controllers[3].text,
-        notes: controllers[4].text,
-        sellerName: widget.sellerName, // إضافة اسم البائع لكل سجل
-      ));
+
+      if (controllers[1].text.isNotEmpty ||
+          controllers[2].text.isNotEmpty ||
+          (controllers[3].text.isNotEmpty && accountTypeValues[i].isNotEmpty)) {
+        currentSellerTransactions.add(BoxTransaction(
+          serialNumber: controllers[0].text,
+          received: controllers[1].text,
+          paid: controllers[2].text,
+          accountType: accountTypeValues[i],
+          accountName: controllers[3].text,
+          notes: controllers[4].text,
+          sellerName: sellerNames[i],
+        ));
+      }
     }
 
-    // حساب المجاميع
-    double totalReceived = 0;
-    double totalPaid = 0;
-    for (var transaction in transactionsList) {
-      totalReceived += double.tryParse(transaction.received) ?? 0;
-      totalPaid += double.tryParse(transaction.paid) ?? 0;
+    if (currentSellerTransactions.isEmpty) {
+      if (!silent && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('لا توجد سجلات مضافة للحفظ'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
+    setState(() => _isSaving = true);
+
+    String journalNumber = serialNumber;
+    if (journalNumber.isEmpty || journalNumber == '1') {
+      final document =
+          await _storageService.loadBoxDocumentForDate(widget.selectedDate);
+      if (document == null) {
+        journalNumber = await _storageService.getNextJournalNumber();
+      } else {
+        journalNumber = document.recordNumber;
+      }
     }
 
     final document = BoxDocument(
-      recordNumber: serialNumber,
+      recordNumber: journalNumber,
       date: widget.selectedDate,
       sellerName: widget.sellerName,
       storeName: widget.storeName,
       dayName: dayName,
-      transactions: transactionsList,
+      transactions: currentSellerTransactions,
       totals: {
-        'totalReceived': totalReceived.toStringAsFixed(2),
-        'totalPaid': totalPaid.toStringAsFixed(2),
+        'totalReceived': totalReceivedController.text,
+        'totalPaid': totalPaidController.text,
       },
     );
 
     final success = await _storageService.saveBoxDocument(document);
 
     if (success) {
-      setState(() => _hasUnsavedChanges = false);
+      setState(() {
+        _hasUnsavedChanges = false;
+        serialNumber = journalNumber;
+      });
     }
 
     setState(() => _isSaving = false);
@@ -957,119 +1285,14 @@ class _BoxScreenState extends State<BoxScreen> {
     }
   }
 
-  // باقي الدوال (_showRecordSelectionDialog, _shareFile, _loadRecord) تبقى كما هي
-  // ... (نفس الدوال الموجودة في الكود الأصلي)
-
-  Future<void> _showRecordSelectionDialog() async {
-    final availableRecords =
-        await _storageService.getAvailableRecords(widget.selectedDate);
-
-    if (!mounted) return;
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text(
-            'يومية سابقة',
-            style: TextStyle(fontWeight: FontWeight.bold),
-            textAlign: TextAlign.center,
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (availableRecords.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.all(16.0),
-                    child: Text(
-                      'لا توجد يومية محفوظة لهذا التاريخ',
-                      style: TextStyle(color: Colors.grey),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                if (availableRecords.isNotEmpty)
-                  ...availableRecords.map((recordNum) {
-                    return Card(
-                      elevation: 2,
-                      margin: const EdgeInsets.symmetric(vertical: 4),
-                      child: ListTile(
-                        leading:
-                            const Icon(Icons.description, color: Colors.blue),
-                        title: Text(
-                          'اليومية رقم $recordNum',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.delete, color: Colors.red),
-                              onPressed: () async {
-                                final confirm = await CommonDialogs
-                                    .showDeleteConfirmationDialog(
-                                  context: context,
-                                  recordNumber: recordNum,
-                                );
-
-                                if (confirm == true) {
-                                  await _storageService.deleteBoxDocument(
-                                    widget.selectedDate,
-                                    recordNum,
-                                  );
-                                  Navigator.pop(context);
-                                  await _showRecordSelectionDialog();
-                                }
-                              },
-                            ),
-                          ],
-                        ),
-                        onTap: () async {
-                          Navigator.of(context).pop();
-                          await _loadRecord(recordNum);
-                        },
-                      ),
-                    );
-                  }).toList(),
-                const Divider(),
-                ElevatedButton.icon(
-                  onPressed: () async {
-                    final nextNumber = await _storageService
-                        .getNextRecordNumber(widget.selectedDate);
-                    if (mounted) {
-                      Navigator.of(context).pop();
-                      _createNewRecord(nextNumber);
-                    }
-                  },
-                  icon: const Icon(Icons.add_circle_outline),
-                  label: const Text('يومية قديمة'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green[600],
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 24, vertical: 12),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
   Future<void> _shareFile() async {
-    final filePath = await _storageService.getFilePath(
-      widget.selectedDate,
-      serialNumber,
-    );
+    final filePath = await _storageService.getFilePath(widget.selectedDate);
 
     if (filePath == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('الرجاء حفظ السجل أولاً'),
+            content: Text('الرجاء حفظ اليومية أولاً'),
             backgroundColor: Colors.orange,
           ),
         );
@@ -1085,92 +1308,45 @@ class _BoxScreenState extends State<BoxScreen> {
     }
   }
 
-  Future<void> _loadRecord(String recordNumber) async {
-    final document = await _storageService.loadBoxDocument(
-      widget.selectedDate,
-      recordNumber,
-    );
-
-    if (document == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('فشل تحميل السجل'),
-            backgroundColor: Colors.red,
+  Future<bool> _showUnsavedChangesDialog() async {
+    return await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            title: const Text('تغييرات غير محفوظة'),
+            content: const Text(
+              'هناك تغييرات غير محفوظة. هل تريد حفظها قبل الانتقال؟',
+              textAlign: TextAlign.center,
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('تجاهل'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('حفظ'),
+              ),
+            ],
           ),
-        );
-      }
-      return;
+        ) ??
+        false;
+  }
+
+  Future<void> _loadJournalNumber() async {
+    try {
+      final journalNumber =
+          await _storageService.getJournalNumberForDate(widget.selectedDate);
+      setState(() {
+        serialNumber = journalNumber;
+        _currentJournalNumber = journalNumber;
+      });
+    } catch (e) {
+      setState(() {
+        serialNumber = '1';
+        _currentJournalNumber = '1';
+      });
     }
-
-    setState(() {
-      serialNumber = recordNumber;
-      _recordCreator = document.sellerName;
-
-      for (var row in rowControllers) {
-        for (var controller in row) {
-          controller.dispose();
-        }
-      }
-      for (var row in rowFocusNodes) {
-        for (var node in row) {
-          node.dispose();
-        }
-      }
-
-      rowControllers.clear();
-      rowFocusNodes.clear();
-      accountTypeValues.clear();
-
-      for (var transaction in document.transactions) {
-        // التحقق من ما إذا كان البائع الحالي هو صاحب السجل
-        bool canEdit = transaction.sellerName == widget.sellerName;
-
-        List<TextEditingController> newControllers = [
-          TextEditingController(text: transaction.serialNumber),
-          TextEditingController(text: transaction.received),
-          TextEditingController(text: transaction.paid),
-          TextEditingController(text: transaction.accountName),
-          TextEditingController(text: transaction.notes),
-        ];
-
-        List<FocusNode> newFocusNodes =
-            List.generate(5, (index) => FocusNode());
-
-        if (canEdit) {
-          newControllers[1].addListener(() {
-            _hasUnsavedChanges = true;
-            if (newControllers[1].text.isNotEmpty) {
-              newControllers[2].text = '';
-            }
-            _calculateAllTotals();
-          });
-
-          newControllers[2].addListener(() {
-            _hasUnsavedChanges = true;
-            if (newControllers[2].text.isNotEmpty) {
-              newControllers[1].text = '';
-            }
-            _calculateAllTotals();
-          });
-
-          newControllers[3].addListener(() => _hasUnsavedChanges = true);
-          newControllers[4].addListener(() => _hasUnsavedChanges = true);
-        }
-
-        rowControllers.add(newControllers);
-        rowFocusNodes.add(newFocusNodes);
-        accountTypeValues.add(transaction.accountType);
-      }
-
-      // إذا لم يكن هناك صفوف، أضف صفاً واحداً
-      if (rowControllers.isEmpty) {
-        _addNewRow();
-      }
-
-      _calculateAllTotals();
-      _hasUnsavedChanges = false;
-    });
   }
 }
 

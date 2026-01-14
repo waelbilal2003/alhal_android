@@ -473,18 +473,21 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                 hint: Text(
                   'اختر اسم البائع',
                   style: TextStyle(color: Colors.white70),
-                  textAlign: TextAlign.center,
+                  textAlign: TextAlign.center, // هنا
                 ),
                 items: _sellersList.map((seller) {
                   return DropdownMenuItem<String>(
                     value: seller,
-                    child: Text(
-                      seller,
-                      style: TextStyle(
-                        color: Colors.teal[700],
-                        fontSize: 16,
+                    child: Container(
+                      width: double.infinity,
+                      child: Text(
+                        seller,
+                        textAlign: TextAlign.center, // هنا
+                        style: TextStyle(
+                          color: Colors.teal[700],
+                          fontSize: 16,
+                        ),
                       ),
-                      textAlign: TextAlign.center,
                     ),
                   );
                 }).toList(),
@@ -498,12 +501,17 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: Colors.white, width: 2),
+                    borderSide: BorderSide(color: Colors.white, width: 0.5),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 16,
                   ),
                 ),
                 dropdownColor: Colors.white,
                 icon: Icon(Icons.arrow_drop_down, color: Colors.white),
                 style: TextStyle(color: Colors.teal[700], fontSize: 16),
+                isExpanded: true, // إضافة هذا لتمديد العرض
               ),
             ),
             const SizedBox(height: 20),

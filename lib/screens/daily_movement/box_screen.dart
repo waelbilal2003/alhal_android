@@ -6,6 +6,7 @@ import '../../widgets/table_builder.dart' as TableBuilder;
 import '../../widgets/table_components.dart' as TableComponents;
 import '../../widgets/common_dialogs.dart' as CommonDialogs;
 import '../../services/customer_index_service.dart';
+import '../../services/supplier_index_service.dart';
 
 class BoxScreen extends StatefulWidget {
   final String sellerName;
@@ -67,7 +68,15 @@ class _BoxScreenState extends State<BoxScreen> {
   String serialNumber = '';
   // ignore: unused_field
   String? _currentJournalNumber;
+  // خدمة فهرس الموردين
+  final SupplierIndexService _supplierIndexService = SupplierIndexService();
 
+  List<String> _supplierSuggestions = [];
+
+  int? _activeSupplierRowIndex;
+
+  final ScrollController _supplierSuggestionsScrollController =
+      ScrollController();
   @override
   void initState() {
     super.initState();
@@ -76,6 +85,9 @@ class _BoxScreenState extends State<BoxScreen> {
     totalReceivedController = TextEditingController();
     totalPaidController = TextEditingController();
     _resetTotalValues();
+
+    // إضافة مستمعات FocusNode لحقول الاقتراحات
+    _addFocusNodeListeners();
 
     // إخفاء الاقتراحات عند التمرير
     _verticalScrollController.addListener(() {
@@ -198,6 +210,23 @@ class _BoxScreenState extends State<BoxScreen> {
 
       newControllers[0].text = newSerialNumber;
 
+      // إضافة مستمع FocusNode لحقل اسم الحساب
+      newFocusNodes[3].addListener(() {
+        if (!newFocusNodes[3].hasFocus) {
+          // إخفاء الاقتراحات عند فقدان التركيز
+          Future.delayed(const Duration(milliseconds: 100), () {
+            if (mounted) {
+              setState(() {
+                _supplierSuggestions = [];
+                _activeSupplierRowIndex = null;
+                _customerSuggestions = [];
+                _activeCustomerRowIndex = null;
+              });
+            }
+          });
+        }
+      });
+
       // إضافة مستمعات للتغيير
       _addChangeListenersToControllers(newControllers, rowControllers.length);
 
@@ -221,9 +250,12 @@ class _BoxScreenState extends State<BoxScreen> {
   void _hideAllSuggestionsImmediately() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        setState(() {});
-        _customerSuggestions = [];
-        _activeCustomerRowIndex = null;
+        setState(() {
+          _customerSuggestions = [];
+          _supplierSuggestions = [];
+          _activeCustomerRowIndex = null;
+          _activeSupplierRowIndex = null;
+        });
       }
     });
   }
@@ -252,13 +284,49 @@ class _BoxScreenState extends State<BoxScreen> {
     // حقل اسم الحساب (الحقل رقم 3)
     controllers[3].addListener(() {
       _hasUnsavedChanges = true;
+
+      // فقط تحديث الاقتراحات بناءً على نوع الحساب
       if (accountTypeValues[rowIndex] == 'زبون') {
         _updateCustomerSuggestions(rowIndex);
+      } else if (accountTypeValues[rowIndex] == 'مورد') {
+        _updateSupplierSuggestions(rowIndex);
+      } else {
+        // إذا كان نوع الحساب "مصروف" أو أي شيء آخر
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            setState(() {
+              _customerSuggestions = [];
+              _supplierSuggestions = [];
+              _activeCustomerRowIndex = null;
+              _activeSupplierRowIndex = null;
+            });
+          }
+        });
       }
     });
 
     // حقل الملاحظات
     controllers[4].addListener(() => _hasUnsavedChanges = true);
+
+    // إضافة مستمع FocusNode لحقل اسم الحساب (الحقل 3) فقط لإخفاء الاقتراحات عند فقدان التركيز
+    if (rowIndex < rowFocusNodes.length && rowFocusNodes[rowIndex].length > 3) {
+      rowFocusNodes[rowIndex][3].addListener(() {
+        if (!rowFocusNodes[rowIndex][3].hasFocus) {
+          // إخفاء الاقتراحات بعد تأخير بسيط
+          Future.delayed(const Duration(milliseconds: 100), () {
+            if (mounted) {
+              setState(() {
+                // إخفاء الاقتراحات فقط
+                _customerSuggestions = [];
+                _supplierSuggestions = [];
+                _activeCustomerRowIndex = null;
+                _activeSupplierRowIndex = null;
+              });
+            }
+          });
+        }
+      });
+    }
   }
 
   void _calculateAllTotals() {
@@ -604,6 +672,7 @@ class _BoxScreenState extends State<BoxScreen> {
     return cell;
   }
 
+  // تحديث خلية الحساب لدعم كلا النوعين
   Widget _buildAccountCell(
       int rowIndex, int colIndex, bool isOwnedByCurrentSeller) {
     final String accountType = accountTypeValues[rowIndex];
@@ -681,18 +750,19 @@ class _BoxScreenState extends State<BoxScreen> {
                     ),
                     onSubmitted: (value) {
                       if (isOwnedByCurrentSeller) {
-                        if (value.trim().isNotEmpty &&
-                            value.trim().length > 1 &&
-                            accountType == 'زبون') {
-                          _saveCustomerToIndex(value);
-                        }
-                        FocusScope.of(context)
-                            .requestFocus(rowFocusNodes[rowIndex][4]);
+                        // تمرير العملية إلى handleFieldSubmitted
+                        _handleFieldSubmitted(value, rowIndex, colIndex);
                       }
                     },
                     onChanged: (value) {
                       if (isOwnedByCurrentSeller) {
                         _hasUnsavedChanges = true;
+                        // تحديث الاقتراحات بناءً على نوع الحساب
+                        if (accountType == 'زبون') {
+                          _updateCustomerSuggestions(rowIndex);
+                        } else if (accountType == 'مورد') {
+                          _updateSupplierSuggestions(rowIndex);
+                        }
                       }
                     },
                     onTap: () {
@@ -703,6 +773,7 @@ class _BoxScreenState extends State<BoxScreen> {
               ],
             ),
           ),
+          // اقتراحات الزبائن
           if (_activeCustomerRowIndex == rowIndex &&
               _customerSuggestions.isNotEmpty &&
               accountType == 'زبون')
@@ -711,6 +782,16 @@ class _BoxScreenState extends State<BoxScreen> {
               left: 0,
               right: 0,
               child: _buildHorizontalCustomerSuggestions(rowIndex),
+            ),
+          // اقتراحات الموردين
+          if (_activeSupplierRowIndex == rowIndex &&
+              _supplierSuggestions.isNotEmpty &&
+              accountType == 'مورد')
+            Positioned(
+              top: 25,
+              left: 0,
+              right: 0,
+              child: _buildHorizontalSupplierSuggestions(rowIndex),
             ),
         ],
       );
@@ -913,10 +994,19 @@ class _BoxScreenState extends State<BoxScreen> {
         return;
       }
 
-      if (value.trim().isNotEmpty &&
-          value.trim().length > 1 &&
-          accountTypeValues[rowIndex] == 'زبون') {
-        _saveCustomerToIndex(value);
+      // إذا كان نوع الحساب مورد وكانت هناك اقتراحات
+      if (accountTypeValues[rowIndex] == 'مورد' &&
+          _supplierSuggestions.isNotEmpty) {
+        _selectSupplierSuggestion(_supplierSuggestions[0], rowIndex);
+        return;
+      }
+
+      if (value.trim().isNotEmpty && value.trim().length > 1) {
+        if (accountTypeValues[rowIndex] == 'زبون') {
+          _saveCustomerToIndex(value);
+        } else if (accountTypeValues[rowIndex] == 'مورد') {
+          _saveSupplierToIndex(value);
+        }
       }
 
       FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][4]);
@@ -1008,6 +1098,12 @@ class _BoxScreenState extends State<BoxScreen> {
     setState(() {
       accountTypeValues[rowIndex] = value;
       _hasUnsavedChanges = true;
+
+      // إخفاء الاقتراحات عند تغيير نوع الحساب
+      _customerSuggestions = [];
+      _supplierSuggestions = [];
+      _activeCustomerRowIndex = null;
+      _activeSupplierRowIndex = null;
 
       if (value.isNotEmpty) {
         Future.delayed(const Duration(milliseconds: 150), () {
@@ -1407,7 +1503,6 @@ class _BoxScreenState extends State<BoxScreen> {
         _activeCustomerRowIndex = rowIndex;
       });
     } else {
-      // إخفاء الاقتراحات إذا كان الحقل فارغاً أو نوع الحساب ليس زبون
       setState(() {
         _customerSuggestions = [];
         _activeCustomerRowIndex = null;
@@ -1415,9 +1510,31 @@ class _BoxScreenState extends State<BoxScreen> {
     }
   }
 
-// اختيار اقتراح للزبون
+// تحديث اقتراحات الموردين
+  void _updateSupplierSuggestions(int rowIndex) async {
+    final query = rowControllers[rowIndex][3].text;
+    if (query.length >= 1 && accountTypeValues[rowIndex] == 'مورد') {
+      final suggestions = await _supplierIndexService.getSuggestions(query);
+      setState(() {
+        _supplierSuggestions = suggestions;
+        _activeSupplierRowIndex = rowIndex;
+      });
+    } else {
+      // إخفاء الاقتراحات إذا كان الحقل فارغاً أو نوع الحساب ليس مورد
+      setState(() {
+        _supplierSuggestions = [];
+        _activeSupplierRowIndex = null;
+      });
+    }
+  }
+
+  // اختيار اقتراح للزبون
   void _selectCustomerSuggestion(String suggestion, int rowIndex) {
-    _hideAllSuggestionsImmediately();
+    setState(() {
+      _customerSuggestions = [];
+      _activeCustomerRowIndex = null;
+    });
+
     rowControllers[rowIndex][3].text = suggestion;
     _hasUnsavedChanges = true;
 
@@ -1432,11 +1549,47 @@ class _BoxScreenState extends State<BoxScreen> {
     });
   }
 
+  // اختيار اقتراح للمورد
+  void _selectSupplierSuggestion(String suggestion, int rowIndex) {
+    // إخفاء الاقتراحات فوراً
+    setState(() {
+      _supplierSuggestions = [];
+      _activeSupplierRowIndex = null;
+    });
+
+    rowControllers[rowIndex][3].text = suggestion;
+    _hasUnsavedChanges = true;
+
+    if (suggestion.trim().length > 1) {
+      _saveSupplierToIndex(suggestion);
+    }
+
+    Future.delayed(const Duration(milliseconds: 50), () {
+      if (mounted) {
+        // إخفاء باقي الاقتراحات أيضاً
+        setState(() {
+          _customerSuggestions = [];
+          _activeCustomerRowIndex = null;
+        });
+
+        FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][4]);
+      }
+    });
+  }
+
   // حفظ الزبون في الفهرس
   void _saveCustomerToIndex(String customer) {
     final trimmedCustomer = customer.trim();
     if (trimmedCustomer.length > 1) {
       _customerIndexService.saveCustomer(trimmedCustomer);
+    }
+  }
+
+  // حفظ المورد في الفهرس
+  void _saveSupplierToIndex(String supplier) {
+    final trimmedSupplier = supplier.trim();
+    if (trimmedSupplier.length > 1) {
+      _supplierIndexService.saveSupplier(trimmedSupplier);
     }
   }
 
@@ -1495,6 +1648,68 @@ class _BoxScreenState extends State<BoxScreen> {
               },
             ),
     );
+  }
+
+  // بناء قائمة اقتراحات الموردين بشكل أفقي
+  Widget _buildHorizontalSupplierSuggestions(int rowIndex) {
+    return Container(
+      height: 30,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: Colors.grey[300]!),
+        borderRadius: BorderRadius.circular(4),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: _supplierSuggestions.isEmpty || _activeSupplierRowIndex != rowIndex
+          ? Container()
+          : ListView.separated(
+              scrollDirection: Axis.horizontal,
+              controller: _supplierSuggestionsScrollController,
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              itemCount: _supplierSuggestions.length,
+              separatorBuilder: (context, index) => const SizedBox(width: 4),
+              itemBuilder: (context, index) {
+                return InkWell(
+                  onTap: () {
+                    _selectSupplierSuggestion(
+                        _supplierSuggestions[index], rowIndex);
+                  },
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color:
+                          index == 0 ? Colors.orange[100] : Colors.orange[50],
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: Colors.orange[100]!),
+                    ),
+                    child: Text(
+                      _supplierSuggestions[index],
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.orange,
+                        fontWeight:
+                            index == 0 ? FontWeight.bold : FontWeight.normal,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                );
+              },
+            ),
+    );
+  }
+
+  // إضافة دالة مساعدة لإضافة مستمعات FocusNode
+  void _addFocusNodeListeners() {
+    // سيتم استدعاؤها عند إضافة صف جديد
   }
 }
 

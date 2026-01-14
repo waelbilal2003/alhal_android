@@ -411,7 +411,8 @@ class SalesStorageService {
   Future<List<Map<String, String>>> getAvailableDatesWithNumbers() async {
     try {
       final basePath = await _getBasePath();
-      final folderPath = '$basePath/AlhalJournals';
+      final folderPath =
+          '$basePath/AlhalSales'; // تغيير من AlhalJournals إلى AlhalSales
 
       final folder = Directory(folderPath);
       if (!await folder.exists()) {
@@ -430,7 +431,8 @@ class SalesStorageService {
             final journalNumber = jsonMap['recordNumber']?.toString() ?? '1';
             final fileName = file.path.split('/').last;
 
-            if (fileName.startsWith('sales-') && date.isNotEmpty) {
+            if (fileName.startsWith('alhal-sales-') && date.isNotEmpty) {
+              // تغيير من 'sales-' إلى 'alhal-sales-'
               datesWithNumbers.add({
                 'date': date,
                 'journalNumber': journalNumber,

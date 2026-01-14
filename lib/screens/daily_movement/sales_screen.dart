@@ -1187,8 +1187,8 @@ class _SalesScreenState extends State<SalesScreen> {
 
     // إذا كان حقل اسم الزبون (الحقل 10) وEnter ضُغط وكانت هناك اقتراحات وكانت القيمة "دين"
     if (colIndex == 10 &&
-        _customerSuggestions.isNotEmpty &&
-        cashOrDebtValues[rowIndex] == 'دين') {
+        cashOrDebtValues[rowIndex] == 'دين' &&
+        _customerSuggestions.isNotEmpty) {
       _selectCustomerSuggestion(_customerSuggestions[0], rowIndex);
       return;
     }
@@ -1275,12 +1275,11 @@ class _SalesScreenState extends State<SalesScreen> {
               customerNames[rowIndex] = value;
               _hasUnsavedChanges = true;
             });
+            // تحديث الاقتراحات عند تغيير النص
+            _updateCustomerSuggestions(rowIndex);
           },
           onCustomerSubmitted: (value, rIndex, cIndex) {
-            if (value.trim().isNotEmpty && value.trim().length > 1) {
-              _saveCustomerToIndex(value);
-            }
-            _showEmptiesDialog(rowIndex);
+            _handleFieldSubmitted(value, rIndex, cIndex);
           },
           isSalesScreen: true,
         ),
@@ -1518,7 +1517,7 @@ class _SalesScreenState extends State<SalesScreen> {
                   const PopupMenuItem<String>(
                     value: '',
                     enabled: false,
-                    child: Text('جاري التحميل...'),
+                    child: Center(child: Text('جاري التحميل...')),
                   ),
                 );
               } else if (_availableRecords.isEmpty) {
@@ -1526,21 +1525,10 @@ class _SalesScreenState extends State<SalesScreen> {
                   const PopupMenuItem<String>(
                     value: '',
                     enabled: false,
-                    child: Text('لا توجد يوميات سابقة'),
+                    child: Center(child: Text('لا توجد يوميات سابقة')),
                   ),
                 );
               } else {
-                // تجميع التواريخ الفريدة
-                final uniqueDates = <String, String>{};
-                for (var record in _availableRecords) {
-                  final date = record['date']!;
-                  if (!uniqueDates.containsKey(date)) {
-                    // الحصول على رقم اليومية لهذا التاريخ (نأخذ الأول)
-                    final journalNumber = record['recordNumber']!;
-                    uniqueDates[date] = journalNumber;
-                  }
-                }
-
                 // إضافة عنوان
                 items.add(
                   const PopupMenuItem<String>(
@@ -1554,8 +1542,11 @@ class _SalesScreenState extends State<SalesScreen> {
                 );
                 items.add(const PopupMenuDivider());
 
-                // إضافة كل تاريخ مع رقم يوميته
-                uniqueDates.forEach((date, journalNumber) {
+                // إضافة كل تاريخ
+                for (var record in _availableRecords) {
+                  final date = record['date']!;
+                  final journalNumber = record['journalNumber']!;
+
                   items.add(
                     PopupMenuItem<String>(
                       value: date,
@@ -1572,7 +1563,7 @@ class _SalesScreenState extends State<SalesScreen> {
                       ),
                     ),
                   );
-                });
+                }
               }
 
               return items;
@@ -1929,14 +1920,7 @@ class _SalesScreenState extends State<SalesScreen> {
       // جلب التواريخ مع أرقام اليوميات
       final dates = await _storageService.getAvailableDatesWithNumbers();
       setState(() {
-        // تحويل التنسيق لتتوافق مع ما نعرضه
-        _availableRecords = dates
-            .map((dateInfo) => {
-                  'date': dateInfo['date']!,
-                  'recordNumber': dateInfo['journalNumber']!,
-                  'type': 'مبيعات'
-                })
-            .toList();
+        _availableRecords = dates; // ببساطة استخدام البيانات كما هي
         _isLoadingRecords = false;
       });
     } catch (e) {
@@ -1950,14 +1934,14 @@ class _SalesScreenState extends State<SalesScreen> {
   // تحديث اقتراحات الزبائن
   void _updateCustomerSuggestions(int rowIndex) async {
     final query = rowControllers[rowIndex][10].text;
-    if (query.length >= 1) {
+    if (query.length >= 1 && cashOrDebtValues[rowIndex] == 'دين') {
       final suggestions = await _customerIndexService.getSuggestions(query);
       setState(() {
         _customerSuggestions = suggestions;
         _activeCustomerRowIndex = rowIndex;
       });
     } else {
-      // إخفاء الاقتراحات إذا كان الحقل فارغاً
+      // إخفاء الاقتراحات إذا كان الحقل فارغاً أو الدفع نقدي
       setState(() {
         _customerSuggestions = [];
         _activeCustomerRowIndex = null;
@@ -1967,7 +1951,11 @@ class _SalesScreenState extends State<SalesScreen> {
 
   // اختيار اقتراح للزبون
   void _selectCustomerSuggestion(String suggestion, int rowIndex) {
-    _hideAllSuggestionsImmediately();
+    setState(() {
+      _customerSuggestions = [];
+      _activeCustomerRowIndex = null;
+    });
+
     rowControllers[rowIndex][10].text = suggestion;
     _hasUnsavedChanges = true;
 

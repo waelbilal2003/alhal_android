@@ -1,367 +1,199 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
-class VerticalSuggestionsWidget extends StatefulWidget {
-  final List<String> suggestions;
-  final Function(String) onSuggestionSelected;
-  final Color primaryColor;
-  final Color backgroundColor;
-  final double maxHeight;
-  final int maxSuggestionsToShow;
-  final BuildContext? parentContext; // <-- إضافة هذا
+/// دالة مساعدة لعرض اقتراحات عمودية خارجية تشغل كامل الشاشة
+/// من أعلى الشاشة إلى أسفلها
+class VerticalSuggestionsWidget {
+  /// بناء نافذة الاقتراحات التي تشغل الشاشة بأكملها
+  static Widget _buildFullScreenOverlay(
+    BuildContext context,
+    List<String> suggestions,
+    int rowIndex,
+    Function(String, int) onSuggestionSelected,
+    Function() onClose,
+    Color primaryColor,
+  ) {
+    final appBarHeight = AppBar().preferredSize.height;
 
-  const VerticalSuggestionsWidget({
-    Key? key,
-    required this.suggestions,
-    required this.onSuggestionSelected,
-    this.primaryColor = Colors.blue,
-    this.backgroundColor = Colors.white,
-    this.maxHeight = 200.0,
-    this.maxSuggestionsToShow = 10,
-    this.parentContext, // <-- إضافة هذا
-  }) : super(key: key);
-
-  @override
-  _VerticalSuggestionsWidgetState createState() =>
-      _VerticalSuggestionsWidgetState();
-}
-
-class _VerticalSuggestionsWidgetState extends State<VerticalSuggestionsWidget> {
-  final ScrollController _scrollController = ScrollController();
-  int _selectedIndex = 0;
-  final FocusNode _focusNode = FocusNode();
-
-  @override
-  void initState() {
-    super.initState();
-    _selectedIndex = 0;
-    // طلب التركيز عند الإنشاء
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _focusNode.requestFocus();
-      }
-    });
-  }
-
-  @override
-  void didUpdateWidget(VerticalSuggestionsWidget oldWidget) {
-    super.didUpdateWidget(oldWidget);
-
-    // فقط إذا تغيرت الاقتراحات فعلاً
-    if (!_areListsEqual(widget.suggestions, oldWidget.suggestions)) {
-      _selectedIndex = 0;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted &&
-            _scrollController.hasClients &&
-            widget.suggestions.isNotEmpty) {
-          _scrollController.animateTo(
-            0,
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeInOut,
-          );
-        }
-      });
-    }
-  }
-
-  bool _areListsEqual(List<String> list1, List<String> list2) {
-    if (list1.length != list2.length) return false;
-    for (int i = 0; i < list1.length; i++) {
-      if (list1[i] != list2[i]) return false;
-    }
-    return true;
-  }
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    _focusNode.dispose();
-    super.dispose();
-  }
-
-  void _handleKeyEvent(RawKeyEvent event) {
-    if (event.runtimeType.toString().contains('RawKeyDownEvent')) {
-      // السهم للأسفل
-      if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-        setState(() {
-          _selectedIndex = (_selectedIndex + 1) % widget.suggestions.length;
-        });
-        _scrollToSelected();
-      }
-      // السهم للأعلى
-      else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-        setState(() {
-          _selectedIndex = (_selectedIndex - 1) % widget.suggestions.length;
-          if (_selectedIndex < 0)
-            _selectedIndex = widget.suggestions.length - 1;
-        });
-        _scrollToSelected();
-      }
-      // Enter
-      else if (event.logicalKey == LogicalKeyboardKey.enter ||
-          event.logicalKey == LogicalKeyboardKey.numpadEnter) {
-        if (_selectedIndex < widget.suggestions.length) {
-          widget.onSuggestionSelected(widget.suggestions[_selectedIndex]);
-        }
-      }
-      // Tab
-      else if (event.logicalKey == LogicalKeyboardKey.tab) {
-        // تجاهل Tab لنسمح بالانتقال الطبيعي بين الحقول
-      }
-    }
-  }
-
-  void _scrollToSelected() {
-    if (_scrollController.hasClients && widget.suggestions.isNotEmpty) {
-      final itemHeight = 40.0;
-      final selectedOffset = _selectedIndex * itemHeight;
-      final viewportHeight = widget.maxHeight;
-
-      if (selectedOffset < _scrollController.offset) {
-        // التمرير للأعلى
-        _scrollController.animateTo(
-          selectedOffset,
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeInOut,
-        );
-      } else if (selectedOffset + itemHeight >
-          _scrollController.offset + viewportHeight) {
-        // التمرير للأسفل
-        _scrollController.animateTo(
-          selectedOffset + itemHeight - viewportHeight,
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeInOut,
-        );
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (widget.suggestions.isEmpty) {
-      return Container();
-    }
-
-    final List<String> suggestionsToShow =
-        widget.suggestions.length > widget.maxSuggestionsToShow
-            ? widget.suggestions.sublist(0, widget.maxSuggestionsToShow)
-            : widget.suggestions;
-
-    // حساب المسافة من أسفل الشاشة لتعديل الموضع
-    double bottomPadding = 0;
-    if (widget.parentContext != null) {
-      final mediaQuery = MediaQuery.of(widget.parentContext!);
-      final keyboardHeight = mediaQuery.viewInsets.bottom;
-      if (keyboardHeight > 0) {
-        // إذا ظهر الكيبورد، نضيف مسافة إضافية
-        bottomPadding = keyboardHeight + 10;
-      }
-    }
-
-    return RawKeyboardListener(
-      focusNode: _focusNode,
-      onKey: _handleKeyEvent,
+    return Positioned.fill(
+      top: appBarHeight, // يبدأ من أسفل الـ AppBar مباشرة
       child: Container(
-        constraints: BoxConstraints(
-          maxHeight: widget.maxHeight,
-          minWidth: 250,
-        ),
-        margin: EdgeInsets.only(bottom: bottomPadding), // <-- تعديل الهامش
-        decoration: BoxDecoration(
-          color: widget.backgroundColor,
-          border: Border.all(color: Colors.grey[300]!),
-          borderRadius: BorderRadius.circular(4),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.15),
-              blurRadius: 8,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
+        color: Colors.white.withOpacity(0.98),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // رأس القائمة
+            // زر الإغلاق في الأعلى
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: widget.primaryColor.withOpacity(0.1),
-                border: Border(bottom: BorderSide(color: Colors.grey[300]!)),
-              ),
+              height: 40,
+              color: Colors.grey[100],
               child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Icon(
-                    Icons.search,
-                    size: 16,
-                    color: widget.primaryColor,
+                  IconButton(
+                    icon: Icon(Icons.close, color: Colors.grey[700]),
+                    onPressed: onClose,
+                    tooltip: 'إغلاق الاقتراحات',
                   ),
-                  const SizedBox(width: 6),
-                  Text(
-                    '${widget.suggestions.length} اقتراح',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: widget.primaryColor,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const Spacer(),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: widget.primaryColor.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.keyboard_arrow_up,
-                            size: 12, color: widget.primaryColor),
-                        Icon(Icons.keyboard_arrow_down,
-                            size: 12, color: widget.primaryColor),
-                        const SizedBox(width: 2),
-                        Text(
-                          'للتنقل',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: widget.primaryColor,
-                          ),
-                        ),
-                      ],
+                  Padding(
+                    padding: const EdgeInsets.only(right: 16.0),
+                    child: Text(
+                      '${suggestions.length} اقتراح',
+                      style: TextStyle(
+                        color: Colors.grey[700],
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
-            // قائمة الاقتراحات
+            // قائمة الاقتراحات تشغل باقي الشاشة
             Expanded(
-              child: Scrollbar(
-                controller: _scrollController,
-                child: ListView.builder(
-                  controller: _scrollController,
-                  padding: EdgeInsets.zero,
-                  itemCount: suggestionsToShow.length,
-                  itemBuilder: (context, index) {
-                    final suggestion = suggestionsToShow[index];
-                    final isSelected = index == _selectedIndex;
-
-                    return Material(
-                      color: isSelected
-                          ? widget.primaryColor.withOpacity(0.15)
+              child: ListView.builder(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: EdgeInsets.zero,
+                itemCount: suggestions.length,
+                itemBuilder: (context, index) {
+                  return Container(
+                    decoration: BoxDecoration(
+                      color: index == 0
+                          ? primaryColor.withOpacity(0.1)
                           : Colors.transparent,
+                      border: Border(
+                        bottom:
+                            BorderSide(color: Colors.grey[200]!, width: 0.5),
+                      ),
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
                       child: InkWell(
-                        onTap: () => widget.onSuggestionSelected(suggestion),
-                        onHover: (hovering) {
-                          if (hovering && mounted) {
-                            setState(() {
-                              _selectedIndex = index;
-                            });
-                          }
+                        onTap: () {
+                          // حفظ الدالة في متغير محلي أولاً
+                          final selectedSuggestion = suggestions[index];
+                          final selectedRowIndex = rowIndex;
+                          final onSelected = onSuggestionSelected;
+                          final closeFunc = onClose;
+
+                          // تنفيذ الإجراءات بالتسلسل
+                          closeFunc(); // إغلاق النافذة أولاً
+
+                          // تأخير بسيط ثم تنفيذ الاختيار
+                          Future.delayed(const Duration(milliseconds: 50), () {
+                            onSelected(selectedSuggestion, selectedRowIndex);
+                          });
                         },
                         child: Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 10,
+                            vertical: 16.0,
+                            horizontal: 20.0,
                           ),
-                          decoration: BoxDecoration(
-                            border: Border(
-                              bottom: index < suggestionsToShow.length - 1
-                                  ? BorderSide(
-                                      color: Colors.grey[200]!, width: 0.5)
-                                  : BorderSide.none,
-                            ),
-                          ),
+                          width: double.infinity,
                           child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              // رقم العنصر
+                              // رقم الاقتراح
                               Container(
-                                width: 28,
-                                height: 28,
+                                width: 30,
+                                height: 30,
                                 decoration: BoxDecoration(
-                                  color: isSelected
-                                      ? widget.primaryColor
-                                      : Colors.grey[200],
-                                  borderRadius: BorderRadius.circular(14),
+                                  color: index == 0
+                                      ? primaryColor
+                                      : primaryColor.withOpacity(0.3),
+                                  shape: BoxShape.circle,
                                 ),
                                 child: Center(
                                   child: Text(
                                     (index + 1).toString(),
                                     style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
-                                      color: isSelected
+                                      color: index == 0
                                           ? Colors.white
-                                          : Colors.grey[700],
+                                          : primaryColor,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
                                     ),
                                   ),
                                 ),
                               ),
-                              const SizedBox(width: 10),
-                              // نص الاقتراح
+                              // النص
                               Expanded(
-                                child: Text(
-                                  suggestion,
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: isSelected
-                                        ? FontWeight.bold
-                                        : FontWeight.w600,
-                                    color: isSelected
-                                        ? widget.primaryColor
-                                        : Colors.grey[800],
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 16.0),
+                                  child: Text(
+                                    suggestions[index],
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      color: Colors.grey[800],
+                                      fontWeight: index == 0
+                                          ? FontWeight.bold
+                                          : FontWeight.normal,
+                                    ),
+                                    textAlign: TextAlign.right,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                              // مؤشر التحديد
-                              if (isSelected)
+                              // أيقونة التأكيد للأول
+                              if (index == 0)
                                 Icon(
-                                  Icons.keyboard_arrow_left,
-                                  size: 18,
-                                  color: widget.primaryColor,
+                                  Icons.check_circle,
+                                  color: primaryColor,
+                                  size: 20,
                                 ),
                             ],
                           ),
                         ),
                       ),
-                    );
-                  },
-                ),
+                    ),
+                  );
+                },
               ),
             ),
-            // تذييل القائمة
-            if (widget.suggestions.length > widget.maxSuggestionsToShow)
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.grey[50],
-                  border: Border(top: BorderSide(color: Colors.grey[300]!)),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.info_outline,
-                      size: 14,
-                      color: Colors.grey[600],
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      'عرض ${widget.maxSuggestionsToShow} من ${widget.suggestions.length}',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.grey[600],
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
           ],
         ),
       ),
+    );
+  }
+
+  /// دالة مساعدة لتحديد ما إذا يجب عرض الاقتراحات أو إخفاؤها
+  static Widget? getSuggestionsOverlay({
+    required BuildContext context,
+    required int? activeRowIndex,
+    required int currentRowIndex,
+    required List<String> suggestions,
+    required String suggestionType,
+    required Function(String, int) onSuggestionSelected,
+    required Function() onClose,
+  }) {
+    if (activeRowIndex != currentRowIndex || suggestions.isEmpty) {
+      return null;
+    }
+
+    // تحديد اللون المناسب حسب النوع
+    Color primaryColor;
+    switch (suggestionType) {
+      case 'material':
+        primaryColor = Colors.blue;
+        break;
+      case 'packaging':
+        primaryColor = Colors.green;
+        break;
+      case 'supplier':
+        primaryColor = Colors.orange;
+        break;
+      case 'customer':
+        primaryColor = Colors.purple;
+        break;
+      default:
+        primaryColor = Colors.blue;
+    }
+
+    return _buildFullScreenOverlay(
+      context,
+      suggestions,
+      currentRowIndex,
+      onSuggestionSelected,
+      onClose,
+      primaryColor,
     );
   }
 }

@@ -11,6 +11,8 @@ class PackagingIndexService {
 
   static const String _fileName = 'packaging_index.json';
   List<String> _packagings = [];
+  List<String> _packagingsByInsertionOrder =
+      []; // <-- قائمة جديدة لحفظ ترتيب الإضافة
   bool _isInitialized = false;
 
   Future<void> _ensureInitialized() async {
@@ -32,18 +34,41 @@ class PackagingIndexService {
 
       if (await file.exists()) {
         final jsonString = await file.readAsString();
-        final List<dynamic> jsonList = jsonDecode(jsonString);
-        _packagings = jsonList.map((item) => item.toString()).toList();
+        final Map<String, dynamic> jsonData = jsonDecode(jsonString);
 
-        // ترتيب العبوات أبجدياً
-        _packagings.sort((a, b) => a.compareTo(b));
+        // تحميل البيانات الجديدة مع الترتيب
+        if (jsonData.containsKey('packagings') &&
+            jsonData.containsKey('insertionOrder')) {
+          final List<dynamic> jsonList = jsonData['packagings'];
+          final List<dynamic> orderList = jsonData['insertionOrder'];
+
+          _packagings = jsonList.map((item) => item.toString()).toList();
+          _packagingsByInsertionOrder =
+              orderList.map((item) => item.toString()).toList();
+
+          // ترتيب قائمة الاقتراحات أبجدياً
+          _packagings.sort((a, b) => a.compareTo(b));
+
+          // التأكد من تطابق القائمتين في المحتوى
+          if (_packagings.length != _packagingsByInsertionOrder.length) {
+            _packagingsByInsertionOrder = List.from(_packagings);
+          }
+        } else {
+          // دعم الملفات القديمة
+          final List<dynamic> jsonList = jsonDecode(jsonString);
+          _packagings = jsonList.map((item) => item.toString()).toList();
+          _packagingsByInsertionOrder = List.from(_packagings);
+          _packagings.sort((a, b) => a.compareTo(b));
+        }
 
         if (kDebugMode) {
           debugPrint('✅ تم تحميل ${_packagings.length} عبوة من الفهرس');
+          debugPrint(
+              'ترتيب الإضافة: ${_packagingsByInsertionOrder.join(', ')}');
         }
       } else {
         _packagings = [];
-        // لا توجد قيم افتراضية - تبدأ فارغة تماماً
+        _packagingsByInsertionOrder = [];
         if (kDebugMode) {
           debugPrint('✅ فهرس العبوات جديد - لا توجد عبوات مخزنة');
         }
@@ -53,6 +78,7 @@ class PackagingIndexService {
         debugPrint('❌ خطأ في تحميل فهرس العبوات: $e');
       }
       _packagings = [];
+      _packagingsByInsertionOrder = [];
     }
   }
 
@@ -66,19 +92,24 @@ class PackagingIndexService {
     // التحقق من عدم وجود العبوة مسبقاً
     if (!_packagings
         .any((p) => p.toLowerCase() == normalizedPackaging.toLowerCase())) {
+      // إضافة للقائمتين
       _packagings.add(normalizedPackaging);
+      _packagingsByInsertionOrder.add(normalizedPackaging);
+
+      // ترتيب قائمة الاقتراحات أبجدياً فقط
       _packagings.sort((a, b) => a.compareTo(b));
 
       await _saveToFile();
 
       if (kDebugMode) {
         debugPrint('✅ تم إضافة عبوة جديدة: $normalizedPackaging');
+        debugPrint(
+            'رقم العبوة حسب ترتيب الإضافة: ${_packagingsByInsertionOrder.indexOf(normalizedPackaging) + 1}');
       }
     }
   }
 
   String _normalizePackaging(String packaging) {
-    // إزالة المسافات الزائدة وتحويل أول حرف لحرف كبير
     String normalized = packaging.trim();
     if (normalized.isNotEmpty) {
       normalized = normalized[0].toUpperCase() + normalized.substring(1);
@@ -110,15 +141,81 @@ class PackagingIndexService {
     }).toList();
   }
 
+  // دالة جديدة: الحصول على اقتراحات حسب الرقم (ترتيب الإضافة)
+  Future<List<String>> getSuggestionsByNumber(String numberQuery) async {
+    await _ensureInitialized();
+
+    if (numberQuery.isEmpty) return [];
+
+    try {
+      final int queryNumber = int.parse(numberQuery);
+
+      if (queryNumber <= 0 ||
+          queryNumber > _packagingsByInsertionOrder.length) {
+        return [];
+      }
+
+      // عرض عنصر واحد فقط حسب الرقم (ترتيب الإضافة)
+      return [_packagingsByInsertionOrder[queryNumber - 1]];
+    } catch (e) {
+      // إذا لم يكن النص رقماً، نعيد قائمة فارغة
+      return [];
+    }
+  }
+
+  // دالة متعددة الاستخدامات: تبحث حسب النص أو الرقم
+  Future<List<String>> getEnhancedSuggestions(String query) async {
+    await _ensureInitialized();
+
+    if (query.isEmpty) return [];
+
+    final normalizedQuery = query.trim();
+
+    // محاولة البحث كرقم أولاً
+    if (RegExp(r'^\d+$').hasMatch(normalizedQuery)) {
+      final numberResults = await getSuggestionsByNumber(normalizedQuery);
+      if (numberResults.isNotEmpty) {
+        return numberResults;
+      }
+    }
+
+    // إذا لم تكن نتيجة البحث كرقم، نبحث كنص
+    return await getSuggestions(normalizedQuery);
+  }
+
   Future<List<String>> getAllPackagings() async {
     await _ensureInitialized();
     return List.from(_packagings);
   }
 
+  // دالة جديدة للحصول على العبوات حسب ترتيب الإضافة
+  Future<List<String>> getAllPackagingsByInsertionOrder() async {
+    await _ensureInitialized();
+    return List.from(_packagingsByInsertionOrder);
+  }
+
+  // دالة جديدة للحصول على رقم العبوة حسب ترتيب الإضافة
+  Future<int?> getPackagingPosition(String packaging) async {
+    await _ensureInitialized();
+
+    final normalizedPackaging = _normalizePackaging(packaging);
+    final index = _packagingsByInsertionOrder.indexWhere(
+        (p) => p.toLowerCase() == normalizedPackaging.toLowerCase());
+
+    return index >= 0 ? index + 1 : null;
+  }
+
   Future<void> removePackaging(String packaging) async {
     await _ensureInitialized();
 
-    _packagings.removeWhere((p) => p.toLowerCase() == packaging.toLowerCase());
+    final normalizedPackaging = _normalizePackaging(packaging);
+
+    // إزالة من القائمتين
+    _packagings.removeWhere(
+        (p) => p.toLowerCase() == normalizedPackaging.toLowerCase());
+    _packagingsByInsertionOrder.removeWhere(
+        (p) => p.toLowerCase() == normalizedPackaging.toLowerCase());
+
     await _saveToFile();
 
     if (kDebugMode) {
@@ -128,6 +225,7 @@ class PackagingIndexService {
 
   Future<void> clearAll() async {
     _packagings.clear();
+    _packagingsByInsertionOrder.clear();
     await _saveToFile();
 
     if (kDebugMode) {
@@ -140,7 +238,13 @@ class PackagingIndexService {
       final filePath = await _getFilePath();
       final file = File(filePath);
 
-      final jsonString = jsonEncode(_packagings);
+      // حفظ البيانات مع الترتيب
+      final Map<String, dynamic> jsonData = {
+        'packagings': _packagings,
+        'insertionOrder': _packagingsByInsertionOrder,
+      };
+
+      final jsonString = jsonEncode(jsonData);
       await file.writeAsString(jsonString);
     } catch (e) {
       if (kDebugMode) {

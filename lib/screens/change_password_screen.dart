@@ -20,24 +20,21 @@ class ChangePasswordScreen extends StatefulWidget {
 class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   int _currentScreen = 0;
 
-  // متغيرات التحقق من الهوية
-  final _verifySellerNameController = TextEditingController();
-  final _verifyPasswordController = TextEditingController();
-  final _verifyFormKey = GlobalKey<FormState>();
-
-  // متغيرات التعديل
+  // متغيرات تعديل بيانات البائع
+  final _oldSellerNameController = TextEditingController();
+  final _oldPasswordController = TextEditingController();
   final _newSellerNameController = TextEditingController();
   final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
-  final _editFormKey = GlobalKey<FormState>();
+  final _sellerFormKey = GlobalKey<FormState>();
 
   // متغيرات اسم المحل
   final _storeNameController = TextEditingController();
   final _storeNameFormKey = GlobalKey<FormState>();
 
   // FocusNodes
-  final _verifySellerFocus = FocusNode();
-  final _verifyPasswordFocus = FocusNode();
+  final _oldSellerFocus = FocusNode();
+  final _oldPasswordFocus = FocusNode();
   final _newSellerFocus = FocusNode();
   final _newPasswordFocus = FocusNode();
   final _confirmPasswordFocus = FocusNode();
@@ -45,7 +42,6 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
 
   bool _isLoading = false;
   String? _errorMessage;
-  bool _identityVerified = false;
   String? _currentSellerName;
 
   @override
@@ -53,20 +49,19 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     super.initState();
     _loadStoreName();
     _loadCurrentSeller();
-    _loadTempSellerData();
   }
 
   @override
   void dispose() {
-    _verifySellerNameController.dispose();
-    _verifyPasswordController.dispose();
+    _oldSellerNameController.dispose();
+    _oldPasswordController.dispose();
     _newSellerNameController.dispose();
     _newPasswordController.dispose();
     _confirmPasswordController.dispose();
     _storeNameController.dispose();
 
-    _verifySellerFocus.dispose();
-    _verifyPasswordFocus.dispose();
+    _oldSellerFocus.dispose();
+    _oldPasswordFocus.dispose();
     _newSellerFocus.dispose();
     _newPasswordFocus.dispose();
     _confirmPasswordFocus.dispose();
@@ -78,6 +73,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       _currentSellerName = prefs.getString('current_seller');
+      // لا نقوم بتعبئة الحقول تلقائياً
     });
   }
 
@@ -89,51 +85,40 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
         : {};
   }
 
-  Future<void> _verifyIdentity() async {
-    if (!_verifyFormKey.currentState!.validate()) return;
+  Future<void> _updateSellerData() async {
+    if (!_sellerFormKey.currentState!.validate()) return;
 
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
 
-    final enteredSellerName = _verifySellerNameController.text;
-    final enteredPassword = _verifyPasswordController.text;
-    final accounts = await _getAccounts();
-
-    if (accounts.containsKey(enteredSellerName) &&
-        accounts[enteredSellerName] == enteredPassword) {
-      // التحقق الناجح
-      setState(() {
-        _isLoading = false;
-        _identityVerified = true;
-        _currentSellerName = enteredSellerName;
-        _newSellerNameController.text = enteredSellerName;
-      });
-    } else {
-      setState(() {
-        _isLoading = false;
-        _errorMessage = 'اسم البائع أو كلمة المرور غير صحيحة';
-      });
-    }
-  }
-
-  Future<void> _saveChanges() async {
-    if (!_editFormKey.currentState!.validate()) return;
-
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-
+    final oldSellerName = _oldSellerNameController.text;
+    final oldPassword = _oldPasswordController.text;
     final newSellerName = _newSellerNameController.text;
     final newPassword = _newPasswordController.text;
-    final oldSellerName = _verifySellerNameController.text;
 
+    // التحقق من الهوية
     final accounts = await _getAccounts();
 
-    // إذا تم تغيير اسم البائع، نحتاج إلى نقل الحساب
-    if (oldSellerName != newSellerName) {
+    if (!accounts.containsKey(oldSellerName) ||
+        accounts[oldSellerName] != oldPassword) {
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'اسم البائع أو كلمة المرور القديمة غير صحيحة';
+      });
+      return;
+    }
+
+    // إذا لم يتم إدخال اسم جديد، نستخدم الاسم القديم
+    final finalNewSellerName =
+        newSellerName.isEmpty ? oldSellerName : newSellerName;
+
+    // تحديث البيانات
+    final updatedAccounts = Map<String, String>.from(accounts);
+
+    // إذا تم تغيير اسم البائع
+    if (oldSellerName != finalNewSellerName) {
       // حفظ الحساب القديم كتاريخ
       final prefs = await SharedPreferences.getInstance();
       final oldAccountsJson = prefs.getString('old_accounts');
@@ -141,37 +126,42 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
           ? Map<String, String>.from(json.decode(oldAccountsJson))
           : {};
 
-      oldAccounts[oldSellerName] = accounts[oldSellerName]!;
+      oldAccounts[oldSellerName] = updatedAccounts[oldSellerName]!;
       await prefs.setString('old_accounts', json.encode(oldAccounts));
 
       // حذف الحساب القديم
-      accounts.remove(oldSellerName);
+      updatedAccounts.remove(oldSellerName);
     }
 
-    // تحديث/إضافة الحساب الجديد
-    accounts[newSellerName] = newPassword;
+    // تحديث كلمة المرور إذا تم إدخال كلمة مرور جديدة، وإلا نستخدم القديمة
+    final finalPassword = newPassword.isNotEmpty ? newPassword : oldPassword;
+    updatedAccounts[finalNewSellerName] = finalPassword;
 
+    // حفظ التغييرات
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('accounts', json.encode(accounts));
+    await prefs.setString('accounts', json.encode(updatedAccounts));
 
     // إذا كان هذا هو البائع الحالي، تحديثه
     if (_currentSellerName == oldSellerName) {
-      await prefs.setString('current_seller', newSellerName);
+      await prefs.setString('current_seller', finalNewSellerName);
+      _currentSellerName = finalNewSellerName;
     }
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('تم حفظ التغييرات بنجاح'),
+        content: Text('تم تحديث بيانات البائع بنجاح'),
         backgroundColor: Colors.green,
       ),
     );
 
-    // إعادة التعيين
+    // إعادة تعيين الحقول
     setState(() {
       _isLoading = false;
-      _identityVerified = false;
-      _verifySellerNameController.clear();
-      _verifyPasswordController.clear();
+      _errorMessage = null;
+
+      // تنظيف الحقول بعد النجاح
+      _oldSellerNameController.clear();
+      _oldPasswordController.clear();
       _newSellerNameController.clear();
       _newPasswordController.clear();
       _confirmPasswordController.clear();
@@ -220,13 +210,12 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   void _resetToSelection() {
     setState(() {
       _currentScreen = 0;
-      _identityVerified = false;
-      _verifySellerNameController.clear();
-      _verifyPasswordController.clear();
+      _errorMessage = null;
+      _oldSellerNameController.clear();
+      _oldPasswordController.clear();
       _newSellerNameController.clear();
       _newPasswordController.clear();
       _confirmPasswordController.clear();
-      _errorMessage = null;
     });
   }
 
@@ -259,7 +248,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
       case 0:
         return 'الإعدادات';
       case 1:
-        return 'تغيير بيانات البائع';
+        return 'تعديل بيانات البائع';
       case 2:
         return 'تغيير اسم المحل';
       default:
@@ -372,55 +361,169 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   }
 
   Widget _buildSellerDataScreen(bool isLandscape) {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Colors.teal[400]!, Colors.teal[700]!],
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-        ),
-      ),
-      child: SingleChildScrollView(
-        // هذه الخصائص تحل المشكلة
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-        ),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxWidth: isLandscape ? 800 : 500,
-              minHeight: MediaQuery.of(context).size.height -
-                  MediaQuery.of(context).viewInsets.bottom,
-            ),
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(isLandscape ? 30.0 : 20.0),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: isLandscape ? 800 : 500,
+          ),
+          child: Form(
+            key: _sellerFormKey,
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  _identityVerified ? Icons.person : Icons.verified_user,
-                  size: isLandscape ? 48 : 38,
-                  color: Colors.white,
-                ),
-                const SizedBox(height: 5),
-                Text(
-                  _identityVerified
-                      ? 'تعديل بيانات البائع'
-                      : 'التحقق من الهوية',
-                  style: TextStyle(
-                    fontSize: isLandscape ? 17 : 14,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 5),
-
-                if (!_identityVerified)
-                  _buildVerificationForm(isLandscape)
+                // سطر التحقق (من اليمين لليسار)
+                if (isLandscape)
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildInputField(
+                          _oldPasswordController,
+                          'كلمة المرور الحالية',
+                          true,
+                          focusNode: _oldPasswordFocus,
+                          onSubmitted: () => FocusScope.of(context)
+                              .requestFocus(_newSellerFocus),
+                          icon: Icons.lock,
+                          isRequired: true,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _buildInputField(
+                          _oldSellerNameController,
+                          'اسم البائع الحالي',
+                          false,
+                          focusNode: _oldSellerFocus,
+                          onSubmitted: () => FocusScope.of(context)
+                              .requestFocus(_oldPasswordFocus),
+                          icon: Icons.person,
+                          isRequired: true,
+                        ),
+                      ),
+                    ],
+                  )
                 else
-                  _buildEditForm(isLandscape),
+                  Column(
+                    children: [
+                      _buildInputField(
+                        _oldPasswordController,
+                        'كلمة المرور الحالية',
+                        true,
+                        focusNode: _oldPasswordFocus,
+                        onSubmitted: () => FocusScope.of(context)
+                            .requestFocus(_oldSellerFocus),
+                        icon: Icons.lock,
+                        isRequired: true,
+                      ),
+                      const SizedBox(height: 10),
+                      _buildInputField(
+                        _oldSellerNameController,
+                        'اسم البائع الحالي',
+                        false,
+                        focusNode: _oldSellerFocus,
+                        onSubmitted: () => FocusScope.of(context)
+                            .requestFocus(_newSellerFocus),
+                        icon: Icons.person,
+                        isRequired: true,
+                      ),
+                    ],
+                  ),
+
+                const SizedBox(height: 20),
+
+                // سطر التعديل (من اليمين لليسار)
+                if (isLandscape)
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildInputField(
+                          _confirmPasswordController,
+                          'تأكيد كلمة المرور',
+                          true,
+                          focusNode: _confirmPasswordFocus,
+                          onSubmitted: _updateSellerData,
+                          icon: Icons.lock_reset,
+                          isRequired: false,
+                          optionalField: true,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _buildInputField(
+                          _newPasswordController,
+                          'كلمة المرور الجديدة (اختياري)',
+                          true,
+                          focusNode: _newPasswordFocus,
+                          onSubmitted: () => FocusScope.of(context)
+                              .requestFocus(_confirmPasswordFocus),
+                          icon: Icons.lock_outline,
+                          isRequired: false,
+                          optionalField: true,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _buildInputField(
+                          _newSellerNameController,
+                          'اسم البائع الجديد (اختياري)',
+                          false,
+                          focusNode: _newSellerFocus,
+                          onSubmitted: () => FocusScope.of(context)
+                              .requestFocus(_newPasswordFocus),
+                          icon: Icons.person_add,
+                          isRequired: false,
+                          optionalField: true,
+                        ),
+                      ),
+                    ],
+                  )
+                else
+                  Column(
+                    children: [
+                      _buildInputField(
+                        _confirmPasswordController,
+                        'تأكيد كلمة المرور',
+                        true,
+                        focusNode: _confirmPasswordFocus,
+                        onSubmitted: _updateSellerData,
+                        icon: Icons.lock_reset,
+                        isRequired: false,
+                        optionalField: true,
+                      ),
+                      const SizedBox(height: 10),
+                      _buildInputField(
+                        _newPasswordController,
+                        'كلمة المرور الجديدة (اختياري)',
+                        true,
+                        focusNode: _newPasswordFocus,
+                        onSubmitted: () => FocusScope.of(context)
+                            .requestFocus(_confirmPasswordFocus),
+                        icon: Icons.lock_outline,
+                        isRequired: false,
+                        optionalField: true,
+                      ),
+                      const SizedBox(height: 10),
+                      _buildInputField(
+                        _newSellerNameController,
+                        'اسم البائع الجديد (اختياري)',
+                        false,
+                        focusNode: _newSellerFocus,
+                        onSubmitted: () => FocusScope.of(context)
+                            .requestFocus(_newPasswordFocus),
+                        icon: Icons.person_add,
+                        isRequired: false,
+                        optionalField: true,
+                      ),
+                    ],
+                  ),
+
+                const SizedBox(height: 20),
 
                 if (_errorMessage != null)
                   Padding(
-                    padding: const EdgeInsets.only(top: 15.0),
+                    padding: const EdgeInsets.only(bottom: 15.0),
                     child: Text(
                       _errorMessage!,
                       style: const TextStyle(
@@ -431,257 +534,58 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                     ),
                   ),
 
-                const SizedBox(height: 5),
-
                 // أزرار التحكم
-                if (isLandscape)
-                  _buildLandscapeButtons()
-                else
-                  _buildPortraitButtons(),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    ElevatedButton(
+                      onPressed: _resetToSelection,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white.withOpacity(0.2),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 30, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: const BorderSide(color: Colors.white, width: 1),
+                        ),
+                      ),
+                      child: const Text(
+                        'رجوع',
+                        style: TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    const SizedBox(width: 20),
+                    _isLoading
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : ElevatedButton(
+                            onPressed: _updateSellerData,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.white,
+                              foregroundColor: Colors.teal[700],
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 30, vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: const Text(
+                              'حفظ التغييرات',
+                              style: TextStyle(
+                                  fontSize: 16, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                  ],
+                ),
+                SizedBox(
+                    height:
+                        MediaQuery.of(context).viewInsets.bottom > 0 ? 200 : 0),
               ],
             ),
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildVerificationForm(bool isLandscape) {
-    return Form(
-      key: _verifyFormKey,
-      child: isLandscape
-          ? Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: _buildInputField(
-                    _verifySellerNameController,
-                    'اسم البائع الحالي',
-                    false,
-                    focusNode: _verifySellerFocus,
-                    onSubmitted: () => FocusScope.of(context)
-                        .requestFocus(_verifyPasswordFocus),
-                    icon: Icons.person,
-                  ),
-                ),
-                const SizedBox(width: 20),
-                Expanded(
-                  child: _buildInputField(
-                    _verifyPasswordController,
-                    'كلمة المرور الحالية',
-                    true,
-                    focusNode: _verifyPasswordFocus,
-                    onSubmitted: _verifyIdentity,
-                    icon: Icons.lock,
-                  ),
-                ),
-              ],
-            )
-          : Column(
-              children: [
-                _buildInputField(
-                  _verifySellerNameController,
-                  'اسم البائع الحالي',
-                  false,
-                  focusNode: _verifySellerFocus,
-                  onSubmitted: () =>
-                      FocusScope.of(context).requestFocus(_verifyPasswordFocus),
-                  icon: Icons.person,
-                ),
-                const SizedBox(height: 5),
-                _buildInputField(
-                  _verifyPasswordController,
-                  'كلمة المرور الحالية',
-                  true,
-                  focusNode: _verifyPasswordFocus,
-                  onSubmitted: _verifyIdentity,
-                  icon: Icons.lock,
-                ),
-              ],
-            ),
-    );
-  }
-
-  Widget _buildEditForm(bool isLandscape) {
-    return Form(
-      key: _editFormKey,
-      child: Column(
-        children: [
-          if (isLandscape)
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: _buildInputField(
-                    _newSellerNameController,
-                    'اسم البائع الجديد',
-                    false,
-                    focusNode: _newSellerFocus,
-                    onSubmitted: () =>
-                        FocusScope.of(context).requestFocus(_newPasswordFocus),
-                    icon: Icons.person_add,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    children: [
-                      _buildInputField(
-                        _newPasswordController,
-                        'كلمة المرور الجديدة',
-                        true,
-                        focusNode: _newPasswordFocus,
-                        onSubmitted: () => FocusScope.of(context)
-                            .requestFocus(_confirmPasswordFocus),
-                        icon: Icons.lock_outline,
-                      ),
-                      _buildInputField(
-                        _confirmPasswordController,
-                        'تأكيد كلمة المرور',
-                        true,
-                        focusNode: _confirmPasswordFocus,
-                        onSubmitted: _saveChanges,
-                        icon: Icons.lock_reset,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            )
-          else
-            Column(
-              children: [
-                _buildInputField(
-                  _newSellerNameController,
-                  'اسم البائع الجديد',
-                  false,
-                  focusNode: _newSellerFocus,
-                  onSubmitted: () =>
-                      FocusScope.of(context).requestFocus(_newPasswordFocus),
-                  icon: Icons.person_add,
-                ),
-                _buildInputField(
-                  _newPasswordController,
-                  'كلمة المرور الجديدة',
-                  true,
-                  focusNode: _newPasswordFocus,
-                  onSubmitted: () => FocusScope.of(context)
-                      .requestFocus(_confirmPasswordFocus),
-                  icon: Icons.lock_outline,
-                ),
-                _buildInputField(
-                  _confirmPasswordController,
-                  'تأكيد كلمة المرور',
-                  true,
-                  focusNode: _confirmPasswordFocus,
-                  onSubmitted: _saveChanges,
-                  icon: Icons.lock_reset,
-                ),
-              ],
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLandscapeButtons() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        ElevatedButton(
-          onPressed: _identityVerified ? _saveChanges : _verifyIdentity,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.white,
-            foregroundColor: Colors.teal[700],
-            padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-          child: Text(
-            _identityVerified ? 'حفظ التغييرات' : 'التحقق',
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          ),
-        ),
-        const SizedBox(width: 20),
-        ElevatedButton(
-          onPressed: _identityVerified
-              ? () {
-                  setState(() {
-                    _identityVerified = false;
-                    _newSellerNameController.clear();
-                    _newPasswordController.clear();
-                    _confirmPasswordController.clear();
-                  });
-                }
-              : _resetToSelection,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.white.withOpacity(0.2),
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: const BorderSide(color: Colors.white, width: 1),
-            ),
-          ),
-          child: Text(
-            _identityVerified ? 'رجوع للتحقق' : 'رجوع',
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPortraitButtons() {
-    return Column(
-      children: [
-        _isLoading
-            ? const CircularProgressIndicator(color: Colors.white)
-            : ElevatedButton(
-                onPressed: _identityVerified ? _saveChanges : _verifyIdentity,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: Colors.teal[700],
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 50, vertical: 15),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: Text(
-                  _identityVerified ? 'حفظ التغييرات' : 'التحقق',
-                  style: const TextStyle(
-                      fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-              ),
-        const SizedBox(height: 15),
-        ElevatedButton(
-          onPressed: _identityVerified
-              ? () {
-                  setState(() {
-                    _identityVerified = false;
-                    _newSellerNameController.clear();
-                    _newPasswordController.clear();
-                    _confirmPasswordController.clear();
-                  });
-                }
-              : _resetToSelection,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.white.withOpacity(0.2),
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 15),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: const BorderSide(color: Colors.white, width: 1),
-            ),
-          ),
-          child: Text(
-            _identityVerified ? 'رجوع للتحقق' : 'رجوع',
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          ),
-        ),
-      ],
     );
   }
 
@@ -707,6 +611,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                   focusNode: _storeNameFocus,
                   onSubmitted: _changeStoreName,
                   icon: Icons.store_mall_directory,
+                  isRequired: true,
                 ),
                 if (_errorMessage != null)
                   Padding(
@@ -782,6 +687,8 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     required Function()? onSubmitted,
     required FocusNode? focusNode,
     required IconData icon,
+    required bool isRequired,
+    bool optionalField = false,
   }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
@@ -815,49 +722,27 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
           errorStyle: const TextStyle(color: Colors.yellowAccent),
         ),
         validator: (value) {
-          if (value == null || value.isEmpty) {
+          if (isRequired && (value == null || value.isEmpty)) {
             return 'الرجاء إدخال $hint';
           }
-          if (hint.contains('كلمة المرور') && value.length < 4) {
+
+          // التحقق من تطابق كلمة المرور مع التأكيد
+          if (hint.contains('تأكيد') && value!.isNotEmpty) {
+            if (value != _newPasswordController.text) {
+              return 'كلمتا المرور غير متطابقتين';
+            }
+          }
+
+          // التحقق من طول كلمة المرور الجديدة إذا تم إدخالها
+          if (hint.contains('كلمة المرور الجديدة') &&
+              value!.isNotEmpty &&
+              value.length < 4) {
             return 'كلمة المرور قصيرة جداً';
           }
-          if (hint.contains('تأكيد') && value != _newPasswordController.text) {
-            return 'كلمتا المرور غير متطابقتين';
-          }
+
           return null;
         },
       ),
     );
-  }
-
-  Future<void> _loadTempSellerData() async {
-    final prefs = await SharedPreferences.getInstance();
-
-    // التحقق من انتهاء الصلاحية
-    final expiryTime = prefs.getInt('temp_seller_expiry');
-    if (expiryTime != null &&
-        expiryTime < DateTime.now().millisecondsSinceEpoch) {
-      // حذف البيانات المنتهية
-      await prefs.remove('temp_seller_name');
-      await prefs.remove('temp_seller_password');
-      await prefs.remove('temp_seller_expiry');
-      return;
-    }
-
-    final tempSellerName = prefs.getString('temp_seller_name');
-    final tempPassword = prefs.getString('temp_seller_password');
-
-    if (tempSellerName != null && tempPassword != null) {
-      // تعبئة الحقول تلقائياً بالبيانات المؤقتة
-      setState(() {
-        _verifySellerNameController.text = tempSellerName;
-        _verifyPasswordController.text = tempPassword;
-      });
-
-      // تنظيف البيانات المؤقتة بعد استخدامها
-      await prefs.remove('temp_seller_name');
-      await prefs.remove('temp_seller_password');
-      await prefs.remove('temp_seller_expiry');
-    }
   }
 }

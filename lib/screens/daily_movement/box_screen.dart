@@ -7,6 +7,7 @@ import '../../widgets/table_components.dart' as TableComponents;
 import '../../widgets/common_dialogs.dart' as CommonDialogs;
 import '../../services/customer_index_service.dart';
 import '../../services/supplier_index_service.dart';
+import '../../services/enhanced_index_service.dart';
 
 class BoxScreen extends StatefulWidget {
   final String sellerName;
@@ -30,6 +31,8 @@ class _BoxScreenState extends State<BoxScreen> {
 
   //  خدمة فهرس الزبائن
   final CustomerIndexService _customerIndexService = CustomerIndexService();
+  // خدمة فهرس الموردين
+  final SupplierIndexService _supplierIndexService = SupplierIndexService();
 
   List<String> _customerSuggestions = [];
   int? _activeCustomerRowIndex;
@@ -68,8 +71,6 @@ class _BoxScreenState extends State<BoxScreen> {
   String serialNumber = '';
   // ignore: unused_field
   String? _currentJournalNumber;
-  // خدمة فهرس الموردين
-  final SupplierIndexService _supplierIndexService = SupplierIndexService();
 
   List<String> _supplierSuggestions = [];
 
@@ -1497,7 +1498,8 @@ class _BoxScreenState extends State<BoxScreen> {
   void _updateCustomerSuggestions(int rowIndex) async {
     final query = rowControllers[rowIndex][3].text;
     if (query.length >= 1 && accountTypeValues[rowIndex] == 'زبون') {
-      final suggestions = await _customerIndexService.getSuggestions(query);
+      final suggestions =
+          await getEnhancedSuggestions(_customerIndexService, query);
       setState(() {
         _customerSuggestions = suggestions;
         _activeCustomerRowIndex = rowIndex;
@@ -1514,7 +1516,8 @@ class _BoxScreenState extends State<BoxScreen> {
   void _updateSupplierSuggestions(int rowIndex) async {
     final query = rowControllers[rowIndex][3].text;
     if (query.length >= 1 && accountTypeValues[rowIndex] == 'مورد') {
-      final suggestions = await _supplierIndexService.getSuggestions(query);
+      final suggestions =
+          await getEnhancedSuggestions(_supplierIndexService, query);
       setState(() {
         _supplierSuggestions = suggestions;
         _activeSupplierRowIndex = rowIndex;

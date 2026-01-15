@@ -7,10 +7,17 @@ import '../../services/material_index_service.dart';
 import '../../services/packaging_index_service.dart';
 import '../../services/supplier_index_service.dart';
 import '../../services/customer_index_service.dart';
+import '../../services/enhanced_index_service.dart';
 
 import '../../widgets/table_builder.dart' as TableBuilder;
 import '../../widgets/table_components.dart' as TableComponents;
 import '../../widgets/common_dialogs.dart' as CommonDialogs;
+
+import '../../widgets/enhanced_suggestions.dart';
+
+import 'package:flutter/foundation.dart';
+
+import 'dart:async';
 
 class SalesScreen extends StatefulWidget {
   final String sellerName;
@@ -37,7 +44,6 @@ class _SalesScreenState extends State<SalesScreen> {
   final PackagingIndexService _packagingIndexService = PackagingIndexService();
   final SupplierIndexService _supplierIndexService = SupplierIndexService();
   final CustomerIndexService _customerIndexService = CustomerIndexService();
-
   // بيانات الحقول
   String dayName = '';
 
@@ -95,10 +101,14 @@ class _SalesScreenState extends State<SalesScreen> {
       ScrollController();
   final ScrollController _customerSuggestionsScrollController =
       ScrollController();
-
+  // Debouncers لمنع التكرار
+  final Map<String, Timer> _debounceTimers = {};
+  // متغير لتتبع إذا كان المستخدم يكتب
+  bool _isUserTyping = false;
   @override
   void initState() {
     super.initState();
+
     dayName = _extractDayName(widget.selectedDate);
 
     totalCountController = TextEditingController();
@@ -108,23 +118,21 @@ class _SalesScreenState extends State<SalesScreen> {
 
     _resetTotalValues();
 
-    // إخفاء الاقتراحات عند التمرير
-    _verticalScrollController.addListener(() {
-      _hideAllSuggestionsImmediately();
-    });
-
-    _horizontalScrollController.addListener(() {
-      _hideAllSuggestionsImmediately();
-    });
-
+    // لا تضيف أي مستمعين للتمرير هنا
+    // فقط تحميل البيانات
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadOrCreateRecord();
-      _loadAvailableDates(); // تغيير هذه الدالة
+      _loadAvailableDates();
     });
   }
 
   @override
   void dispose() {
+    // إلغاء جميع الـ debounce timers
+    for (var timer in _debounceTimers.values) {
+      timer.cancel();
+    }
+    _debounceTimers.clear();
     _saveCurrentRecord(silent: true);
 
     for (var row in rowControllers) {
@@ -153,6 +161,8 @@ class _SalesScreenState extends State<SalesScreen> {
     _packagingSuggestionsScrollController.dispose();
     _supplierSuggestionsScrollController.dispose();
     _customerSuggestionsScrollController.dispose();
+
+    EnhancedSuggestions.hide();
 
     super.dispose();
   }
@@ -257,43 +267,81 @@ class _SalesScreenState extends State<SalesScreen> {
     });
   }
 
+/*
   // دالة مساعدة لإخفاء جميع الاقتراحات فوراً
   void _hideAllSuggestionsImmediately() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        setState(() {
-          _materialSuggestions = [];
-          _packagingSuggestions = [];
-          _supplierSuggestions = [];
-          _customerSuggestions = [];
-          _activeMaterialRowIndex = null;
-          _activePackagingRowIndex = null;
-          _activeSupplierRowIndex = null;
-          _activeCustomerRowIndex = null;
-        });
+        // إخفاء الاقتراحات باستخدام EnhancedSuggestions أولاً
+        EnhancedSuggestions.hide();
+
+        // ثم مسح الحالة
+        _materialSuggestions = [];
+        _packagingSuggestions = [];
+        _supplierSuggestions = [];
+        _customerSuggestions = [];
+        _activeMaterialRowIndex = null;
+        _activePackagingRowIndex = null;
+        _activeSupplierRowIndex = null;
+        _activeCustomerRowIndex = null;
       }
     });
   }
-
+*/
   // دالة مساعدة لإضافة المستمعات
   void _addChangeListenersToControllers(
       List<TextEditingController> controllers, int rowIndex) {
-    // حقل المادة
+    // حقل المادة مع debouncer محسن
     controllers[1].addListener(() {
       _hasUnsavedChanges = true;
-      _updateMaterialSuggestions(rowIndex);
+
+      // إلغاء المؤقت السابق لهذا الحقل
+      final key = 'material_$rowIndex';
+      if (_debounceTimers.containsKey(key)) {
+        _debounceTimers[key]!.cancel();
+      }
+
+      // إنشاء مؤقت جديد
+      _debounceTimers[key] = Timer(const Duration(milliseconds: 200), () {
+        if (mounted) {
+          _updateMaterialSuggestions(rowIndex);
+        }
+        _debounceTimers.remove(key);
+      });
     });
 
     // حقل العائدية
     controllers[2].addListener(() {
       _hasUnsavedChanges = true;
-      _updateSupplierSuggestions(rowIndex);
+
+      final key = 'supplier_$rowIndex';
+      if (_debounceTimers.containsKey(key)) {
+        _debounceTimers[key]!.cancel();
+      }
+
+      _debounceTimers[key] = Timer(const Duration(milliseconds: 200), () {
+        if (mounted) {
+          _updateSupplierSuggestions(rowIndex);
+        }
+        _debounceTimers.remove(key);
+      });
     });
 
     // حقل العبوة
     controllers[5].addListener(() {
       _hasUnsavedChanges = true;
-      _updatePackagingSuggestions(rowIndex);
+
+      final key = 'packaging_$rowIndex';
+      if (_debounceTimers.containsKey(key)) {
+        _debounceTimers[key]!.cancel();
+      }
+
+      _debounceTimers[key] = Timer(const Duration(milliseconds: 200), () {
+        if (mounted) {
+          _updatePackagingSuggestions(rowIndex);
+        }
+        _debounceTimers.remove(key);
+      });
     });
 
     // الحقول الرقمية مع التحديث التلقائي
@@ -323,27 +371,89 @@ class _SalesScreenState extends State<SalesScreen> {
       _calculateAllTotals();
     });
 
+    // حقل اسم الزبون
     controllers[10].addListener(() {
       _hasUnsavedChanges = true;
-      _updateCustomerSuggestions(rowIndex);
+
+      Future.delayed(const Duration(milliseconds: 100), () {
+        if (mounted) {
+          _updateCustomerSuggestions(rowIndex);
+        }
+      });
     });
   }
 
   // تحديث اقتراحات المادة
   void _updateMaterialSuggestions(int rowIndex) async {
+    // إذا كان المستخدم يكتب حالياً، لا نقوم بتحديث الاقتراحات
+    if (_isUserTyping) return;
+    // منع التنفيذ المتعدد
+    if (!mounted) return;
+
     final query = rowControllers[rowIndex][1].text;
-    if (query.length >= 1) {
-      final suggestions = await _materialIndexService.getSuggestions(query);
+    final focusNode = rowFocusNodes[rowIndex][1];
+
+    // إذا لم يكن الحقل في التركيز، تجاهل
+    if (!focusNode.hasFocus) return;
+
+    // إذا كان النص فارغاً، إخفاء فقط
+    if (query.isEmpty) {
+      EnhancedSuggestions.hide(force: true);
+      if (mounted) {
+        setState(() {
+          _materialSuggestions = [];
+          _activeMaterialRowIndex = null;
+        });
+      }
+      return;
+    }
+
+    // منع الاستعلامات السريعة المتتالية
+    if (query.length < 2) return;
+
+    final suggestions =
+        await getEnhancedSuggestions(_materialIndexService, query);
+
+    // التحقق إذا ما زلنا في نفس السياق ونفس الاستعلام
+    if (!mounted ||
+        rowControllers[rowIndex][1].text != query ||
+        !focusNode.hasFocus) {
+      return;
+    }
+
+    // تحديث الحالة مرة واحدة فقط
+    if (mounted && suggestions.isNotEmpty) {
       setState(() {
         _materialSuggestions = suggestions;
         _activeMaterialRowIndex = rowIndex;
       });
-    } else {
-      // إخفاء الاقتراحات إذا كان الحقل فارغاً
-      setState(() {
-        _materialSuggestions = [];
-        _activeMaterialRowIndex = null;
+
+      // إظهار الاقتراحات بعد تأخير بسيط
+      Future.delayed(const Duration(milliseconds: 10), () {
+        if (mounted &&
+            _activeMaterialRowIndex == rowIndex &&
+            focusNode.hasFocus) {
+          try {
+            final position = _calculateFieldPosition(rowIndex, 1, focusNode);
+
+            EnhancedSuggestions.showVerticalSuggestions(
+              context: context,
+              suggestions: suggestions,
+              onSuggestionSelected: (suggestion) {
+                _selectMaterialSuggestion(suggestion, rowIndex);
+              },
+              position: position,
+              query: query,
+              rowIndex: rowIndex,
+              primaryColor: Colors.blue,
+            );
+          } catch (e) {
+            print('❌ خطأ في إظهار الاقتراحات: $e');
+          }
+        }
       });
+    } else {
+      EnhancedSuggestions.hide(force: true);
     }
   }
 
@@ -351,17 +461,44 @@ class _SalesScreenState extends State<SalesScreen> {
   void _updatePackagingSuggestions(int rowIndex) async {
     final query = rowControllers[rowIndex][5].text;
     if (query.length >= 1) {
-      final suggestions = await _packagingIndexService.getSuggestions(query);
-      setState(() {
-        _packagingSuggestions = suggestions;
-        _activePackagingRowIndex = rowIndex;
-      });
+      final suggestions =
+          await getEnhancedSuggestions(_packagingIndexService, query);
+
+      if (mounted) {
+        setState(() {
+          _packagingSuggestions = suggestions;
+          _activePackagingRowIndex = rowIndex;
+        });
+
+        if (suggestions.isNotEmpty) {
+          Future.delayed(const Duration(milliseconds: 50), () {
+            if (mounted && _activePackagingRowIndex == rowIndex) {
+              final position = _calculateFieldPosition(
+                  rowIndex, 5, rowFocusNodes[rowIndex][5]);
+
+              EnhancedSuggestions.showVerticalSuggestions(
+                context: context,
+                suggestions: suggestions,
+                onSuggestionSelected: (suggestion) {
+                  _selectPackagingSuggestion(suggestion, rowIndex);
+                },
+                position: position,
+                query: query,
+                rowIndex: rowIndex,
+                primaryColor: Colors.green,
+              );
+            }
+          });
+        }
+      }
     } else {
-      // إخفاء الاقتراحات إذا كان الحقل فارغاً
-      setState(() {
-        _packagingSuggestions = [];
-        _activePackagingRowIndex = null;
-      });
+      if (mounted) {
+        setState(() {
+          _packagingSuggestions = [];
+          _activePackagingRowIndex = null;
+        });
+        EnhancedSuggestions.hide();
+      }
     }
   }
 
@@ -369,23 +506,61 @@ class _SalesScreenState extends State<SalesScreen> {
   void _updateSupplierSuggestions(int rowIndex) async {
     final query = rowControllers[rowIndex][2].text;
     if (query.length >= 1) {
-      final suggestions = await _supplierIndexService.getSuggestions(query);
-      setState(() {
-        _supplierSuggestions = suggestions;
-        _activeSupplierRowIndex = rowIndex;
-      });
+      final suggestions =
+          await getEnhancedSuggestions(_supplierIndexService, query);
+
+      if (mounted) {
+        setState(() {
+          _supplierSuggestions = suggestions;
+          _activeSupplierRowIndex = rowIndex;
+        });
+
+        if (suggestions.isNotEmpty) {
+          Future.delayed(const Duration(milliseconds: 50), () {
+            if (mounted && _activeSupplierRowIndex == rowIndex) {
+              final position = _calculateFieldPosition(
+                  rowIndex, 2, rowFocusNodes[rowIndex][2]);
+
+              EnhancedSuggestions.showVerticalSuggestions(
+                context: context,
+                suggestions: suggestions,
+                onSuggestionSelected: (suggestion) {
+                  _selectSupplierSuggestion(suggestion, rowIndex);
+                },
+                position: position,
+                query: query,
+                rowIndex: rowIndex,
+                primaryColor: Colors.orange,
+              );
+            }
+          });
+        }
+      }
     } else {
-      // إخفاء الاقتراحات إذا كان الحقل فارغاً
-      setState(() {
-        _supplierSuggestions = [];
-        _activeSupplierRowIndex = null;
-      });
+      if (mounted) {
+        setState(() {
+          _supplierSuggestions = [];
+          _activeSupplierRowIndex = null;
+        });
+        EnhancedSuggestions.hide();
+      }
     }
   }
 
-  // اختيار اقتراح للمادة
+  // اختيار اقتراح للعبوة
   void _selectMaterialSuggestion(String suggestion, int rowIndex) {
-    _hideAllSuggestionsImmediately();
+    // إخفاء الاقتراحات عند الاختيار
+    EnhancedSuggestions.hide(force: true);
+
+    // مسح الاقتراحات من الحالة
+    if (mounted) {
+      setState(() {
+        _materialSuggestions = [];
+        _activeMaterialRowIndex = null;
+      });
+    }
+
+    // تعيين النص
     rowControllers[rowIndex][1].text = suggestion;
     _hasUnsavedChanges = true;
 
@@ -393,16 +568,16 @@ class _SalesScreenState extends State<SalesScreen> {
       _saveMaterialToIndex(suggestion);
     }
 
-    Future.delayed(const Duration(milliseconds: 50), () {
+    // الانتقال للحقل التالي
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][2]);
       }
     });
   }
 
-  // اختيار اقتراح للعبوة
   void _selectPackagingSuggestion(String suggestion, int rowIndex) {
-    _hideAllSuggestionsImmediately();
+    EnhancedSuggestions.hide(); // إخفاء الاقتراحات العمودية
     rowControllers[rowIndex][5].text = suggestion;
     _hasUnsavedChanges = true;
 
@@ -417,9 +592,8 @@ class _SalesScreenState extends State<SalesScreen> {
     });
   }
 
-  // اختيار اقتراح للمورد (العائدية)
   void _selectSupplierSuggestion(String suggestion, int rowIndex) {
-    _hideAllSuggestionsImmediately();
+    EnhancedSuggestions.hide(); // إخفاء الاقتراحات العمودية
     rowControllers[rowIndex][2].text = suggestion;
     _hasUnsavedChanges = true;
 
@@ -430,6 +604,23 @@ class _SalesScreenState extends State<SalesScreen> {
     Future.delayed(const Duration(milliseconds: 50), () {
       if (mounted) {
         FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][3]);
+      }
+    });
+  }
+
+  void _selectCustomerSuggestion(String suggestion, int rowIndex) {
+    EnhancedSuggestions.hide(); // إخفاء الاقتراحات العمودية
+    rowControllers[rowIndex][10].text = suggestion;
+    customerNames[rowIndex] = suggestion;
+    _hasUnsavedChanges = true;
+
+    if (suggestion.trim().length > 1) {
+      _saveCustomerToIndex(suggestion);
+    }
+
+    Future.delayed(const Duration(milliseconds: 50), () {
+      if (mounted) {
+        _showEmptiesDialog(rowIndex);
       }
     });
   }
@@ -823,11 +1014,7 @@ class _SalesScreenState extends State<SalesScreen> {
       int rowIndex,
       int colIndex,
       bool isOwnedByCurrentSeller) {
-    focusNode.addListener(() {
-      if (!focusNode.hasFocus) {
-        _hideAllSuggestionsImmediately();
-      }
-    });
+    // لا تضيف أي listeners هنا
 
     Widget cell = TableBuilder.buildTableCell(
       controller: controller,
@@ -843,24 +1030,16 @@ class _SalesScreenState extends State<SalesScreen> {
           _saveMaterialToIndex(value);
         }
       },
-      onFieldChanged: (value, rIndex, cIndex) =>
-          _handleFieldChanged(value, rIndex, cIndex),
+      onFieldChanged: (value, rIndex, cIndex) {
+        // هنا فقط تحديث الاقتراحات
+        _hasUnsavedChanges = true;
+        Future.delayed(const Duration(milliseconds: 200), () {
+          if (mounted && rowFocusNodes[rIndex][cIndex].hasFocus) {
+            _updateMaterialSuggestions(rIndex);
+          }
+        });
+      },
     );
-
-    Widget cellWithSuggestions = Stack(
-      children: [
-        cell,
-        if (_activeMaterialRowIndex == rowIndex &&
-            _materialSuggestions.isNotEmpty)
-          Positioned(
-            top: 25,
-            left: 0,
-            right: 0,
-            child: _buildHorizontalMaterialSuggestions(rowIndex),
-          ),
-      ],
-    );
-
     if (!isOwnedByCurrentSeller) {
       return IgnorePointer(
         child: Opacity(
@@ -869,22 +1048,36 @@ class _SalesScreenState extends State<SalesScreen> {
             decoration: BoxDecoration(
               color: Colors.grey[100],
             ),
-            child: cellWithSuggestions,
+            child: cell,
           ),
         ),
       );
     }
 
-    return cellWithSuggestions;
+    return cell;
   }
 
   // خلية خاصة لحقل العبوة مع الاقتراحات
+  // في sales_screen.dart - استبدال _buildPackagingCell بهذا:
+
   Widget _buildPackagingCell(
       TextEditingController controller,
       FocusNode focusNode,
       int rowIndex,
       int colIndex,
       bool isOwnedByCurrentSeller) {
+    // إضافة مستمع لإخفاء الاقتراحات عند فقدان التركيز
+    focusNode.addListener(() {
+      if (!focusNode.hasFocus && _activePackagingRowIndex == rowIndex) {
+        EnhancedSuggestions.hide();
+        if (mounted) {
+          setState(() {
+            _activePackagingRowIndex = null;
+          });
+        }
+      }
+    });
+
     Widget cell = TableBuilder.buildTableCell(
       controller: controller,
       focusNode: focusNode,
@@ -903,20 +1096,7 @@ class _SalesScreenState extends State<SalesScreen> {
           _handleFieldChanged(value, rIndex, cIndex),
     );
 
-    Widget cellWithSuggestions = Stack(
-      children: [
-        cell,
-        if (_activePackagingRowIndex == rowIndex &&
-            _packagingSuggestions.isNotEmpty)
-          Positioned(
-            top: 25,
-            left: 0,
-            right: 0,
-            child: _buildHorizontalPackagingSuggestions(rowIndex),
-          ),
-      ],
-    );
-
+    // إرجاع الخلية فقط بدون Stack أو اقتراحات أفقية
     if (!isOwnedByCurrentSeller) {
       return IgnorePointer(
         child: Opacity(
@@ -925,13 +1105,13 @@ class _SalesScreenState extends State<SalesScreen> {
             decoration: BoxDecoration(
               color: Colors.grey[100],
             ),
-            child: cellWithSuggestions,
+            child: cell,
           ),
         ),
       );
     }
 
-    return cellWithSuggestions;
+    return cell; // فقط الخلية بدون اقتراحات
   }
 
   // خلية خاصة لحقل العائدية (الموردين) مع الاقتراحات
@@ -941,6 +1121,17 @@ class _SalesScreenState extends State<SalesScreen> {
       int rowIndex,
       int colIndex,
       bool isOwnedByCurrentSeller) {
+    focusNode.addListener(() {
+      if (!focusNode.hasFocus && _activeSupplierRowIndex == rowIndex) {
+        EnhancedSuggestions.hide();
+        if (mounted) {
+          setState(() {
+            _activeSupplierRowIndex = null;
+          });
+        }
+      }
+    });
+
     Widget cell = TableBuilder.buildTableCell(
       controller: controller,
       focusNode: focusNode,
@@ -959,20 +1150,6 @@ class _SalesScreenState extends State<SalesScreen> {
           _handleFieldChanged(value, rIndex, cIndex),
     );
 
-    Widget cellWithSuggestions = Stack(
-      children: [
-        cell,
-        if (_activeSupplierRowIndex == rowIndex &&
-            _supplierSuggestions.isNotEmpty)
-          Positioned(
-            top: 25,
-            left: 0,
-            right: 0,
-            child: _buildHorizontalSupplierSuggestions(rowIndex),
-          ),
-      ],
-    );
-
     if (!isOwnedByCurrentSeller) {
       return IgnorePointer(
         child: Opacity(
@@ -981,182 +1158,13 @@ class _SalesScreenState extends State<SalesScreen> {
             decoration: BoxDecoration(
               color: Colors.grey[100],
             ),
-            child: cellWithSuggestions,
+            child: cell,
           ),
         ),
       );
     }
 
-    return cellWithSuggestions;
-  }
-
-  // بناء قائمة اقتراحات المادة بشكل أفقي
-  Widget _buildHorizontalMaterialSuggestions(int rowIndex) {
-    return Container(
-      height: 30,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: Colors.grey[300]!),
-        borderRadius: BorderRadius.circular(4),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: _materialSuggestions.isEmpty
-          ? Container()
-          : ListView.separated(
-              scrollDirection: Axis.horizontal,
-              controller: _materialSuggestionsScrollController,
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              itemCount: _materialSuggestions.length,
-              separatorBuilder: (context, index) => const SizedBox(width: 4),
-              itemBuilder: (context, index) {
-                return InkWell(
-                  onTap: () {
-                    _selectMaterialSuggestion(
-                        _materialSuggestions[index], rowIndex);
-                  },
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: index == 0 ? Colors.blue[100] : Colors.blue[50],
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: Colors.blue[100]!),
-                    ),
-                    child: Text(
-                      _materialSuggestions[index],
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.blue,
-                        fontWeight:
-                            index == 0 ? FontWeight.bold : FontWeight.normal,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                );
-              },
-            ),
-    );
-  }
-
-  // بناء قائمة اقتراحات العبوة بشكل أفقي
-  Widget _buildHorizontalPackagingSuggestions(int rowIndex) {
-    return Container(
-      height: 30,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: Colors.grey[300]!),
-        borderRadius: BorderRadius.circular(4),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: _packagingSuggestions.isEmpty
-          ? Container()
-          : ListView.separated(
-              scrollDirection: Axis.horizontal,
-              controller: _packagingSuggestionsScrollController,
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              itemCount: _packagingSuggestions.length,
-              separatorBuilder: (context, index) => const SizedBox(width: 4),
-              itemBuilder: (context, index) {
-                return InkWell(
-                  onTap: () {
-                    _selectPackagingSuggestion(
-                        _packagingSuggestions[index], rowIndex);
-                  },
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: index == 0 ? Colors.green[100] : Colors.green[50],
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: Colors.green[100]!),
-                    ),
-                    child: Text(
-                      _packagingSuggestions[index],
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.green,
-                        fontWeight:
-                            index == 0 ? FontWeight.bold : FontWeight.normal,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                );
-              },
-            ),
-    );
-  }
-
-  // بناء قائمة اقتراحات الموردين بشكل أفقي
-  Widget _buildHorizontalSupplierSuggestions(int rowIndex) {
-    return Container(
-      height: 30,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: Colors.grey[300]!),
-        borderRadius: BorderRadius.circular(4),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: _supplierSuggestions.isEmpty
-          ? Container()
-          : ListView.separated(
-              scrollDirection: Axis.horizontal,
-              controller: _supplierSuggestionsScrollController,
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              itemCount: _supplierSuggestions.length,
-              separatorBuilder: (context, index) => const SizedBox(width: 4),
-              itemBuilder: (context, index) {
-                return InkWell(
-                  onTap: () {
-                    _selectSupplierSuggestion(
-                        _supplierSuggestions[index], rowIndex);
-                  },
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color:
-                          index == 0 ? Colors.orange[100] : Colors.orange[50],
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: Colors.orange[100]!),
-                    ),
-                    child: Text(
-                      _supplierSuggestions[index],
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.orange,
-                        fontWeight:
-                            index == 0 ? FontWeight.bold : FontWeight.normal,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                );
-              },
-            ),
-    );
+    return cell; // بدون Stack
   }
 
   void _handleFieldSubmitted(String value, int rowIndex, int colIndex) {
@@ -1165,32 +1173,62 @@ class _SalesScreenState extends State<SalesScreen> {
       return;
     }
 
-    _hideAllSuggestionsImmediately();
-
-    // إذا كان حقل المادة وEnter ضُغط وكانت هناك اقتراحات
+    // حالة خاصة لحقل المادة وEnter ضُغط وكانت هناك اقتراحات
     if (colIndex == 1 && _materialSuggestions.isNotEmpty) {
       _selectMaterialSuggestion(_materialSuggestions[0], rowIndex);
       return;
     }
 
-    // إذا كان حقل العائدية وEnter ضُغط وكانت هناك اقتراحات
+    // حالة خاصة لحقل العائدية وEnter ضُغط وكانت هناك اقتراحات
     if (colIndex == 2 && _supplierSuggestions.isNotEmpty) {
       _selectSupplierSuggestion(_supplierSuggestions[0], rowIndex);
       return;
     }
 
-    // إذا كان حقل العبوة وEnter ضُغط وكانت هناك اقتراحات
+    // حالة خاصة لحقل العبوة وEnter ضُغط وكانت هناك اقتراحات
     if (colIndex == 5 && _packagingSuggestions.isNotEmpty) {
       _selectPackagingSuggestion(_packagingSuggestions[0], rowIndex);
       return;
     }
 
-    // إذا كان حقل اسم الزبون (الحقل 10) وEnter ضُغط وكانت هناك اقتراحات وكانت القيمة "دين"
-    if (colIndex == 10 &&
-        cashOrDebtValues[rowIndex] == 'دين' &&
-        _customerSuggestions.isNotEmpty) {
-      _selectCustomerSuggestion(_customerSuggestions[0], rowIndex);
-      return;
+    // إخفاء الاقتراحات عند الضغط على Enter في أي حقل
+    EnhancedSuggestions.hide(force: true);
+
+    // حالة خاصة لحقل اسم الزبون (الحقل 10)
+    if (colIndex == 10) {
+      // إخفاء الاقتراحات أولاً (تم إخفاؤها أعلاه)
+
+      // إذا كانت القيمة "دين" وكانت هناك اقتراحات
+      if (cashOrDebtValues[rowIndex] == 'دين' &&
+          _customerSuggestions.isNotEmpty) {
+        _selectCustomerSuggestion(_customerSuggestions[0], rowIndex);
+        return;
+      }
+
+      // إذا كانت القيمة "دين" ولا توجد اقتراحات أو المستخدم كتب اسماً جديداً
+      if (cashOrDebtValues[rowIndex] == 'دين') {
+        // حفظ الاسم إذا كان صالحاً
+        if (value.trim().isNotEmpty && value.trim().length > 1) {
+          _saveCustomerToIndex(value.trim());
+        }
+        // فتح نافذة الفوارغ مباشرة
+        Future.delayed(const Duration(milliseconds: 50), () {
+          if (mounted) {
+            _showEmptiesDialog(rowIndex);
+          }
+        });
+        return;
+      }
+
+      // إذا كانت القيمة "نقدي"، ننتقل مباشرة إلى الفوارغ
+      if (cashOrDebtValues[rowIndex] == 'نقدي') {
+        Future.delayed(const Duration(milliseconds: 50), () {
+          if (mounted) {
+            _showEmptiesDialog(rowIndex);
+          }
+        });
+        return;
+      }
     }
 
     // التنقل العادي بين الحقول
@@ -1279,6 +1317,7 @@ class _SalesScreenState extends State<SalesScreen> {
             _updateCustomerSuggestions(rowIndex);
           },
           onCustomerSubmitted: (value, rIndex, cIndex) {
+            // استدعاء handleFieldSubmitted عند الضغط على Enter
             _handleFieldSubmitted(value, rIndex, cIndex);
           },
           isSalesScreen: true,
@@ -1358,23 +1397,33 @@ class _SalesScreenState extends State<SalesScreen> {
 
           if (value == 'نقدي') {
             customerNames[rowIndex] = '';
+            // فتح نافذة الفوارغ بعد تأخير بسيط
             Future.delayed(const Duration(milliseconds: 100), () {
               if (mounted) {
                 _showEmptiesDialog(rowIndex);
               }
             });
-          } else {
+          } else if (value == 'دين') {
+            // تفريغ اسم الزبون القديم إذا كان موجوداً
+            customerNames[rowIndex] = '';
+            rowControllers[rowIndex][10].text = '';
+            // تركيز الماوس على حقل اسم الزبون بعد تأخير بسيط
             Future.delayed(const Duration(milliseconds: 100), () {
               if (mounted && rowIndex < rowFocusNodes.length) {
                 FocusScope.of(context)
                     .requestFocus(rowFocusNodes[rowIndex][10]);
+                // تحديث الاقتراحات
+                _updateCustomerSuggestions(rowIndex);
               }
             });
           }
         });
       },
       onCancel: () {
-        // لا نقوم بأي شيء عند الإلغاء
+        // إذا تم الإلغاء، نرجع التركيز لحقل السعر
+        if (mounted && rowIndex < rowFocusNodes.length) {
+          FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][8]);
+        }
       },
     );
   }
@@ -1394,9 +1443,19 @@ class _SalesScreenState extends State<SalesScreen> {
           emptiesValues[rowIndex] = value;
           _hasUnsavedChanges = true;
         });
+        // إضافة صف جديد بعد اختيار الفوارغ
         _addRowAfterEmptiesSelection(rowIndex);
       },
-      onCancel: () {},
+      onCancel: () {
+        // إذا تم الإلغاء، نرجع التركيز لحقل اسم الزبون
+        if (cashOrDebtValues[rowIndex] == 'دین') {
+          Future.delayed(const Duration(milliseconds: 50), () {
+            if (mounted && rowIndex < rowFocusNodes.length) {
+              FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][10]);
+            }
+          });
+        }
+      },
     );
   }
 
@@ -1406,8 +1465,9 @@ class _SalesScreenState extends State<SalesScreen> {
       final newRowIndex = rowControllers.length - 1;
       Future.delayed(const Duration(milliseconds: 100), () {
         if (mounted) {
-          FocusScope.of(context).requestFocus(rowFocusNodes[newRowIndex][0]);
-          _scrollToField(newRowIndex, 0);
+          // التركيز على حقل المادة في السجل الجديد
+          FocusScope.of(context).requestFocus(rowFocusNodes[newRowIndex][1]);
+          _scrollToField(newRowIndex, 1);
         }
       });
     }
@@ -1935,39 +1995,45 @@ class _SalesScreenState extends State<SalesScreen> {
   void _updateCustomerSuggestions(int rowIndex) async {
     final query = rowControllers[rowIndex][10].text;
     if (query.length >= 1 && cashOrDebtValues[rowIndex] == 'دين') {
-      final suggestions = await _customerIndexService.getSuggestions(query);
-      setState(() {
-        _customerSuggestions = suggestions;
-        _activeCustomerRowIndex = rowIndex;
-      });
-    } else {
-      // إخفاء الاقتراحات إذا كان الحقل فارغاً أو الدفع نقدي
-      setState(() {
-        _customerSuggestions = [];
-        _activeCustomerRowIndex = null;
-      });
-    }
-  }
+      final suggestions =
+          await getEnhancedSuggestions(_customerIndexService, query);
 
-  // اختيار اقتراح للزبون
-  void _selectCustomerSuggestion(String suggestion, int rowIndex) {
-    setState(() {
-      _customerSuggestions = [];
-      _activeCustomerRowIndex = null;
-    });
-
-    rowControllers[rowIndex][10].text = suggestion;
-    _hasUnsavedChanges = true;
-
-    if (suggestion.trim().length > 1) {
-      _saveCustomerToIndex(suggestion);
-    }
-
-    Future.delayed(const Duration(milliseconds: 50), () {
       if (mounted) {
-        _showEmptiesDialog(rowIndex);
+        setState(() {
+          _customerSuggestions = suggestions;
+          _activeCustomerRowIndex = rowIndex;
+        });
+
+        if (suggestions.isNotEmpty) {
+          Future.delayed(const Duration(milliseconds: 50), () {
+            if (mounted && _activeCustomerRowIndex == rowIndex) {
+              final position = _calculateFieldPosition(
+                  rowIndex, 10, rowFocusNodes[rowIndex][10]);
+
+              EnhancedSuggestions.showVerticalSuggestions(
+                context: context,
+                suggestions: suggestions,
+                onSuggestionSelected: (suggestion) {
+                  _selectCustomerSuggestion(suggestion, rowIndex);
+                },
+                position: position,
+                query: query,
+                rowIndex: rowIndex,
+                primaryColor: Colors.purple,
+              );
+            }
+          });
+        }
       }
-    });
+    } else {
+      if (mounted) {
+        setState(() {
+          _customerSuggestions = [];
+          _activeCustomerRowIndex = null;
+        });
+        EnhancedSuggestions.hide();
+      }
+    }
   }
 
   // حفظ الزبون في الفهرس
@@ -2033,6 +2099,33 @@ class _SalesScreenState extends State<SalesScreen> {
               },
             ),
     );
+  }
+
+  // دالة محسنة لحساب الموضع بدقة
+  Offset _calculateFieldPosition(
+      int rowIndex, int colIndex, FocusNode focusNode) {
+    try {
+      final RenderBox? renderBox =
+          focusNode.context?.findRenderObject() as RenderBox?;
+      if (renderBox != null) {
+        return renderBox.localToGlobal(Offset.zero);
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint(
+            '❌ خطأ في حساب موضع الحقل [صف:$rowIndex, عمود:$colIndex]: $e');
+      }
+    }
+
+    // احتياطي: حساب موضع تقريبي بناءً على حجم الخلية
+    const double headerHeight = 32.0;
+    const double rowHeight = 25.0;
+    const double columnWidth = 60.0;
+
+    final double verticalOffset = (rowIndex * rowHeight) + headerHeight;
+    final double horizontalOffset = colIndex * columnWidth;
+
+    return Offset(horizontalOffset, verticalOffset);
   }
 }
 

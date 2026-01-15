@@ -9,6 +9,7 @@ import '../../services/supplier_index_service.dart';
 import '../../widgets/table_builder.dart' as TableBuilder;
 import '../../widgets/table_components.dart' as TableComponents;
 import '../../widgets/common_dialogs.dart' as CommonDialogs;
+import '../../services/enhanced_index_service.dart';
 
 class PurchasesScreen extends StatefulWidget {
   final String sellerName;
@@ -322,7 +323,8 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   void _updateMaterialSuggestions(int rowIndex) async {
     final query = rowControllers[rowIndex][1].text;
     if (query.length >= 1) {
-      final suggestions = await _materialIndexService.getSuggestions(query);
+      final suggestions =
+          await getEnhancedSuggestions(_materialIndexService, query);
       setState(() {
         _materialSuggestions = suggestions;
         _activeMaterialRowIndex = rowIndex;
@@ -340,7 +342,8 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   void _updatePackagingSuggestions(int rowIndex) async {
     final query = rowControllers[rowIndex][4].text;
     if (query.length >= 1) {
-      final suggestions = await _packagingIndexService.getSuggestions(query);
+      final suggestions =
+          await getEnhancedSuggestions(_packagingIndexService, query);
       setState(() {
         _packagingSuggestions = suggestions;
         _activePackagingRowIndex = rowIndex;
@@ -358,7 +361,8 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   void _updateSupplierSuggestions(int rowIndex) async {
     final query = rowControllers[rowIndex][2].text;
     if (query.length >= 1) {
-      final suggestions = await _supplierIndexService.getSuggestions(query);
+      final suggestions =
+          await getEnhancedSuggestions(_supplierIndexService, query);
       setState(() {
         _supplierSuggestions = suggestions;
         _activeSupplierRowIndex = rowIndex;

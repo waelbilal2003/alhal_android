@@ -95,6 +95,9 @@ class _SalesScreenState extends State<SalesScreen> {
   bool _showFullScreenSuggestions = false;
   String _currentSuggestionType = '';
 
+  double? _currentFieldWidth;
+  double? _currentFieldLeft;
+
   @override
   void initState() {
     super.initState();
@@ -894,11 +897,13 @@ class _SalesScreenState extends State<SalesScreen> {
       int colIndex,
       bool isOwnedByCurrentSeller) {
     focusNode.addListener(() {
-      if (!focusNode.hasFocus) {
+      if (focusNode.hasFocus) {
+        // حساب موقع الحقل عندما يحصل على التركيز
+        _calculateFieldPosition(focusNode, rowIndex, colIndex);
+      } else {
         _toggleFullScreenSuggestions(type: 'material', show: false);
       }
     });
-
     Widget cell = TableBuilder.buildTableCell(
       controller: controller,
       focusNode: focusNode,
@@ -1518,9 +1523,35 @@ class _SalesScreenState extends State<SalesScreen> {
         type: _currentSuggestionType,
         show: false,
       ),
+      fieldWidth: _currentFieldWidth,
+      fieldLeft: _currentFieldLeft, // لم يعد بحاجة fieldTop و fieldHeight
     );
 
     return overlay ?? Container();
+  }
+
+// تعديل دالة _calculateFieldPosition في sales_screen.dart
+  void _calculateFieldPosition(
+      FocusNode focusNode, int rowIndex, int colIndex) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final renderBox = context.findRenderObject() as RenderBox?;
+      if (renderBox != null) {
+        final fieldPosition = focusNode.context?.findRenderObject();
+        if (fieldPosition is RenderBox) {
+          final fieldSize = fieldPosition.size;
+          final fieldOffset = fieldPosition.localToGlobal(
+            Offset.zero,
+            ancestor: renderBox,
+          );
+
+          setState(() {
+            _currentFieldWidth = fieldSize.width;
+            _currentFieldLeft = fieldOffset.dx;
+            // لم يعد بحاجة لحفظ fieldTop و fieldHeight
+          });
+        }
+      }
+    });
   }
 
   Widget _buildFloatingActionButton() {

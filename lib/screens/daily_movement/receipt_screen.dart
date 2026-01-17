@@ -11,6 +11,7 @@ import '../../services/enhanced_index_service.dart';
 import '../../widgets/table_builder.dart' as TableBuilder;
 import '../../widgets/table_components.dart' as TableComponents;
 import '../../widgets/common_dialogs.dart' as CommonDialogs;
+import '../../widgets/suggestions_banner.dart';
 
 class ReceiptScreen extends StatefulWidget {
   final String sellerName;
@@ -85,7 +86,10 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
       ScrollController();
   final ScrollController _supplierSuggestionsScrollController =
       ScrollController();
-
+  bool _showFullScreenSuggestions = false;
+  String _currentSuggestionType = '';
+  late ScrollController
+      _horizontalSuggestionsController; // في initState قم بتعريفه: _horizontalSuggestionsController = ScrollController();
   @override
   void initState() {
     super.initState();
@@ -98,7 +102,9 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
 
     _resetTotalValues();
 
-    // إخفاء الاقتراحات عند التمرير
+    // تهيئة المتحكم
+    _horizontalSuggestionsController = ScrollController();
+
     _verticalScrollController.addListener(() {
       _hideAllSuggestionsImmediately();
     });
@@ -117,33 +123,29 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
   @override
   void dispose() {
     _saveCurrentRecord(silent: true);
-
     for (var row in rowControllers) {
       for (var controller in row) {
         controller.dispose();
       }
     }
-
     for (var row in rowFocusNodes) {
       for (var node in row) {
         node.dispose();
       }
     }
-
     totalCountController.dispose();
     totalStandingController.dispose();
     totalPaymentController.dispose();
     totalLoadController.dispose();
-
     _verticalScrollController.dispose();
     _horizontalScrollController.dispose();
     _scrollController.dispose();
-
-    // تحرير متحكمات اقتراحات التمرير
     _materialSuggestionsScrollController.dispose();
     _packagingSuggestionsScrollController.dispose();
     _supplierSuggestionsScrollController.dispose();
 
+    // إغلاق المتحكم
+    _horizontalSuggestionsController.dispose();
     super.dispose();
   }
 
@@ -314,6 +316,8 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
       setState(() {
         _materialSuggestions = suggestions;
         _activeMaterialRowIndex = rowIndex;
+        _toggleFullScreenSuggestions(
+            type: 'material', show: suggestions.isNotEmpty);
       });
     } else {
       // إخفاء الاقتراحات إذا كان الحقل فارغاً
@@ -333,6 +337,8 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
       setState(() {
         _packagingSuggestions = suggestions;
         _activePackagingRowIndex = rowIndex;
+        _toggleFullScreenSuggestions(
+            type: 'packaging', show: suggestions.isNotEmpty);
       });
     } else {
       // إخفاء الاقتراحات إذا كان الحقل فارغاً
@@ -352,6 +358,8 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
       setState(() {
         _supplierSuggestions = suggestions;
         _activeSupplierRowIndex = rowIndex;
+        _toggleFullScreenSuggestions(
+            type: 'supplier', show: suggestions.isNotEmpty);
       });
     } else {
       // إخفاء الاقتراحات إذا كان الحقل فارغاً
@@ -694,20 +702,12 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     return cell;
   }
 
-  // خلية خاصة لحقل المادة مع الاقتراحات - معدلة
   Widget _buildMaterialCell(
       TextEditingController controller,
       FocusNode focusNode,
       int rowIndex,
       int colIndex,
       bool isOwnedByCurrentSeller) {
-    // إضافة مستمع لفقدان التركيز
-    focusNode.addListener(() {
-      if (!focusNode.hasFocus) {
-        _hideAllSuggestionsImmediately();
-      }
-    });
-
     Widget cell = TableBuilder.buildTableCell(
       controller: controller,
       focusNode: focusNode,
@@ -718,49 +718,22 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
       scrollToField: _scrollToField,
       onFieldSubmitted: (value, rIndex, cIndex) {
         _handleFieldSubmitted(value, rIndex, cIndex);
-        // حفظ المادة في الفهرس عند الإنتهاء من الكتابة
-        if (value.trim().isNotEmpty && value.trim().length > 1) {
+        if (value.trim().isNotEmpty && value.trim().length > 1)
           _saveMaterialToIndex(value);
-        }
       },
       onFieldChanged: (value, rIndex, cIndex) =>
           _handleFieldChanged(value, rIndex, cIndex),
     );
-
-    // إضافة الاقتراحات
-    Widget cellWithSuggestions = Stack(
-      children: [
-        cell,
-        if (_activeMaterialRowIndex == rowIndex &&
-            _materialSuggestions.isNotEmpty)
-          Positioned(
-            top: 25,
-            left: 0,
-            right: 0,
-            child: _buildHorizontalMaterialSuggestions(rowIndex),
-          ),
-      ],
-    );
-
-    // إذا لم يكن السجل مملوكاً للبائع الحالي، جعل الخلية للقراءة فقط
-    if (!isOwnedByCurrentSeller) {
-      return IgnorePointer(
-        child: Opacity(
-          opacity: 0.7,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.grey[100],
-            ),
-            child: cellWithSuggestions,
-          ),
-        ),
-      );
-    }
-
-    return cellWithSuggestions;
+    return isOwnedByCurrentSeller
+        ? cell
+        : IgnorePointer(
+            child: Opacity(
+                opacity: 0.7,
+                child: Container(
+                    decoration: BoxDecoration(color: Colors.grey[100]),
+                    child: cell)));
   }
 
-  // خلية خاصة لحقل العبوة مع الاقتراحات
   Widget _buildPackagingCell(
       TextEditingController controller,
       FocusNode focusNode,
@@ -777,49 +750,21 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
       scrollToField: _scrollToField,
       onFieldSubmitted: (value, rIndex, cIndex) {
         _handleFieldSubmitted(value, rIndex, cIndex);
-        // حفظ العبوة في الفهرس عند الإنتهاء من الكتابة
-        if (value.trim().isNotEmpty) {
-          _savePackagingToIndex(value);
-        }
+        if (value.trim().isNotEmpty) _savePackagingToIndex(value);
       },
       onFieldChanged: (value, rIndex, cIndex) =>
           _handleFieldChanged(value, rIndex, cIndex),
     );
-
-    // إضافة الاقتراحات
-    Widget cellWithSuggestions = Stack(
-      children: [
-        cell,
-        if (_activePackagingRowIndex == rowIndex &&
-            _packagingSuggestions.isNotEmpty)
-          Positioned(
-            top: 25,
-            left: 0,
-            right: 0,
-            child: _buildHorizontalPackagingSuggestions(rowIndex),
-          ),
-      ],
-    );
-
-    // إذا لم يكن السجل مملوكاً للبائع الحالي، جعل الخلية للقراءة فقط
-    if (!isOwnedByCurrentSeller) {
-      return IgnorePointer(
-        child: Opacity(
-          opacity: 0.7,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.grey[100],
-            ),
-            child: cellWithSuggestions,
-          ),
-        ),
-      );
-    }
-
-    return cellWithSuggestions;
+    return isOwnedByCurrentSeller
+        ? cell
+        : IgnorePointer(
+            child: Opacity(
+                opacity: 0.7,
+                child: Container(
+                    decoration: BoxDecoration(color: Colors.grey[100]),
+                    child: cell)));
   }
 
-  // خلية خاصة لحقل العائدية (الموردين) مع الاقتراحات
   Widget _buildSupplierCell(
       TextEditingController controller,
       FocusNode focusNode,
@@ -836,217 +781,19 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
       scrollToField: _scrollToField,
       onFieldSubmitted: (value, rIndex, cIndex) {
         _handleFieldSubmitted(value, rIndex, cIndex);
-        // حفظ المورد في الفهرس عند الإنتهاء من الكتابة
-        if (value.trim().isNotEmpty) {
-          _saveSupplierToIndex(value);
-        }
+        if (value.trim().isNotEmpty) _saveSupplierToIndex(value);
       },
       onFieldChanged: (value, rIndex, cIndex) =>
           _handleFieldChanged(value, rIndex, cIndex),
     );
-
-    // إضافة الاقتراحات
-    Widget cellWithSuggestions = Stack(
-      children: [
-        cell,
-        if (_activeSupplierRowIndex == rowIndex &&
-            _supplierSuggestions.isNotEmpty)
-          Positioned(
-            top: 25,
-            left: 0,
-            right: 0,
-            child: _buildHorizontalSupplierSuggestions(rowIndex),
-          ),
-      ],
-    );
-
-    // إذا لم يكن السجل مملوكاً للبائع الحالي، جعل الخلية للقراءة فقط
-    if (!isOwnedByCurrentSeller) {
-      return IgnorePointer(
-        child: Opacity(
-          opacity: 0.7,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.grey[100],
-            ),
-            child: cellWithSuggestions,
-          ),
-        ),
-      );
-    }
-
-    return cellWithSuggestions;
-  }
-
-  // بناء قائمة اقتراحات المادة بشكل أفقي - معدلة لاختيار بنقرة واحدة
-  Widget _buildHorizontalMaterialSuggestions(int rowIndex) {
-    return Container(
-      height: 30,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: Colors.grey[300]!),
-        borderRadius: BorderRadius.circular(4),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: _materialSuggestions.isEmpty
-          ? Container()
-          : ListView.separated(
-              scrollDirection: Axis.horizontal,
-              controller: _materialSuggestionsScrollController,
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              itemCount: _materialSuggestions.length,
-              separatorBuilder: (context, index) => const SizedBox(width: 4),
-              itemBuilder: (context, index) {
-                return InkWell(
-                  onTap: () {
-                    _selectMaterialSuggestion(
-                        _materialSuggestions[index], rowIndex);
-                  },
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: index == 0
-                          ? Colors.blue[100] // تمييز أول اقتراح
-                          : Colors.blue[50],
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: Colors.blue[100]!),
-                    ),
-                    child: Text(
-                      _materialSuggestions[index],
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.blue,
-                        fontWeight:
-                            index == 0 ? FontWeight.bold : FontWeight.normal,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                );
-              },
-            ),
-    );
-  }
-
-  // بناء قائمة اقتراحات العبوة بشكل أفقي - معدلة لاختيار بنقرة واحدة
-  Widget _buildHorizontalPackagingSuggestions(int rowIndex) {
-    return Container(
-      height: 30,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: Colors.grey[300]!),
-        borderRadius: BorderRadius.circular(4),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: _packagingSuggestions.isEmpty
-          ? Container()
-          : ListView.separated(
-              scrollDirection: Axis.horizontal,
-              controller: _packagingSuggestionsScrollController,
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              itemCount: _packagingSuggestions.length,
-              separatorBuilder: (context, index) => const SizedBox(width: 4),
-              itemBuilder: (context, index) {
-                return InkWell(
-                  onTap: () {
-                    _selectPackagingSuggestion(
-                        _packagingSuggestions[index], rowIndex);
-                  },
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: index == 0 ? Colors.green[100] : Colors.green[50],
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: Colors.green[100]!),
-                    ),
-                    child: Text(
-                      _packagingSuggestions[index],
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.green,
-                        fontWeight:
-                            index == 0 ? FontWeight.bold : FontWeight.normal,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                );
-              },
-            ),
-    );
-  }
-
-  // بناء قائمة اقتراحات الموردين بشكل أفقي - معدلة لاختيار بنقرة واحدة
-  Widget _buildHorizontalSupplierSuggestions(int rowIndex) {
-    return Container(
-      height: 30,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: Colors.grey[300]!),
-        borderRadius: BorderRadius.circular(4),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: _supplierSuggestions.isEmpty
-          ? Container()
-          : ListView.separated(
-              scrollDirection: Axis.horizontal,
-              controller: _supplierSuggestionsScrollController,
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              itemCount: _supplierSuggestions.length,
-              separatorBuilder: (context, index) => const SizedBox(width: 4),
-              itemBuilder: (context, index) {
-                return InkWell(
-                  onTap: () {
-                    _selectSupplierSuggestion(
-                        _supplierSuggestions[index], rowIndex);
-                  },
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color:
-                          index == 0 ? Colors.orange[100] : Colors.orange[50],
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: Colors.orange[100]!),
-                    ),
-                    child: Text(
-                      _supplierSuggestions[index],
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.orange,
-                        fontWeight:
-                            index == 0 ? FontWeight.bold : FontWeight.normal,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                );
-              },
-            ),
-    );
+    return isOwnedByCurrentSeller
+        ? cell
+        : IgnorePointer(
+            child: Opacity(
+                opacity: 0.7,
+                child: Container(
+                    decoration: BoxDecoration(color: Colors.grey[100]),
+                    child: cell)));
   }
 
   void _handleFieldSubmitted(String value, int rowIndex, int colIndex) {
@@ -1148,12 +895,36 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          'يومية استلام رقم /$serialNumber/ ليوم $dayName تاريخ ${widget.selectedDate} لمحل ${widget.storeName} البائع ${widget.sellerName}',
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 14,
-          ),
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            if (_showFullScreenSuggestions &&
+                _getSuggestionsByType().isNotEmpty)
+              SuggestionsBanner(
+                suggestions: _getSuggestionsByType(),
+                type: _currentSuggestionType,
+                currentRowIndex: _getCurrentRowIndexByType(),
+                scrollController: _horizontalSuggestionsController,
+                onSelect: (val, idx) {
+                  if (_currentSuggestionType == 'material')
+                    _selectMaterialSuggestion(val, idx);
+                  if (_currentSuggestionType == 'packaging')
+                    _selectPackagingSuggestion(val, idx);
+                  if (_currentSuggestionType == 'supplier')
+                    _selectSupplierSuggestion(val, idx);
+                },
+                onClose: () =>
+                    _toggleFullScreenSuggestions(type: '', show: false),
+              ),
+            Expanded(
+              child: Text(
+                'يومية مبيعات رقم /$serialNumber/ تاريخ ${widget.selectedDate} البائع ${widget.sellerName}',
+                style:
+                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                textAlign: TextAlign.right,
+              ),
+            ),
+          ],
         ),
         centerTitle: true,
         backgroundColor: Colors.blue[700],
@@ -1530,6 +1301,44 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
         _activePackagingRowIndex = null;
         _activeSupplierRowIndex = null;
       });
+    }
+  }
+
+  void _toggleFullScreenSuggestions(
+      {required String type, required bool show}) {
+    if (mounted) {
+      setState(() {
+        _showFullScreenSuggestions = show;
+        _currentSuggestionType = show ? type : '';
+      });
+    }
+  }
+
+  List<String> _getSuggestionsByType() {
+    switch (_currentSuggestionType) {
+      case 'material':
+        return _materialSuggestions;
+      case 'packaging':
+        return _packagingSuggestions;
+      case 'supplier':
+        return _supplierSuggestions;
+
+      default:
+        return [];
+    }
+  }
+
+  int _getCurrentRowIndexByType() {
+    switch (_currentSuggestionType) {
+      case 'material':
+        return _activeMaterialRowIndex ?? -1;
+      case 'packaging':
+        return _activePackagingRowIndex ?? -1;
+      case 'supplier':
+        return _activeSupplierRowIndex ?? -1;
+
+      default:
+        return -1;
     }
   }
 }

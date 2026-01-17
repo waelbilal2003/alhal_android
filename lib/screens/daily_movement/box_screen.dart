@@ -8,6 +8,7 @@ import '../../widgets/common_dialogs.dart' as CommonDialogs;
 import '../../services/customer_index_service.dart';
 import '../../services/supplier_index_service.dart';
 import '../../services/enhanced_index_service.dart';
+import '../../widgets/suggestions_banner.dart';
 
 class BoxScreen extends StatefulWidget {
   final String sellerName;
@@ -78,6 +79,11 @@ class _BoxScreenState extends State<BoxScreen> {
 
   final ScrollController _supplierSuggestionsScrollController =
       ScrollController();
+
+  bool _showFullScreenSuggestions = false;
+  String _currentSuggestionType = '';
+  late ScrollController
+      _horizontalSuggestionsController; // في initState قم بتعريفه: _horizontalSuggestionsController = ScrollController();
   @override
   void initState() {
     super.initState();
@@ -87,10 +93,9 @@ class _BoxScreenState extends State<BoxScreen> {
     totalPaidController = TextEditingController();
     _resetTotalValues();
 
-    // إضافة مستمعات FocusNode لحقول الاقتراحات
-    _addFocusNodeListeners();
+    // تهيئة المتحكم
+    _horizontalSuggestionsController = ScrollController();
 
-    // إخفاء الاقتراحات عند التمرير
     _verticalScrollController.addListener(() {
       _hideAllSuggestionsImmediately();
     });
@@ -109,27 +114,25 @@ class _BoxScreenState extends State<BoxScreen> {
   @override
   void dispose() {
     _saveCurrentRecord(silent: true);
-
     for (var row in rowControllers) {
       for (var controller in row) {
         controller.dispose();
       }
     }
-
     for (var row in rowFocusNodes) {
       for (var node in row) {
         node.dispose();
       }
     }
-
     totalReceivedController.dispose();
     totalPaidController.dispose();
-
     _verticalScrollController.dispose();
     _horizontalScrollController.dispose();
     _scrollController.dispose();
-
     _customerSuggestionsScrollController.dispose();
+
+    // إغلاق المتحكم
+    _horizontalSuggestionsController.dispose();
     super.dispose();
   }
 
@@ -682,196 +685,99 @@ class _BoxScreenState extends State<BoxScreen> {
     final FocusNode accountNameFocusNode = rowFocusNodes[rowIndex][3];
 
     if (accountType.isNotEmpty) {
-      Widget cell = Stack(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(1),
-            constraints: const BoxConstraints(minHeight: 25),
-            child: Row(
-              children: [
-                Expanded(
-                  flex: 2,
-                  child: InkWell(
-                    onTap: isOwnedByCurrentSeller
-                        ? () {
-                            _showAccountTypeDialog(rowIndex);
-                            _scrollToField(rowIndex, colIndex);
-                          }
-                        : null,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        border: Border.all(
-                          color: _getAccountTypeColor(accountType),
-                          width: 0.5,
-                        ),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 4, vertical: 2),
-                      child: Center(
-                        child: Text(
-                          accountType,
+      Widget cell = Container(
+        padding: const EdgeInsets.all(1),
+        constraints: const BoxConstraints(minHeight: 25),
+        child: Row(
+          children: [
+            Expanded(
+              flex: 2,
+              child: InkWell(
+                onTap: isOwnedByCurrentSeller
+                    ? () => _showAccountTypeDialog(rowIndex)
+                    : null,
+                child: Container(
+                  decoration: BoxDecoration(
+                      border: Border.all(
+                          color: _getAccountTypeColor(accountType), width: 0.5),
+                      borderRadius: BorderRadius.circular(2)),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  child: Center(
+                      child: Text(accountType,
                           style: TextStyle(
-                            fontSize: 10,
-                            color: _getAccountTypeColor(accountType),
-                            fontWeight: FontWeight.bold,
-                          ),
+                              fontSize: 10,
+                              color: _getAccountTypeColor(accountType),
+                              fontWeight: FontWeight.bold),
                           textAlign: TextAlign.center,
                           maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ),
-                  ),
+                          overflow: TextOverflow.ellipsis)),
                 ),
-                const SizedBox(width: 4),
-                Expanded(
-                  flex: 5,
-                  child: TextField(
-                    controller: accountNameController,
-                    focusNode: accountNameFocusNode,
-                    textAlign: TextAlign.right,
-                    enabled: isOwnedByCurrentSeller,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.black,
-                    ),
-                    decoration: InputDecoration(
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 2, vertical: 1),
-                      border: const OutlineInputBorder(
-                        borderSide: BorderSide(color: Colors.grey, width: 0.5),
-                      ),
-                      hintText: _getAccountHintText(accountType),
-                      hintStyle: const TextStyle(
-                        fontSize: 10,
-                        color: Colors.grey,
-                      ),
-                    ),
-                    onSubmitted: (value) {
-                      if (isOwnedByCurrentSeller) {
-                        // تمرير العملية إلى handleFieldSubmitted
-                        _handleFieldSubmitted(value, rowIndex, colIndex);
-                      }
-                    },
-                    onChanged: (value) {
-                      if (isOwnedByCurrentSeller) {
-                        _hasUnsavedChanges = true;
-                        // تحديث الاقتراحات بناءً على نوع الحساب
-                        if (accountType == 'زبون') {
-                          _updateCustomerSuggestions(rowIndex);
-                        } else if (accountType == 'مورد') {
-                          _updateSupplierSuggestions(rowIndex);
-                        }
-                      }
-                    },
-                    onTap: () {
-                      _scrollToField(rowIndex, colIndex);
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // اقتراحات الزبائن
-          if (_activeCustomerRowIndex == rowIndex &&
-              _customerSuggestions.isNotEmpty &&
-              accountType == 'زبون')
-            Positioned(
-              top: 25,
-              left: 0,
-              right: 0,
-              child: _buildHorizontalCustomerSuggestions(rowIndex),
-            ),
-          // اقتراحات الموردين
-          if (_activeSupplierRowIndex == rowIndex &&
-              _supplierSuggestions.isNotEmpty &&
-              accountType == 'مورد')
-            Positioned(
-              top: 25,
-              left: 0,
-              right: 0,
-              child: _buildHorizontalSupplierSuggestions(rowIndex),
-            ),
-        ],
-      );
-
-      if (!isOwnedByCurrentSeller) {
-        return IgnorePointer(
-          child: Opacity(
-            opacity: 0.7,
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.grey[100],
               ),
-              child: cell,
             ),
-          ),
-        );
-      }
-
-      return cell;
+            const SizedBox(width: 4),
+            Expanded(
+              flex: 5,
+              child: TextField(
+                controller: accountNameController,
+                focusNode: accountNameFocusNode,
+                textAlign: TextAlign.right,
+                enabled: isOwnedByCurrentSeller,
+                style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black),
+                decoration: InputDecoration(
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+                  border: const OutlineInputBorder(
+                      borderSide: BorderSide(color: Colors.grey, width: 0.5)),
+                  hintText: _getAccountHintText(accountType),
+                  hintStyle: const TextStyle(fontSize: 10, color: Colors.grey),
+                ),
+                onSubmitted: (value) =>
+                    _handleFieldSubmitted(value, rowIndex, colIndex),
+                onChanged: (value) {
+                  if (isOwnedByCurrentSeller) {
+                    _hasUnsavedChanges = true;
+                    if (accountType == 'زبون')
+                      _updateCustomerSuggestions(rowIndex);
+                    else if (accountType == 'مورد')
+                      _updateSupplierSuggestions(rowIndex);
+                  }
+                },
+              ),
+            ),
+          ],
+        ),
+      );
+      return isOwnedByCurrentSeller
+          ? cell
+          : IgnorePointer(
+              child: Opacity(
+                  opacity: 0.7,
+                  child: Container(
+                      decoration: BoxDecoration(color: Colors.grey[100]),
+                      child: cell)));
     }
 
-    Widget cell = Container(
-      padding: const EdgeInsets.all(1),
-      constraints: const BoxConstraints(minHeight: 25),
-      child: InkWell(
-        onTap: isOwnedByCurrentSeller
-            ? () {
-                _showAccountTypeDialog(rowIndex);
-                _scrollToField(rowIndex, colIndex);
-              }
-            : null,
-        child: Container(
-          decoration: BoxDecoration(
+    // زر "اختر" في حال كان النوع فارغاً
+    return InkWell(
+      onTap: isOwnedByCurrentSeller
+          ? () => _showAccountTypeDialog(rowIndex)
+          : null,
+      child: Container(
+        margin: const EdgeInsets.all(2),
+        decoration: BoxDecoration(
             border: Border.all(color: Colors.grey[300]!),
-            borderRadius: BorderRadius.circular(3),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Expanded(
-                child: Text(
-                  'اختر',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.grey[600],
-                    fontWeight: FontWeight.normal,
-                  ),
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              Icon(
-                Icons.arrow_drop_down,
-                size: 16,
-                color: Colors.grey[600],
-              ),
-            ],
-          ),
-        ),
+            borderRadius: BorderRadius.circular(3)),
+        child:
+            const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Text('اختر', style: TextStyle(fontSize: 11)),
+          Icon(Icons.arrow_drop_down, size: 16)
+        ]),
       ),
     );
-
-    if (!isOwnedByCurrentSeller) {
-      return IgnorePointer(
-        child: Opacity(
-          opacity: 0.7,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.grey[100],
-            ),
-            child: cell,
-          ),
-        ),
-      );
-    }
-
-    return cell;
   }
 
   Widget _buildEmptyCell() {
@@ -1135,12 +1041,34 @@ class _BoxScreenState extends State<BoxScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          'يومية الصندوق رقم /$serialNumber/ ليوم $dayName تاريخ ${widget.selectedDate} لمحل ${widget.storeName} البائع ${widget.sellerName}',
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 14,
-          ),
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            if (_showFullScreenSuggestions &&
+                _getSuggestionsByType().isNotEmpty)
+              SuggestionsBanner(
+                suggestions: _getSuggestionsByType(),
+                type: _currentSuggestionType,
+                currentRowIndex: _getCurrentRowIndexByType(),
+                scrollController: _horizontalSuggestionsController,
+                onSelect: (val, idx) {
+                  if (_currentSuggestionType == 'customer')
+                    _selectCustomerSuggestion(val, idx);
+                  if (_currentSuggestionType == 'supplier')
+                    _selectSupplierSuggestion(val, idx);
+                },
+                onClose: () =>
+                    _toggleFullScreenSuggestions(type: '', show: false),
+              ),
+            Expanded(
+              child: Text(
+                'يومية مبيعات رقم /$serialNumber/ تاريخ ${widget.selectedDate} البائع ${widget.sellerName}',
+                style:
+                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                textAlign: TextAlign.right,
+              ),
+            ),
+          ],
         ),
         centerTitle: true,
         backgroundColor: Colors.blue[700],
@@ -1503,6 +1431,8 @@ class _BoxScreenState extends State<BoxScreen> {
       setState(() {
         _customerSuggestions = suggestions;
         _activeCustomerRowIndex = rowIndex;
+        _toggleFullScreenSuggestions(
+            type: 'customer', show: suggestions.isNotEmpty);
       });
     } else {
       setState(() {
@@ -1521,6 +1451,8 @@ class _BoxScreenState extends State<BoxScreen> {
       setState(() {
         _supplierSuggestions = suggestions;
         _activeSupplierRowIndex = rowIndex;
+        _toggleFullScreenSuggestions(
+            type: 'supplier', show: suggestions.isNotEmpty);
       });
     } else {
       // إخفاء الاقتراحات إذا كان الحقل فارغاً أو نوع الحساب ليس مورد
@@ -1596,123 +1528,36 @@ class _BoxScreenState extends State<BoxScreen> {
     }
   }
 
-  // بناء قائمة اقتراحات الزبائن بشكل أفقي
-  Widget _buildHorizontalCustomerSuggestions(int rowIndex) {
-    return Container(
-      height: 30,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: Colors.grey[300]!),
-        borderRadius: BorderRadius.circular(4),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: _customerSuggestions.isEmpty
-          ? Container()
-          : ListView.separated(
-              scrollDirection: Axis.horizontal,
-              controller: _customerSuggestionsScrollController,
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              itemCount: _customerSuggestions.length,
-              separatorBuilder: (context, index) => const SizedBox(width: 4),
-              itemBuilder: (context, index) {
-                return InkWell(
-                  onTap: () {
-                    _selectCustomerSuggestion(
-                        _customerSuggestions[index], rowIndex);
-                  },
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color:
-                          index == 0 ? Colors.purple[100] : Colors.purple[50],
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: Colors.purple[100]!),
-                    ),
-                    child: Text(
-                      _customerSuggestions[index],
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.purple,
-                        fontWeight:
-                            index == 0 ? FontWeight.bold : FontWeight.normal,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                );
-              },
-            ),
-    );
+  void _toggleFullScreenSuggestions(
+      {required String type, required bool show}) {
+    if (mounted) {
+      setState(() {
+        _showFullScreenSuggestions = show;
+        _currentSuggestionType = show ? type : '';
+      });
+    }
   }
 
-  // بناء قائمة اقتراحات الموردين بشكل أفقي
-  Widget _buildHorizontalSupplierSuggestions(int rowIndex) {
-    return Container(
-      height: 30,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: Colors.grey[300]!),
-        borderRadius: BorderRadius.circular(4),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: _supplierSuggestions.isEmpty || _activeSupplierRowIndex != rowIndex
-          ? Container()
-          : ListView.separated(
-              scrollDirection: Axis.horizontal,
-              controller: _supplierSuggestionsScrollController,
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              itemCount: _supplierSuggestions.length,
-              separatorBuilder: (context, index) => const SizedBox(width: 4),
-              itemBuilder: (context, index) {
-                return InkWell(
-                  onTap: () {
-                    _selectSupplierSuggestion(
-                        _supplierSuggestions[index], rowIndex);
-                  },
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color:
-                          index == 0 ? Colors.orange[100] : Colors.orange[50],
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: Colors.orange[100]!),
-                    ),
-                    child: Text(
-                      _supplierSuggestions[index],
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.orange,
-                        fontWeight:
-                            index == 0 ? FontWeight.bold : FontWeight.normal,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                );
-              },
-            ),
-    );
+  List<String> _getSuggestionsByType() {
+    switch (_currentSuggestionType) {
+      case 'supplier':
+        return _supplierSuggestions;
+      case 'customer':
+        return _customerSuggestions;
+      default:
+        return [];
+    }
   }
 
-  // إضافة دالة مساعدة لإضافة مستمعات FocusNode
-  void _addFocusNodeListeners() {
-    // سيتم استدعاؤها عند إضافة صف جديد
+  int _getCurrentRowIndexByType() {
+    switch (_currentSuggestionType) {
+      case 'supplier':
+        return _activeSupplierRowIndex ?? -1;
+      case 'customer':
+        return _activeCustomerRowIndex ?? -1;
+      default:
+        return -1;
+    }
   }
 }
 

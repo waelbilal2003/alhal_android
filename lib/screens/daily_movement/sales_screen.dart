@@ -16,6 +16,7 @@ import '../../widgets/common_dialogs.dart' as CommonDialogs;
 import 'package:flutter/foundation.dart';
 
 import 'dart:async';
+import '../../widgets/suggestions_banner.dart';
 
 class SalesScreen extends StatefulWidget {
   final String sellerName;
@@ -94,7 +95,6 @@ class _SalesScreenState extends State<SalesScreen> {
   String _currentSuggestionType = '';
 
   late ScrollController _horizontalSuggestionsController;
-
   @override
   void initState() {
     super.initState();
@@ -1360,22 +1360,34 @@ class _SalesScreenState extends State<SalesScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween, // توزيع العناصر
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            // نافذة الاقتراحات الأفقية (على اليسار)
             if (_showFullScreenSuggestions &&
                 _getSuggestionsByType().isNotEmpty)
-              _buildHorizontalSuggestions(),
-
-            // عنوان الصفحة (على اليمين)
+              SuggestionsBanner(
+                suggestions: _getSuggestionsByType(),
+                type: _currentSuggestionType,
+                currentRowIndex: _getCurrentRowIndexByType(),
+                scrollController: _horizontalSuggestionsController,
+                onSelect: (val, idx) {
+                  if (_currentSuggestionType == 'material')
+                    _selectMaterialSuggestion(val, idx);
+                  if (_currentSuggestionType == 'packaging')
+                    _selectPackagingSuggestion(val, idx);
+                  if (_currentSuggestionType == 'supplier')
+                    _selectSupplierSuggestion(val, idx);
+                  if (_currentSuggestionType == 'customer')
+                    _selectCustomerSuggestion(val, idx);
+                },
+                onClose: () =>
+                    _toggleFullScreenSuggestions(type: '', show: false),
+              ),
             Expanded(
               child: Text(
-                'يومية مبيعات رقم /$serialNumber/ ليوم $dayName تاريخ ${widget.selectedDate} لمحل ${widget.storeName} البائع ${widget.sellerName}',
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                ),
-                textAlign: TextAlign.right, // محاذاة النص لليمين
+                'يومية مبيعات رقم /$serialNumber/ تاريخ ${widget.selectedDate} البائع ${widget.sellerName}',
+                style:
+                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                textAlign: TextAlign.right,
               ),
             ),
           ],
@@ -2002,312 +2014,6 @@ class _SalesScreenState extends State<SalesScreen> {
       default:
         return [];
     }
-  }
-
-  // دالة لبناء الاقتراحات الأفقية في AppBar
-  Widget _buildHorizontalSuggestions() {
-    final suggestions = _getSuggestionsByType();
-    if (suggestions.isEmpty) return Container();
-
-    final currentRowIndex = _getCurrentRowIndexByType();
-    if (currentRowIndex < 0) return Container();
-
-    Color primaryColor;
-    switch (_currentSuggestionType) {
-      case 'material':
-        primaryColor = Colors.blue;
-        break;
-      case 'packaging':
-        primaryColor = Colors.green;
-        break;
-      case 'supplier':
-        primaryColor = Colors.orange;
-        break;
-      case 'customer':
-        primaryColor = Colors.purple;
-        break;
-      default:
-        primaryColor = Colors.blue;
-    }
-
-    return Container(
-      margin: const EdgeInsets.only(right: 8),
-      child: Material(
-        borderRadius: BorderRadius.circular(6),
-        color: Colors.white,
-        elevation: 4,
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(
-              color: primaryColor.withOpacity(0.3),
-              width: 1.5,
-            ),
-          ),
-          constraints: BoxConstraints(
-            maxWidth: MediaQuery.of(context).size.width * 0.5,
-            maxHeight: 120,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // رأس نافذة الاقتراحات
-              Container(
-                height: 28,
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                decoration: BoxDecoration(
-                  color: primaryColor.withOpacity(0.1),
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(6),
-                    topRight: Radius.circular(6),
-                  ),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        InkWell(
-                          onTap: () {
-                            print('========= CLOSE BUTTON TAPPED =========');
-                            _toggleFullScreenSuggestions(
-                              type: _currentSuggestionType,
-                              show: false,
-                            );
-                          },
-                          borderRadius: BorderRadius.circular(12),
-                          child: Container(
-                            width: 24,
-                            height: 24,
-                            alignment: Alignment.center,
-                            child: Icon(Icons.close,
-                                size: 14, color: Colors.grey[700]),
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${suggestions.length} اقتراح',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: primaryColor,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                    Container(
-                      width: 16,
-                      height: 16,
-                      decoration: BoxDecoration(
-                        color: primaryColor.withOpacity(0.2),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Center(
-                        child: Icon(
-                          Icons.swipe,
-                          size: 10,
-                          color: primaryColor,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // قائمة الاقتراحات الأفقية
-              Container(
-                height: 80,
-                color: Colors.white,
-                child: Row(
-                  children: [
-                    // زر للتمرير لليسار
-                    InkWell(
-                      onTap: () {
-                        print('========= SCROLL LEFT TAPPED =========');
-                        _horizontalSuggestionsController.animateTo(
-                          _horizontalSuggestionsController.offset - 150,
-                          duration: const Duration(milliseconds: 300),
-                          curve: Curves.easeInOut,
-                        );
-                      },
-                      child: Container(
-                        width: 24,
-                        height: 80,
-                        alignment: Alignment.center,
-                        child: Icon(Icons.chevron_left,
-                            size: 18, color: primaryColor),
-                      ),
-                    ),
-
-                    // قائمة الاقتراحات الأفقية مع تمرير
-                    Expanded(
-                      child: ListView.builder(
-                        controller: _horizontalSuggestionsController,
-                        scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        itemCount: suggestions.length,
-                        itemBuilder: (context, index) {
-                          return _buildSuggestionItem(
-                            suggestion: suggestions[index],
-                            index: index,
-                            primaryColor: primaryColor,
-                            currentRowIndex: currentRowIndex,
-                          );
-                        },
-                      ),
-                    ),
-
-                    // زر للتمرير لليمين
-                    InkWell(
-                      onTap: () {
-                        print('========= SCROLL RIGHT TAPPED =========');
-                        _horizontalSuggestionsController.animateTo(
-                          _horizontalSuggestionsController.offset + 150,
-                          duration: const Duration(milliseconds: 300),
-                          curve: Curves.easeInOut,
-                        );
-                      },
-                      child: Container(
-                        width: 24,
-                        height: 80,
-                        alignment: Alignment.center,
-                        child: Icon(Icons.chevron_right,
-                            size: 18, color: primaryColor),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // مؤشر التمرير
-              Container(
-                height: 4,
-                margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: suggestions.length,
-                  itemBuilder: (context, index) {
-                    return Container(
-                      width: 8,
-                      height: 4,
-                      margin: const EdgeInsets.symmetric(horizontal: 1),
-                      decoration: BoxDecoration(
-                        color: index == 0 ? primaryColor : Colors.grey[300],
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-// دالة مساعدة لبناء عنصر اقتراح واحد - باستخدام Material + InkWell
-  Widget _buildSuggestionItem({
-    required String suggestion,
-    required int index,
-    required Color primaryColor,
-    required int currentRowIndex,
-  }) {
-    return Container(
-      width: 120,
-      margin: const EdgeInsets.symmetric(horizontal: 2),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () {
-            // استدعاء الدالة المناسبة مباشرةً
-            // ستقوم الدالة نفسها بإخفاء الاقتراحات وتنفيذ باقي الخطوات
-            switch (_currentSuggestionType) {
-              case 'material':
-                _selectMaterialSuggestion(suggestion, currentRowIndex);
-                break;
-              case 'packaging':
-                _selectPackagingSuggestion(suggestion, currentRowIndex);
-                break;
-              case 'supplier':
-                _selectSupplierSuggestion(suggestion, currentRowIndex);
-                break;
-              case 'customer':
-                _selectCustomerSuggestion(suggestion, currentRowIndex);
-                break;
-            }
-          },
-          borderRadius: BorderRadius.circular(4),
-          child: Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 8,
-              vertical: 6,
-            ),
-            decoration: BoxDecoration(
-              color:
-                  index == 0 ? primaryColor.withOpacity(0.1) : Colors.grey[50],
-              borderRadius: BorderRadius.circular(4),
-              border: Border.all(
-                color: index == 0
-                    ? primaryColor.withOpacity(0.3)
-                    : Colors.grey[200]!,
-                width: 1,
-              ),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // رقم الاقتراح
-                Container(
-                  width: 20,
-                  height: 20,
-                  decoration: BoxDecoration(
-                    color: index == 0
-                        ? primaryColor
-                        : primaryColor.withOpacity(0.15),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Center(
-                    child: Text(
-                      (index + 1).toString(),
-                      style: TextStyle(
-                        color: index == 0 ? Colors.white : primaryColor,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 9,
-                      ),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 4),
-
-                // النص
-                Text(
-                  suggestion,
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: Colors.grey[800],
-                    fontWeight:
-                        index == 0 ? FontWeight.bold : FontWeight.normal,
-                  ),
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-
-                // مؤشر للأول
-                if (index == 0)
-                  Icon(
-                    Icons.keyboard_arrow_down,
-                    size: 12,
-                    color: primaryColor,
-                  ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
   }
 }
 

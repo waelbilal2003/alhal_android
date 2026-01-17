@@ -96,11 +96,15 @@ class _SalesScreenState extends State<SalesScreen> {
   String _currentSuggestionType = '';
 
   double? _currentFieldWidth;
+
   double? _currentFieldLeft;
+
+  late ScrollController _horizontalSuggestionsController;
 
   @override
   void initState() {
     super.initState();
+    _horizontalSuggestionsController = ScrollController();
 
     dayName = _extractDayName(widget.selectedDate);
 
@@ -128,6 +132,7 @@ class _SalesScreenState extends State<SalesScreen> {
 
   @override
   void dispose() {
+    _horizontalSuggestionsController.dispose();
     // إزالة جميع مراجع الاقتراحات العمودية
     _saveCurrentRecord(silent: true);
 
@@ -1346,14 +1351,28 @@ class _SalesScreenState extends State<SalesScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          'يومية مبيعات رقم /$serialNumber/ ليوم $dayName تاريخ ${widget.selectedDate} لمحل ${widget.storeName} البائع ${widget.sellerName}',
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 14,
-          ),
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween, // توزيع العناصر
+          children: [
+            // نافذة الاقتراحات الأفقية (على اليسار)
+            if (_showFullScreenSuggestions &&
+                _getSuggestionsByType().isNotEmpty)
+              _buildHorizontalSuggestions(),
+
+            // عنوان الصفحة (على اليمين)
+            Expanded(
+              child: Text(
+                'يومية مبيعات رقم /$serialNumber/ ليوم $dayName تاريخ ${widget.selectedDate} لمحل ${widget.storeName} البائع ${widget.sellerName}',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
+                textAlign: TextAlign.right, // محاذاة النص لليمين
+              ),
+            ),
+          ],
         ),
-        centerTitle: true,
+        centerTitle: false, // إلغاء المركزية
         backgroundColor: Colors.orange[700],
         foregroundColor: Colors.white,
         actions: [
@@ -1501,30 +1520,26 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   Widget _buildMainContent() {
-    return Stack(
-      children: [
-        _buildTableWithStickyHeader(),
-        // عرض الاقتراحات على كامل الشاشة إذا كانت مفعلة
-        if (_showFullScreenSuggestions) _buildSuggestionsOverlay(),
-      ],
-    );
+    return _buildTableWithStickyHeader(); // فقط الجدول بدون Stack
+    // لأن الاقتراحات الآن تظهر في AppBar
   }
 
   Widget _buildSuggestionsOverlay() {
-    // الحصول على الاقتراحات المناسبة حسب النوع
-    final Widget? overlay = VerticalSuggestionsWidget.getSuggestionsOverlay(
+    // استخدام HorizontalSuggestionsWidget بدلاً من VerticalSuggestionsWidget
+    final Widget? overlay = HorizontalSuggestionsWidget.getAppBarSuggestions(
       context: context,
-      activeRowIndex: _getActiveRowIndexByType(),
-      currentRowIndex: _getCurrentRowIndexByType(),
       suggestions: _getSuggestionsByType(),
       suggestionType: _currentSuggestionType,
-      onSuggestionSelected: _getOnSuggestionSelectedByType(),
+      onSuggestionSelected: (suggestion) {
+        final rowIndex = _getCurrentRowIndexByType();
+        if (rowIndex >= 0) {
+          _getOnSuggestionSelectedByType()(suggestion, rowIndex);
+        }
+      },
       onClose: () => _toggleFullScreenSuggestions(
         type: _currentSuggestionType,
         show: false,
       ),
-      fieldWidth: _currentFieldWidth,
-      fieldLeft: _currentFieldLeft, // لم يعد بحاجة fieldTop و fieldHeight
     );
 
     return overlay ?? Container();
@@ -2041,6 +2056,478 @@ class _SalesScreenState extends State<SalesScreen> {
       default:
         return (String suggestion, int rowIndex) {};
     }
+  }
+
+  // دالة لبناء الاقتراحات في AppBar
+  Widget _buildAppBarSuggestions() {
+    final suggestions = _getSuggestionsByType();
+    if (suggestions.isEmpty) return Container();
+
+    // تحديد اللون المناسب حسب النوع
+    Color primaryColor;
+    switch (_currentSuggestionType) {
+      case 'material':
+        primaryColor = Colors.blue;
+        break;
+      case 'packaging':
+        primaryColor = Colors.green;
+        break;
+      case 'supplier':
+        primaryColor = Colors.orange;
+        break;
+      case 'customer':
+        primaryColor = Colors.purple;
+        break;
+      default:
+        primaryColor = Colors.blue;
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(left: 8),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(6),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.15),
+              blurRadius: 6,
+              spreadRadius: 1,
+            ),
+          ],
+          border: Border.all(
+            color: primaryColor.withOpacity(0.5),
+            width: 1.5,
+          ),
+        ),
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.35,
+          maxHeight: 180,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // رأس نافذة الاقتراحات
+            Container(
+              height: 32,
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              decoration: BoxDecoration(
+                color: primaryColor.withOpacity(0.1),
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(6),
+                  topRight: Radius.circular(6),
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  IconButton(
+                    icon: Icon(Icons.close, size: 16, color: Colors.grey[700]),
+                    onPressed: () => _toggleFullScreenSuggestions(
+                      type: _currentSuggestionType,
+                      show: false,
+                    ),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 28,
+                      minHeight: 28,
+                    ),
+                  ),
+                  Text(
+                    '${suggestions.length} اقتراح',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: primaryColor,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // قائمة الاقتراحات
+            Expanded(
+              child: Container(
+                color: Colors.white,
+                child: ListView.builder(
+                  padding: EdgeInsets.zero,
+                  shrinkWrap: true,
+                  itemCount: suggestions.length,
+                  itemBuilder: (context, index) {
+                    return Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () {
+                          final rowIndex = _getCurrentRowIndexByType();
+                          if (rowIndex >= 0) {
+                            _toggleFullScreenSuggestions(
+                              type: _currentSuggestionType,
+                              show: false,
+                            );
+                            Future.delayed(const Duration(milliseconds: 50),
+                                () {
+                              _getOnSuggestionSelectedByType()(
+                                  suggestions[index], rowIndex);
+                            });
+                          }
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 6.0,
+                            horizontal: 8.0,
+                          ),
+                          decoration: BoxDecoration(
+                            color: index == 0
+                                ? primaryColor.withOpacity(0.08)
+                                : Colors.transparent,
+                            border: Border(
+                              bottom: BorderSide(
+                                  color: Colors.grey[200]!, width: 0.5),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              // رقم الاقتراح
+                              Container(
+                                width: 22,
+                                height: 22,
+                                decoration: BoxDecoration(
+                                  color: index == 0
+                                      ? primaryColor
+                                      : primaryColor.withOpacity(0.1),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    (index + 1).toString(),
+                                    style: TextStyle(
+                                      color: index == 0
+                                          ? Colors.white
+                                          : primaryColor,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                                ),
+                              ),
+
+                              const SizedBox(width: 6),
+
+                              // النص
+                              Expanded(
+                                child: Text(
+                                  suggestions[index],
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.grey[800],
+                                    fontWeight: index == 0
+                                        ? FontWeight.bold
+                                        : FontWeight.normal,
+                                  ),
+                                  textAlign: TextAlign.right,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+
+                              // أيقونة السهم للأول
+                              if (index == 0)
+                                Icon(
+                                  Icons.arrow_back_ios_new,
+                                  color: primaryColor,
+                                  size: 12,
+                                  textDirection: TextDirection.ltr,
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // دالة لبناء الاقتراحات الأفقية في AppBar
+  Widget _buildHorizontalSuggestions() {
+    final suggestions = _getSuggestionsByType();
+    if (suggestions.isEmpty) return Container();
+
+    // تحديد اللون المناسب حسب النوع
+    Color primaryColor;
+    switch (_currentSuggestionType) {
+      case 'material':
+        primaryColor = Colors.blue;
+        break;
+      case 'packaging':
+        primaryColor = Colors.green;
+        break;
+      case 'supplier':
+        primaryColor = Colors.orange;
+        break;
+      case 'customer':
+        primaryColor = Colors.purple;
+        break;
+      default:
+        primaryColor = Colors.blue;
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(right: 8),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(6),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.15),
+              blurRadius: 6,
+              spreadRadius: 1,
+            ),
+          ],
+          border: Border.all(
+            color: primaryColor.withOpacity(0.5),
+            width: 1.5,
+          ),
+        ),
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.5,
+          maxHeight: 120,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // رأس نافذة الاقتراحات
+            Container(
+              height: 28,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              decoration: BoxDecoration(
+                color: primaryColor.withOpacity(0.1),
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(6),
+                  topRight: Radius.circular(6),
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      IconButton(
+                        icon: Icon(Icons.close,
+                            size: 14, color: Colors.grey[700]),
+                        onPressed: () => _toggleFullScreenSuggestions(
+                          type: _currentSuggestionType,
+                          show: false,
+                        ),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                          minWidth: 24,
+                          minHeight: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${suggestions.length} اقتراح',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: primaryColor,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Container(
+                    width: 16,
+                    height: 16,
+                    decoration: BoxDecoration(
+                      color: primaryColor.withOpacity(0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Center(
+                      child: Icon(
+                        Icons.swipe,
+                        size: 10,
+                        color: primaryColor,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // قائمة الاقتراحات الأفقية
+            Container(
+              height: 80, // ارتفاع ثابت للقائمة الأفقية
+              color: Colors.white,
+              child: Row(
+                children: [
+                  // زر للتمرير لليسار
+                  IconButton(
+                    icon:
+                        Icon(Icons.chevron_left, size: 18, color: primaryColor),
+                    onPressed: () {
+                      // منطق التمرير لليسار
+                    },
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 24,
+                      minHeight: 24,
+                    ),
+                  ),
+
+                  // قائمة الاقتراحات الأفقية مع تمرير
+                  Expanded(
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal, // أفقي
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      itemCount: suggestions.length,
+                      itemBuilder: (context, index) {
+                        return Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 2),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: () {
+                                final rowIndex = _getCurrentRowIndexByType();
+                                if (rowIndex >= 0) {
+                                  _toggleFullScreenSuggestions(
+                                    type: _currentSuggestionType,
+                                    show: false,
+                                  );
+                                  Future.delayed(
+                                      const Duration(milliseconds: 50), () {
+                                    _getOnSuggestionSelectedByType()(
+                                        suggestions[index], rowIndex);
+                                  });
+                                }
+                              },
+                              borderRadius: BorderRadius.circular(4),
+                              child: Container(
+                                width: 120, // عرض ثابت لكل اقتراح
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: index == 0
+                                      ? primaryColor.withOpacity(0.1)
+                                      : Colors.grey[50],
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(
+                                    color: index == 0
+                                        ? primaryColor.withOpacity(0.3)
+                                        : Colors.grey[200]!,
+                                    width: 1,
+                                  ),
+                                ),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    // رقم الاقتراح
+                                    Container(
+                                      width: 20,
+                                      height: 20,
+                                      decoration: BoxDecoration(
+                                        color: index == 0
+                                            ? primaryColor
+                                            : primaryColor.withOpacity(0.15),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Center(
+                                        child: Text(
+                                          (index + 1).toString(),
+                                          style: TextStyle(
+                                            color: index == 0
+                                                ? Colors.white
+                                                : primaryColor,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 9,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+
+                                    const SizedBox(height: 4),
+
+                                    // النص
+                                    Text(
+                                      suggestions[index],
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: Colors.grey[800],
+                                        fontWeight: index == 0
+                                            ? FontWeight.bold
+                                            : FontWeight.normal,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+
+                                    // مؤشر للأول
+                                    if (index == 0)
+                                      Icon(
+                                        Icons.keyboard_arrow_down,
+                                        size: 12,
+                                        color: primaryColor,
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+
+                  // زر للتمرير لليمين
+                  IconButton(
+                    icon: Icon(Icons.chevron_right,
+                        size: 18, color: primaryColor),
+                    onPressed: () {
+                      // منطق التمرير لليمين
+                    },
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 24,
+                      minHeight: 24,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // مؤشر التمرير
+            Container(
+              height: 4,
+              margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: suggestions.length,
+                itemBuilder: (context, index) {
+                  return Container(
+                    width: 8,
+                    height: 4,
+                    margin: const EdgeInsets.symmetric(horizontal: 1),
+                    decoration: BoxDecoration(
+                      color: index == 0 ? primaryColor : Colors.grey[300],
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

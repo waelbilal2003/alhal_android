@@ -120,11 +120,6 @@ class _SalesScreenState extends State<SalesScreen> {
       _hideAllSuggestionsImmediately();
     });
 
-    // إضافة مستمع لفقدان التركيز من الجدول
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      // يمكنك إضافة FocusScope هنا إذا لزم الأمر
-    });
-
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadOrCreateRecord();
       _loadAvailableDates();
@@ -406,6 +401,123 @@ class _SalesScreenState extends State<SalesScreen> {
         });
       }
     }
+  }
+
+  // 1. اختيار اقتراح للمادة
+  void _selectMaterialSuggestion(String suggestion, int rowIndex) {
+    // التأكد من أن الصف لا يزال موجوداً
+    if (rowIndex >= rowControllers.length) return;
+
+    // أولاً: إخفاء نافذة الاقتراحات
+    _toggleFullScreenSuggestions(type: 'material', show: false);
+
+    // ثانياً: تعيين النص في المتحكم مباشرة (لا حاجة لـ setState هنا)
+    rowControllers[rowIndex][1].text = suggestion;
+
+    // ثالثاً: تحديث حالة "التغييرات غير المحفوظة" (هنا نحتاج setState)
+    setState(() {
+      _hasUnsavedChanges = true;
+    });
+
+    // رابعاً: حفظ المادة في الفهرس
+    if (suggestion.trim().length > 1) {
+      _saveMaterialToIndex(suggestion);
+    }
+
+    // خامساً: نقل التركيز إلى الحقل التالي بعد تأخير بسيط للسماح للواجهة بالتحديث
+    Future.delayed(const Duration(milliseconds: 50), () {
+      if (mounted && rowIndex < rowFocusNodes.length) {
+        FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][2]);
+      }
+    });
+  }
+
+// 2. اختيار اقتراح للعبوة
+  void _selectPackagingSuggestion(String suggestion, int rowIndex) {
+    // التأكد من أن الصف لا يزال موجوداً
+    if (rowIndex >= rowControllers.length) return;
+
+    // أولاً: إخفاء نافذة الاقتراحات
+    _toggleFullScreenSuggestions(type: 'packaging', show: false);
+
+    // ثانياً: تعيين النص في المتحكم مباشرة
+    rowControllers[rowIndex][5].text = suggestion;
+
+    // ثالثاً: تحديث حالة "التغييرات غير المحفوظة"
+    setState(() {
+      _hasUnsavedChanges = true;
+    });
+
+    // رابعاً: حفظ العبوة في الفهرس
+    if (suggestion.trim().length > 1) {
+      _savePackagingToIndex(suggestion);
+    }
+
+    // خامساً: نقل التركيز إلى الحقل التالي
+    Future.delayed(const Duration(milliseconds: 50), () {
+      if (mounted && rowIndex < rowFocusNodes.length) {
+        FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][6]);
+      }
+    });
+  }
+
+// 3. اختيار اقتراح للمورد (العائدية)
+  void _selectSupplierSuggestion(String suggestion, int rowIndex) {
+    // التأكد من أن الصف لا يزال موجوداً
+    if (rowIndex >= rowControllers.length) return;
+
+    // أولاً: إخفاء نافذة الاقتراحات
+    _toggleFullScreenSuggestions(type: 'supplier', show: false);
+
+    // ثانياً: تعيين النص في المتحكم مباشرة
+    rowControllers[rowIndex][2].text = suggestion;
+
+    // ثالثاً: تحديث حالة "التغييرات غير المحفوظة"
+    setState(() {
+      _hasUnsavedChanges = true;
+    });
+
+    // رابعاً: حفظ المورد في الفهرس
+    if (suggestion.trim().length > 1) {
+      _saveSupplierToIndex(suggestion);
+    }
+
+    // خامساً: نقل التركيز إلى الحقل التالي
+    Future.delayed(const Duration(milliseconds: 50), () {
+      if (mounted && rowIndex < rowFocusNodes.length) {
+        FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][3]);
+      }
+    });
+  }
+
+// 4. اختيار اقتراح للزبون
+  void _selectCustomerSuggestion(String suggestion, int rowIndex) {
+    // التأكد من أن الصف لا يزال موجوداً
+    if (rowIndex >= rowControllers.length) return;
+
+    // أولاً: إخفاء نافذة الاقتراحات
+    _toggleFullScreenSuggestions(type: 'customer', show: false);
+
+    // ثانياً: تعيين النص في المتحكم
+    rowControllers[rowIndex][10].text = suggestion;
+
+    // ثالثاً: تحديث حالة "التغييرات غير المحفوظة" والمتغير الخاص باسم الزبون
+    setState(() {
+      customerNames[rowIndex] = suggestion;
+      _hasUnsavedChanges = true;
+    });
+
+    // رابعاً: حفظ الزبون في الفهرس
+    if (suggestion.trim().length > 1) {
+      _saveCustomerToIndex(suggestion);
+    }
+
+    // خامساً: فتح نافذة الفوارغ تلقائياً
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (mounted) {
+        _showEmptiesDialog(rowIndex);
+      }
+    });
   }
 
   // حفظ المادة في الفهرس
@@ -952,35 +1064,23 @@ class _SalesScreenState extends State<SalesScreen> {
     }
 
     // إخفاء الاقتراحات أولاً - مثل purchases_screen
-    _toggleFullScreenSuggestions(type: _currentSuggestionType, show: false);
+    _hideAllSuggestionsImmediately();
 
     // حالة خاصة لحقل المادة وEnter ضُغط وكانت هناك اقتراحات
     if (colIndex == 1 && _materialSuggestions.isNotEmpty) {
-      _handleSuggestionSelection(
-        suggestion: _materialSuggestions[0],
-        index: 0,
-        rowIndex: rowIndex,
-      );
+      _selectMaterialSuggestion(_materialSuggestions[0], rowIndex);
       return;
     }
 
     // حالة خاصة لحقل العائدية وEnter ضُغط وكانت هناك اقتراحات
     if (colIndex == 2 && _supplierSuggestions.isNotEmpty) {
-      _handleSuggestionSelection(
-        suggestion: _supplierSuggestions[0],
-        index: 0,
-        rowIndex: rowIndex,
-      );
+      _selectSupplierSuggestion(_supplierSuggestions[0], rowIndex);
       return;
     }
 
     // حالة خاصة لحقل العبوة وEnter ضُغط وكانت هناك اقتراحات
     if (colIndex == 5 && _packagingSuggestions.isNotEmpty) {
-      _handleSuggestionSelection(
-        suggestion: _packagingSuggestions[0],
-        index: 0,
-        rowIndex: rowIndex,
-      );
+      _selectPackagingSuggestion(_packagingSuggestions[0], rowIndex);
       return;
     }
 
@@ -989,11 +1089,7 @@ class _SalesScreenState extends State<SalesScreen> {
       // إذا كانت القيمة "دين" وكانت هناك اقتراحات
       if (cashOrDebtValues[rowIndex] == 'دين' &&
           _customerSuggestions.isNotEmpty) {
-        _handleSuggestionSelection(
-          suggestion: _customerSuggestions[0],
-          index: 0,
-          rowIndex: rowIndex,
-        );
+        _selectCustomerSuggestion(_customerSuggestions[0], rowIndex);
         return;
       }
 
@@ -1436,13 +1532,16 @@ class _SalesScreenState extends State<SalesScreen> {
     // لأن الاقتراحات الآن تظهر في AppBar
   }
 
+// تعديل دالة _calculateFieldPosition في sales_screen.dart
   void _calculateFieldPosition(
       FocusNode focusNode, int rowIndex, int colIndex) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final renderBox = context.findRenderObject() as RenderBox?;
       if (renderBox != null) {
         final fieldPosition = focusNode.context?.findRenderObject();
-        if (fieldPosition is RenderBox) {}
+        if (fieldPosition is RenderBox) {
+          setState(() {});
+        }
       }
     });
   }
@@ -1905,7 +2004,7 @@ class _SalesScreenState extends State<SalesScreen> {
     }
   }
 
-  // دالة لبناء الاقتراحات الأفقية في AppBar - معدلة لتعمل مثل purchases_screen
+  // دالة لبناء الاقتراحات الأفقية في AppBar
   Widget _buildHorizontalSuggestions() {
     final suggestions = _getSuggestionsByType();
     if (suggestions.isEmpty) return Container();
@@ -1970,6 +2069,7 @@ class _SalesScreenState extends State<SalesScreen> {
                       children: [
                         InkWell(
                           onTap: () {
+                            print('========= CLOSE BUTTON TAPPED =========');
                             _toggleFullScreenSuggestions(
                               type: _currentSuggestionType,
                               show: false,
@@ -2014,7 +2114,7 @@ class _SalesScreenState extends State<SalesScreen> {
                 ),
               ),
 
-              // قائمة الاقتراحات الأفقية - معدلة مثل purchases_screen
+              // قائمة الاقتراحات الأفقية
               Container(
                 height: 80,
                 color: Colors.white,
@@ -2023,6 +2123,7 @@ class _SalesScreenState extends State<SalesScreen> {
                     // زر للتمرير لليسار
                     InkWell(
                       onTap: () {
+                        print('========= SCROLL LEFT TAPPED =========');
                         _horizontalSuggestionsController.animateTo(
                           _horizontalSuggestionsController.offset - 150,
                           duration: const Duration(milliseconds: 300),
@@ -2038,97 +2139,19 @@ class _SalesScreenState extends State<SalesScreen> {
                       ),
                     ),
 
-                    // قائمة الاقتراحات الأفقية مع تمرير - معدلة مثل purchases_screen
+                    // قائمة الاقتراحات الأفقية مع تمرير
                     Expanded(
-                      child: ListView.separated(
+                      child: ListView.builder(
                         controller: _horizontalSuggestionsController,
                         scrollDirection: Axis.horizontal,
                         padding: const EdgeInsets.symmetric(horizontal: 4),
-                        separatorBuilder: (context, index) =>
-                            const SizedBox(width: 4),
                         itemCount: suggestions.length,
                         itemBuilder: (context, index) {
-                          return InkWell(
-                            onTap: () {
-                              // اختيار الاقتراح وتنفيذ كل شيء بنقرة واحدة - مثل purchases_screen
-                              _handleSuggestionSelection(
-                                suggestion: suggestions[index],
-                                index: index,
-                                rowIndex: currentRowIndex,
-                              );
-                            },
-                            child: Container(
-                              width: 120,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 6,
-                              ),
-                              decoration: BoxDecoration(
-                                color: index == 0
-                                    ? primaryColor.withOpacity(0.1)
-                                    : Colors.grey[50],
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(
-                                  color: index == 0
-                                      ? primaryColor.withOpacity(0.3)
-                                      : Colors.grey[200]!,
-                                  width: 1,
-                                ),
-                              ),
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  // رقم الاقتراح
-                                  Container(
-                                    width: 20,
-                                    height: 20,
-                                    decoration: BoxDecoration(
-                                      color: index == 0
-                                          ? primaryColor
-                                          : primaryColor.withOpacity(0.15),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: Center(
-                                      child: Text(
-                                        (index + 1).toString(),
-                                        style: TextStyle(
-                                          color: index == 0
-                                              ? Colors.white
-                                              : primaryColor,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 9,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-
-                                  const SizedBox(height: 4),
-
-                                  // النص
-                                  Text(
-                                    suggestions[index],
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      color: Colors.grey[800],
-                                      fontWeight: index == 0
-                                          ? FontWeight.bold
-                                          : FontWeight.normal,
-                                    ),
-                                    textAlign: TextAlign.center,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-
-                                  // مؤشر للأول
-                                  if (index == 0)
-                                    Icon(
-                                      Icons.keyboard_arrow_down,
-                                      size: 12,
-                                      color: primaryColor,
-                                    ),
-                                ],
-                              ),
-                            ),
+                          return _buildSuggestionItem(
+                            suggestion: suggestions[index],
+                            index: index,
+                            primaryColor: primaryColor,
+                            currentRowIndex: currentRowIndex,
                           );
                         },
                       ),
@@ -2137,6 +2160,7 @@ class _SalesScreenState extends State<SalesScreen> {
                     // زر للتمرير لليمين
                     InkWell(
                       onTap: () {
+                        print('========= SCROLL RIGHT TAPPED =========');
                         _horizontalSuggestionsController.animateTo(
                           _horizontalSuggestionsController.offset + 150,
                           duration: const Duration(milliseconds: 300),
@@ -2182,85 +2206,108 @@ class _SalesScreenState extends State<SalesScreen> {
     );
   }
 
-  // دالة مساعدة لمعالجة اختيار الاقتراح - تعمل مثل purchases_screen
-  void _handleSuggestionSelection({
+// دالة مساعدة لبناء عنصر اقتراح واحد - باستخدام Material + InkWell
+  Widget _buildSuggestionItem({
     required String suggestion,
     required int index,
-    required int rowIndex,
+    required Color primaryColor,
+    required int currentRowIndex,
   }) {
-    // إخفاء الاقتراحات أولاً وفوراً - مثل purchases_screen
-    _toggleFullScreenSuggestions(
-      type: _currentSuggestionType,
-      show: false,
-    );
-
-    // استخدام setState لتحديث الواجهة
-    setState(() {
-      // استدعاء الدالة المناسبة حسب النوع - مثل purchases_screen
-      switch (_currentSuggestionType) {
-        case 'material':
-          rowControllers[rowIndex][1].text = suggestion;
-          _hasUnsavedChanges = true;
-          break;
-        case 'packaging':
-          rowControllers[rowIndex][5].text = suggestion;
-          _hasUnsavedChanges = true;
-          break;
-        case 'supplier':
-          rowControllers[rowIndex][2].text = suggestion;
-          _hasUnsavedChanges = true;
-          break;
-        case 'customer':
-          rowControllers[rowIndex][10].text = suggestion;
-          customerNames[rowIndex] = suggestion;
-          _hasUnsavedChanges = true;
-          break;
-      }
-    });
-
-    // حفظ في الفهرس إذا كانت القيمة صالحة - مثل purchases_screen
-    final trimmedSuggestion = suggestion.trim();
-    if (trimmedSuggestion.length > 1) {
-      switch (_currentSuggestionType) {
-        case 'material':
-          _saveMaterialToIndex(trimmedSuggestion);
-          break;
-        case 'packaging':
-          _savePackagingToIndex(trimmedSuggestion);
-          break;
-        case 'supplier':
-          _saveSupplierToIndex(trimmedSuggestion);
-          break;
-        case 'customer':
-          _saveCustomerToIndex(trimmedSuggestion);
-          break;
-      }
-    }
-
-    // نقل التركيز إلى الحقل التالي بعد تأخير بسيط - مثل purchases_screen
-    Future.delayed(const Duration(milliseconds: 50), () {
-      if (!mounted) return;
-
-      switch (_currentSuggestionType) {
-        case 'material':
-          FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][2]);
-          break;
-        case 'packaging':
-          FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][6]);
-          break;
-        case 'supplier':
-          FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][3]);
-          break;
-        case 'customer':
-          // للزبائن، نفتح نافذة الفوارغ بعد الاختيار
-          Future.delayed(const Duration(milliseconds: 100), () {
-            if (mounted) {
-              _showEmptiesDialog(rowIndex);
+    return Container(
+      width: 120,
+      margin: const EdgeInsets.symmetric(horizontal: 2),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () {
+            // استدعاء الدالة المناسبة مباشرةً
+            // ستقوم الدالة نفسها بإخفاء الاقتراحات وتنفيذ باقي الخطوات
+            switch (_currentSuggestionType) {
+              case 'material':
+                _selectMaterialSuggestion(suggestion, currentRowIndex);
+                break;
+              case 'packaging':
+                _selectPackagingSuggestion(suggestion, currentRowIndex);
+                break;
+              case 'supplier':
+                _selectSupplierSuggestion(suggestion, currentRowIndex);
+                break;
+              case 'customer':
+                _selectCustomerSuggestion(suggestion, currentRowIndex);
+                break;
             }
-          });
-          break;
-      }
-    });
+          },
+          borderRadius: BorderRadius.circular(4),
+          child: Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 8,
+              vertical: 6,
+            ),
+            decoration: BoxDecoration(
+              color:
+                  index == 0 ? primaryColor.withOpacity(0.1) : Colors.grey[50],
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(
+                color: index == 0
+                    ? primaryColor.withOpacity(0.3)
+                    : Colors.grey[200]!,
+                width: 1,
+              ),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // رقم الاقتراح
+                Container(
+                  width: 20,
+                  height: 20,
+                  decoration: BoxDecoration(
+                    color: index == 0
+                        ? primaryColor
+                        : primaryColor.withOpacity(0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: Text(
+                      (index + 1).toString(),
+                      style: TextStyle(
+                        color: index == 0 ? Colors.white : primaryColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 9,
+                      ),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 4),
+
+                // النص
+                Text(
+                  suggestion,
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: Colors.grey[800],
+                    fontWeight:
+                        index == 0 ? FontWeight.bold : FontWeight.normal,
+                  ),
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+
+                // مؤشر للأول
+                if (index == 0)
+                  Icon(
+                    Icons.keyboard_arrow_down,
+                    size: 12,
+                    color: primaryColor,
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

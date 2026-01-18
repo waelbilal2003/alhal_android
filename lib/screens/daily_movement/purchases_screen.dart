@@ -790,14 +790,13 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     return cell;
   }
 
-  // خلية المادة - بعد التنظيف
   Widget _buildMaterialCell(
       TextEditingController controller,
       FocusNode focusNode,
       int rowIndex,
       int colIndex,
       bool isOwnedByCurrentSeller) {
-    Widget cell = TableBuilder.buildTableCell(
+    return TableBuilder.buildTableCell(
       controller: controller,
       focusNode: focusNode,
       isSerialField: false,
@@ -805,35 +804,20 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       rowIndex: rowIndex,
       colIndex: colIndex,
       scrollToField: _scrollToField,
-      onFieldSubmitted: (value, rIndex, cIndex) {
-        _handleFieldSubmitted(value, rIndex, cIndex);
-        if (value.trim().isNotEmpty && value.trim().length > 1) {
-          _saveMaterialToIndex(value);
-        }
-      },
+      onFieldSubmitted: (value, rIndex, cIndex) =>
+          _handleFieldSubmitted(value, rIndex, cIndex),
       onFieldChanged: (value, rIndex, cIndex) =>
           _handleFieldChanged(value, rIndex, cIndex),
     );
-
-    if (!isOwnedByCurrentSeller) {
-      return IgnorePointer(
-          child: Opacity(
-              opacity: 0.7,
-              child: Container(
-                  decoration: BoxDecoration(color: Colors.grey[100]),
-                  child: cell)));
-    }
-    return cell;
   }
 
-  // خلية العبوة - بعد التنظيف
   Widget _buildPackagingCell(
       TextEditingController controller,
       FocusNode focusNode,
       int rowIndex,
       int colIndex,
       bool isOwnedByCurrentSeller) {
-    Widget cell = TableBuilder.buildTableCell(
+    return TableBuilder.buildTableCell(
       controller: controller,
       focusNode: focusNode,
       isSerialField: false,
@@ -841,33 +825,20 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       rowIndex: rowIndex,
       colIndex: colIndex,
       scrollToField: _scrollToField,
-      onFieldSubmitted: (value, rIndex, cIndex) {
-        _handleFieldSubmitted(value, rIndex, cIndex);
-        if (value.trim().isNotEmpty) _savePackagingToIndex(value);
-      },
+      onFieldSubmitted: (value, rIndex, cIndex) =>
+          _handleFieldSubmitted(value, rIndex, cIndex),
       onFieldChanged: (value, rIndex, cIndex) =>
           _handleFieldChanged(value, rIndex, cIndex),
     );
-
-    if (!isOwnedByCurrentSeller) {
-      return IgnorePointer(
-          child: Opacity(
-              opacity: 0.7,
-              child: Container(
-                  decoration: BoxDecoration(color: Colors.grey[100]),
-                  child: cell)));
-    }
-    return cell;
   }
 
-  // خلية المورد - بعد التنظيف
   Widget _buildSupplierCell(
       TextEditingController controller,
       FocusNode focusNode,
       int rowIndex,
       int colIndex,
       bool isOwnedByCurrentSeller) {
-    Widget cell = TableBuilder.buildTableCell(
+    return TableBuilder.buildTableCell(
       controller: controller,
       focusNode: focusNode,
       isSerialField: false,
@@ -875,54 +846,45 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       rowIndex: rowIndex,
       colIndex: colIndex,
       scrollToField: _scrollToField,
-      onFieldSubmitted: (value, rIndex, cIndex) {
-        _handleFieldSubmitted(value, rIndex, cIndex);
-        if (value.trim().isNotEmpty) _saveSupplierToIndex(value);
-      },
+      onFieldSubmitted: (value, rIndex, cIndex) =>
+          _handleFieldSubmitted(value, rIndex, cIndex),
       onFieldChanged: (value, rIndex, cIndex) =>
           _handleFieldChanged(value, rIndex, cIndex),
     );
-
-    if (!isOwnedByCurrentSeller) {
-      return IgnorePointer(
-          child: Opacity(
-              opacity: 0.7,
-              child: Container(
-                  decoration: BoxDecoration(color: Colors.grey[100]),
-                  child: cell)));
-    }
-    return cell;
   }
 
   void _handleFieldSubmitted(String value, int rowIndex, int colIndex) {
-    // التحقق إذا كان السجل مملوكاً للبائع الحالي
-    if (!_isRowOwnedByCurrentSeller(rowIndex)) {
-      return; // لا تفعل شيئاً إذا لم يكن السجل مملوكاً للبائع الحالي
+    if (!_isRowOwnedByCurrentSeller(rowIndex)) return;
+
+    // 1. معالجة حقل المادة
+    if (colIndex == 1) {
+      if (_materialSuggestions.isNotEmpty) {
+        _selectMaterialSuggestion(_materialSuggestions[0], rowIndex);
+        return; // توقف لمنع تخزين النص الناقص
+      }
+      if (value.trim().length > 1) _saveMaterialToIndex(value);
+      FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][2]);
     }
-
-    // إخفاء الاقتراحات أولاً
-    _hideAllSuggestionsImmediately();
-
-    // إذا كان حقل المادة وEnter ضُغط وكانت هناك اقتراحات
-    if (colIndex == 1 && _materialSuggestions.isNotEmpty) {
-      _selectMaterialSuggestion(_materialSuggestions[0], rowIndex);
-      return;
+    // 2. معالجة حقل العائدية (المورد)
+    else if (colIndex == 2) {
+      if (_supplierSuggestions.isNotEmpty) {
+        _selectSupplierSuggestion(_supplierSuggestions[0], rowIndex);
+        return; // توقف
+      }
+      if (value.trim().length > 1) _saveSupplierToIndex(value);
+      FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][3]);
     }
-
-    // إذا كان حقل العائدية وEnter ضُغط وكانت هناك اقتراحات
-    if (colIndex == 2 && _supplierSuggestions.isNotEmpty) {
-      _selectSupplierSuggestion(_supplierSuggestions[0], rowIndex);
-      return;
+    // 3. معالجة حقل العبوة
+    else if (colIndex == 4) {
+      if (_packagingSuggestions.isNotEmpty) {
+        _selectPackagingSuggestion(_packagingSuggestions[0], rowIndex);
+        return; // توقف
+      }
+      if (value.trim().length > 1) _savePackagingToIndex(value);
+      FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][5]);
     }
-
-    // إذا كان حقل العبوة وEnter ضُغط وكانت هناك اقتراحات
-    if (colIndex == 4 && _packagingSuggestions.isNotEmpty) {
-      _selectPackagingSuggestion(_packagingSuggestions[0], rowIndex);
-      return;
-    }
-
-    // التنقل العادي بين الحقول
-    if (colIndex == 0) {
+    // التنقل العادي لبقية الحقول
+    else if (colIndex == 0) {
       FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][1]);
     } else if (colIndex == 7) {
       _showCashOrDebtDialog(rowIndex);
@@ -936,6 +898,8 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       FocusScope.of(context)
           .requestFocus(rowFocusNodes[rowIndex][colIndex + 1]);
     }
+
+    _hideAllSuggestionsImmediately();
   }
 
   void _handleFieldChanged(String value, int rowIndex, int colIndex) {

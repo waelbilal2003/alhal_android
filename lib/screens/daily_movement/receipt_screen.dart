@@ -708,7 +708,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
       int rowIndex,
       int colIndex,
       bool isOwnedByCurrentSeller) {
-    Widget cell = TableBuilder.buildTableCell(
+    return TableBuilder.buildTableCell(
       controller: controller,
       focusNode: focusNode,
       isSerialField: false,
@@ -716,22 +716,11 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
       rowIndex: rowIndex,
       colIndex: colIndex,
       scrollToField: _scrollToField,
-      onFieldSubmitted: (value, rIndex, cIndex) {
-        _handleFieldSubmitted(value, rIndex, cIndex);
-        if (value.trim().isNotEmpty && value.trim().length > 1)
-          _saveMaterialToIndex(value);
-      },
+      onFieldSubmitted: (value, rIndex, cIndex) =>
+          _handleFieldSubmitted(value, rIndex, cIndex),
       onFieldChanged: (value, rIndex, cIndex) =>
           _handleFieldChanged(value, rIndex, cIndex),
     );
-    return isOwnedByCurrentSeller
-        ? cell
-        : IgnorePointer(
-            child: Opacity(
-                opacity: 0.7,
-                child: Container(
-                    decoration: BoxDecoration(color: Colors.grey[100]),
-                    child: cell)));
   }
 
   Widget _buildPackagingCell(
@@ -740,7 +729,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
       int rowIndex,
       int colIndex,
       bool isOwnedByCurrentSeller) {
-    Widget cell = TableBuilder.buildTableCell(
+    return TableBuilder.buildTableCell(
       controller: controller,
       focusNode: focusNode,
       isSerialField: false,
@@ -748,21 +737,11 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
       rowIndex: rowIndex,
       colIndex: colIndex,
       scrollToField: _scrollToField,
-      onFieldSubmitted: (value, rIndex, cIndex) {
-        _handleFieldSubmitted(value, rIndex, cIndex);
-        if (value.trim().isNotEmpty) _savePackagingToIndex(value);
-      },
+      onFieldSubmitted: (value, rIndex, cIndex) =>
+          _handleFieldSubmitted(value, rIndex, cIndex),
       onFieldChanged: (value, rIndex, cIndex) =>
           _handleFieldChanged(value, rIndex, cIndex),
     );
-    return isOwnedByCurrentSeller
-        ? cell
-        : IgnorePointer(
-            child: Opacity(
-                opacity: 0.7,
-                child: Container(
-                    decoration: BoxDecoration(color: Colors.grey[100]),
-                    child: cell)));
   }
 
   Widget _buildSupplierCell(
@@ -771,7 +750,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
       int rowIndex,
       int colIndex,
       bool isOwnedByCurrentSeller) {
-    Widget cell = TableBuilder.buildTableCell(
+    return TableBuilder.buildTableCell(
       controller: controller,
       focusNode: focusNode,
       isSerialField: false,
@@ -779,52 +758,38 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
       rowIndex: rowIndex,
       colIndex: colIndex,
       scrollToField: _scrollToField,
-      onFieldSubmitted: (value, rIndex, cIndex) {
-        _handleFieldSubmitted(value, rIndex, cIndex);
-        if (value.trim().isNotEmpty) _saveSupplierToIndex(value);
-      },
+      onFieldSubmitted: (value, rIndex, cIndex) =>
+          _handleFieldSubmitted(value, rIndex, cIndex),
       onFieldChanged: (value, rIndex, cIndex) =>
           _handleFieldChanged(value, rIndex, cIndex),
     );
-    return isOwnedByCurrentSeller
-        ? cell
-        : IgnorePointer(
-            child: Opacity(
-                opacity: 0.7,
-                child: Container(
-                    decoration: BoxDecoration(color: Colors.grey[100]),
-                    child: cell)));
   }
 
   void _handleFieldSubmitted(String value, int rowIndex, int colIndex) {
-    // التحقق إذا كان السجل مملوكاً للبائع الحالي
-    if (!_isRowOwnedByCurrentSeller(rowIndex)) {
-      return;
-    }
+    if (!_isRowOwnedByCurrentSeller(rowIndex)) return;
 
-    // إخفاء الاقتراحات أولاً
-    _hideAllSuggestionsImmediately();
-
-    // إذا كان حقل المادة وEnter ضُغط وكانت هناك اقتراحات
-    if (colIndex == 1 && _materialSuggestions.isNotEmpty) {
-      _selectMaterialSuggestion(_materialSuggestions[0], rowIndex);
-      return;
-    }
-
-    // إذا كان حقل العائدية وEnter ضُغط وكانت هناك اقتراحات
-    if (colIndex == 2 && _supplierSuggestions.isNotEmpty) {
-      _selectSupplierSuggestion(_supplierSuggestions[0], rowIndex);
-      return;
-    }
-
-    // إذا كان حقل العبوة وEnter ضُغط وكانت هناك اقتراحات
-    if (colIndex == 4 && _packagingSuggestions.isNotEmpty) {
-      _selectPackagingSuggestion(_packagingSuggestions[0], rowIndex);
-      return;
-    }
-
-    // التنقل العادي بين الحقول
-    if (colIndex == 0) {
+    if (colIndex == 1) {
+      if (_materialSuggestions.isNotEmpty) {
+        _selectMaterialSuggestion(_materialSuggestions[0], rowIndex);
+        return;
+      }
+      if (value.trim().length > 1) _saveMaterialToIndex(value);
+      FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][2]);
+    } else if (colIndex == 2) {
+      if (_supplierSuggestions.isNotEmpty) {
+        _selectSupplierSuggestion(_supplierSuggestions[0], rowIndex);
+        return;
+      }
+      if (value.trim().length > 1) _saveSupplierToIndex(value);
+      FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][3]);
+    } else if (colIndex == 4) {
+      if (_packagingSuggestions.isNotEmpty) {
+        _selectPackagingSuggestion(_packagingSuggestions[0], rowIndex);
+        return;
+      }
+      if (value.trim().length > 1) _savePackagingToIndex(value);
+      FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][5]);
+    } else if (colIndex == 0) {
       FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][1]);
     } else if (colIndex == 7) {
       _addNewRow();
@@ -836,6 +801,8 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
       FocusScope.of(context)
           .requestFocus(rowFocusNodes[rowIndex][colIndex + 1]);
     }
+
+    _hideAllSuggestionsImmediately();
   }
 
   void _handleFieldChanged(String value, int rowIndex, int colIndex) {

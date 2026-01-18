@@ -1058,69 +1058,50 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   void _handleFieldSubmitted(String value, int rowIndex, int colIndex) {
-    // التحقق إذا كان السجل مملوكاً للبائع الحالي
-    if (!_isRowOwnedByCurrentSeller(rowIndex)) {
-      return;
-    }
+    if (!_isRowOwnedByCurrentSeller(rowIndex)) return;
 
-    // إخفاء الاقتراحات أولاً - مثل purchases_screen
-    _hideAllSuggestionsImmediately();
-
-    // حالة خاصة لحقل المادة وEnter ضُغط وكانت هناك اقتراحات
-    if (colIndex == 1 && _materialSuggestions.isNotEmpty) {
-      _selectMaterialSuggestion(_materialSuggestions[0], rowIndex);
-      return;
-    }
-
-    // حالة خاصة لحقل العائدية وEnter ضُغط وكانت هناك اقتراحات
-    if (colIndex == 2 && _supplierSuggestions.isNotEmpty) {
-      _selectSupplierSuggestion(_supplierSuggestions[0], rowIndex);
-      return;
-    }
-
-    // حالة خاصة لحقل العبوة وEnter ضُغط وكانت هناك اقتراحات
-    if (colIndex == 5 && _packagingSuggestions.isNotEmpty) {
-      _selectPackagingSuggestion(_packagingSuggestions[0], rowIndex);
-      return;
-    }
-
-    // حالة خاصة لحقل اسم الزبون (الحقل 10)
-    if (colIndex == 10) {
-      // إذا كانت القيمة "دين" وكانت هناك اقتراحات
+    if (colIndex == 1) {
+      if (_materialSuggestions.isNotEmpty) {
+        _selectMaterialSuggestion(_materialSuggestions[0], rowIndex);
+        return;
+      }
+      if (value.trim().length > 1) _saveMaterialToIndex(value);
+      FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][2]);
+    } else if (colIndex == 2) {
+      if (_supplierSuggestions.isNotEmpty) {
+        _selectSupplierSuggestion(_supplierSuggestions[0], rowIndex);
+        return;
+      }
+      if (value.trim().length > 1) _saveSupplierToIndex(value);
+      FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][3]);
+    } else if (colIndex == 5) {
+      if (_packagingSuggestions.isNotEmpty) {
+        _selectPackagingSuggestion(_packagingSuggestions[0], rowIndex);
+        return;
+      }
+      if (value.trim().length > 1) _savePackagingToIndex(value);
+      FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][6]);
+    } else if (colIndex == 10) {
+      // تم الإبقاء على منطق الزبون كما هو لأنه يعمل بشكل صحيح لديك
       if (cashOrDebtValues[rowIndex] == 'دين' &&
           _customerSuggestions.isNotEmpty) {
         _selectCustomerSuggestion(_customerSuggestions[0], rowIndex);
         return;
       }
-
-      // إذا كانت القيمة "دين" ولا توجد اقتراحات أو المستخدم كتب اسماً جديداً
       if (cashOrDebtValues[rowIndex] == 'دين') {
-        // حفظ الاسم إذا كان صالحاً
-        if (value.trim().isNotEmpty && value.trim().length > 1) {
-          _saveCustomerToIndex(value.trim());
-        }
-        // فتح نافذة الفوارغ مباشرة
+        if (value.trim().length > 1) _saveCustomerToIndex(value.trim());
         Future.delayed(const Duration(milliseconds: 50), () {
-          if (mounted) {
-            _showEmptiesDialog(rowIndex);
-          }
+          if (mounted) _showEmptiesDialog(rowIndex);
         });
         return;
       }
-
-      // إذا كانت القيمة "نقدي"، ننتقل مباشرة إلى الفوارغ
       if (cashOrDebtValues[rowIndex] == 'نقدي') {
         Future.delayed(const Duration(milliseconds: 50), () {
-          if (mounted) {
-            _showEmptiesDialog(rowIndex);
-          }
+          if (mounted) _showEmptiesDialog(rowIndex);
         });
         return;
       }
-    }
-
-    // التنقل العادي بين الحقول
-    if (colIndex == 0) {
+    } else if (colIndex == 0) {
       FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][1]);
     } else if (colIndex == 8) {
       _showCashOrDebtDialog(rowIndex);
@@ -1134,6 +1115,8 @@ class _SalesScreenState extends State<SalesScreen> {
       FocusScope.of(context)
           .requestFocus(rowFocusNodes[rowIndex][colIndex + 1]);
     }
+
+    _hideAllSuggestionsImmediately();
   }
 
   void _handleFieldChanged(String value, int rowIndex, int colIndex) {

@@ -77,9 +77,6 @@ class _BoxScreenState extends State<BoxScreen> {
 
   int? _activeSupplierRowIndex;
 
-  final ScrollController _supplierSuggestionsScrollController =
-      ScrollController();
-
   bool _showFullScreenSuggestions = false;
   String _currentSuggestionType = '';
   late ScrollController

@@ -10,10 +10,9 @@ class CustomerIndexService {
   CustomerIndexService._internal();
 
   static const String _fileName = 'customer_index.json';
-  List<String> _customers = [];
-  List<String> _customersByInsertionOrder =
-      []; // <-- قائمة جديدة لحفظ ترتيب الإضافة
+  Map<int, String> _customerMap = {}; // <-- خريطة تربط الرقم بالزبون
   bool _isInitialized = false;
+  int _nextId = 1; // <-- رقم الزبون التالي للإضافة
 
   Future<void> _ensureInitialized() async {
     if (!_isInitialized) {
@@ -36,38 +35,47 @@ class CustomerIndexService {
         final jsonString = await file.readAsString();
         final Map<String, dynamic> jsonData = jsonDecode(jsonString);
 
-        // تحميل البيانات الجديدة مع الترتيب
         if (jsonData.containsKey('customers') &&
-            jsonData.containsKey('insertionOrder')) {
-          final List<dynamic> jsonList = jsonData['customers'];
-          final List<dynamic> orderList = jsonData['insertionOrder'];
+            jsonData.containsKey('nextId')) {
+          final Map<String, dynamic> customersJson = jsonData['customers'];
 
-          _customers = jsonList.map((item) => item.toString()).toList();
-          _customersByInsertionOrder =
-              orderList.map((item) => item.toString()).toList();
+          // تحميل الخريطة من JSON
+          _customerMap.clear();
+          customersJson.forEach((key, value) {
+            _customerMap[int.parse(key)] = value.toString();
+          });
 
-          // ترتيب قائمة الاقتراحات أبجدياً
-          _customers.sort((a, b) => a.compareTo(b));
+          _nextId = jsonData['nextId'] ?? 1;
 
-          // التأكد من تطابق القائمتين في المحتوى
-          if (_customers.length != _customersByInsertionOrder.length) {
-            _customersByInsertionOrder = List.from(_customers);
+          if (kDebugMode) {
+            debugPrint('✅ تم تحميل ${_customerMap.length} زبون من الفهرس');
+            debugPrint(
+                'الزبائن: ${_customerMap.entries.map((e) => '${e.key}:${e.value}').join(', ')}');
           }
         } else {
           // دعم الملفات القديمة
-          final List<dynamic> jsonList = jsonDecode(jsonString);
-          _customers = jsonList.map((item) => item.toString()).toList();
-          _customersByInsertionOrder = List.from(_customers);
-          _customers.sort((a, b) => a.compareTo(b));
-        }
+          _customerMap.clear();
+          if (jsonData is List) {
+            // تنسيق قديم: قائمة فقط
+            for (int i = 0; i < jsonData.length; i++) {
+              _customerMap[i + 1] = jsonData[i].toString();
+            }
+            _nextId = jsonData.length + 1;
+          } else if (jsonData.containsKey('customers')) {
+            // تنسيق قديم آخر
+            final List<dynamic> jsonList = jsonData['customers'];
+            for (int i = 0; i < jsonList.length; i++) {
+              _customerMap[i + 1] = jsonList[i].toString();
+            }
+            _nextId = jsonList.length + 1;
+          }
 
-        if (kDebugMode) {
-          debugPrint('✅ تم تحميل ${_customers.length} زبون من الفهرس');
-          debugPrint('ترتيب الإضافة: ${_customersByInsertionOrder.join(', ')}');
+          // حفظ بالتنسيق الجديد
+          await _saveToFile();
         }
       } else {
-        _customers = [];
-        _customersByInsertionOrder = [];
+        _customerMap.clear();
+        _nextId = 1;
         if (kDebugMode) {
           debugPrint('✅ فهرس الزبائن جديد - لا توجد زبائن مخزنة');
         }
@@ -76,8 +84,8 @@ class CustomerIndexService {
       if (kDebugMode) {
         debugPrint('❌ خطأ في تحميل فهرس الزبائن: $e');
       }
-      _customers = [];
-      _customersByInsertionOrder = [];
+      _customerMap.clear();
+      _nextId = 1;
     }
   }
 
@@ -89,21 +97,17 @@ class CustomerIndexService {
     final normalizedCustomer = _normalizeCustomer(customer);
 
     // التحقق من عدم وجود الزبون مسبقاً
-    if (!_customers
+    if (!_customerMap.values
         .any((c) => c.toLowerCase() == normalizedCustomer.toLowerCase())) {
-      // إضافة للقائمتين
-      _customers.add(normalizedCustomer);
-      _customersByInsertionOrder.add(normalizedCustomer);
-
-      // ترتيب قائمة الاقتراحات أبجدياً فقط
-      _customers.sort((a, b) => a.compareTo(b));
+      // إضافة مع رقم ثابت جديد
+      _customerMap[_nextId] = normalizedCustomer;
+      _nextId++;
 
       await _saveToFile();
 
       if (kDebugMode) {
-        debugPrint('✅ تم إضافة زبون جديد: $normalizedCustomer');
         debugPrint(
-            'رقم الزبون حسب ترتيب الإضافة: ${_customersByInsertionOrder.indexOf(normalizedCustomer) + 1}');
+            '✅ تم إضافة زبون جديد: $normalizedCustomer (رقم: ${_nextId - 1})');
       }
     }
   }
@@ -123,9 +127,10 @@ class CustomerIndexService {
 
     final normalizedQuery = query.toLowerCase().trim();
 
-    return _customers.where((customer) {
-      return customer.toLowerCase().contains(normalizedQuery);
-    }).toList();
+    return _customerMap.entries
+        .where((entry) => entry.value.toLowerCase().contains(normalizedQuery))
+        .map((entry) => entry.value)
+        .toList();
   }
 
   Future<List<String>> getSuggestionsByFirstLetter(String letter) async {
@@ -135,12 +140,14 @@ class CustomerIndexService {
 
     final normalizedLetter = letter.toLowerCase().trim();
 
-    return _customers.where((customer) {
-      return customer.toLowerCase().startsWith(normalizedLetter);
-    }).toList();
+    return _customerMap.entries
+        .where(
+            (entry) => entry.value.toLowerCase().startsWith(normalizedLetter))
+        .map((entry) => entry.value)
+        .toList();
   }
 
-  // دالة جديدة: الحصول على اقتراحات حسب الرقم (ترتيب الإضافة)
+  // دالة جديدة: الحصول على اقتراحات حسب الرقم (رقم الفهرس الثابت)
   Future<List<String>> getSuggestionsByNumber(String numberQuery) async {
     await _ensureInitialized();
 
@@ -149,12 +156,12 @@ class CustomerIndexService {
     try {
       final int queryNumber = int.parse(numberQuery);
 
-      if (queryNumber <= 0 || queryNumber > _customersByInsertionOrder.length) {
+      // البحث عن الزبون بهذا الرقم
+      if (_customerMap.containsKey(queryNumber)) {
+        return [_customerMap[queryNumber]!];
+      } else {
         return [];
       }
-
-      // عرض عنصر واحد فقط حسب الرقم (ترتيب الإضافة)
-      return [_customersByInsertionOrder[queryNumber - 1]];
     } catch (e) {
       // إذا لم يكن النص رقماً، نعيد قائمة فارغة
       return [];
@@ -183,24 +190,38 @@ class CustomerIndexService {
 
   Future<List<String>> getAllCustomers() async {
     await _ensureInitialized();
-    return List.from(_customers);
+
+    // ترتيب أبجدي للعرض فقط (لا يؤثر على الأرقام)
+    final customers = _customerMap.values.toList();
+    customers.sort((a, b) => a.compareTo(b));
+    return customers;
   }
 
-  // دالة جديدة للحصول على الزبائن حسب ترتيب الإضافة
+  // دالة جديدة للحصول على الزبائن حسب ترتيب الإضافة (حسب الرقم)
   Future<List<String>> getAllCustomersByInsertionOrder() async {
     await _ensureInitialized();
-    return List.from(_customersByInsertionOrder);
+
+    // ترتيب حسب الرقم (ترتيب الإضافة)
+    final sortedEntries = _customerMap.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+
+    return sortedEntries.map((entry) => entry.value).toList();
   }
 
-  // دالة جديدة للحصول على رقم الزبون حسب ترتيب الإضافة
+  // دالة جديدة للحصول على رقم الزبون الثابت
   Future<int?> getCustomerPosition(String customer) async {
     await _ensureInitialized();
 
     final normalizedCustomer = _normalizeCustomer(customer);
-    final index = _customersByInsertionOrder
-        .indexWhere((c) => c.toLowerCase() == normalizedCustomer.toLowerCase());
 
-    return index >= 0 ? index + 1 : null;
+    // البحث عن الزبون وإرجاع رقمها
+    for (var entry in _customerMap.entries) {
+      if (entry.value.toLowerCase() == normalizedCustomer.toLowerCase()) {
+        return entry.key;
+      }
+    }
+
+    return null;
   }
 
   Future<void> removeCustomer(String customer) async {
@@ -208,22 +229,28 @@ class CustomerIndexService {
 
     final normalizedCustomer = _normalizeCustomer(customer);
 
-    // إزالة من القائمتين
-    _customers.removeWhere(
-        (c) => c.toLowerCase() == normalizedCustomer.toLowerCase());
-    _customersByInsertionOrder.removeWhere(
-        (c) => c.toLowerCase() == normalizedCustomer.toLowerCase());
+    // البحث عن الرقم الخاص بالزبون وحذفها
+    int? keyToRemove;
+    for (var entry in _customerMap.entries) {
+      if (entry.value.toLowerCase() == normalizedCustomer.toLowerCase()) {
+        keyToRemove = entry.key;
+        break;
+      }
+    }
 
-    await _saveToFile();
+    if (keyToRemove != null) {
+      _customerMap.remove(keyToRemove);
+      await _saveToFile();
 
-    if (kDebugMode) {
-      debugPrint('✅ تم حذف الزبون: $customer');
+      if (kDebugMode) {
+        debugPrint('✅ تم حذف الزبون: $customer (رقم: $keyToRemove)');
+      }
     }
   }
 
   Future<void> clearAll() async {
-    _customers.clear();
-    _customersByInsertionOrder.clear();
+    _customerMap.clear();
+    _nextId = 1;
     await _saveToFile();
 
     if (kDebugMode) {
@@ -236,10 +263,16 @@ class CustomerIndexService {
       final filePath = await _getFilePath();
       final file = File(filePath);
 
-      // حفظ البيانات مع الترتيب
+      // تحويل الخريطة إلى Map<String, dynamic> للتخزين
+      final Map<String, dynamic> customersJson = {};
+      _customerMap.forEach((key, value) {
+        customersJson[key.toString()] = value;
+      });
+
+      // حفظ البيانات مع الأرقام الثابتة
       final Map<String, dynamic> jsonData = {
-        'customers': _customers,
-        'insertionOrder': _customersByInsertionOrder,
+        'customers': customersJson,
+        'nextId': _nextId,
       };
 
       final jsonString = jsonEncode(jsonData);
@@ -253,11 +286,18 @@ class CustomerIndexService {
 
   Future<int> getCount() async {
     await _ensureInitialized();
-    return _customers.length;
+    return _customerMap.length;
   }
 
   Future<bool> exists(String customer) async {
     await _ensureInitialized();
-    return _customers.any((c) => c.toLowerCase() == customer.toLowerCase());
+    return _customerMap.values
+        .any((c) => c.toLowerCase() == customer.toLowerCase());
+  }
+
+  // دالة جديدة: الحصول على جميع الزبائن مع أرقامها
+  Future<Map<int, String>> getAllCustomersWithNumbers() async {
+    await _ensureInitialized();
+    return Map.from(_customerMap);
   }
 }

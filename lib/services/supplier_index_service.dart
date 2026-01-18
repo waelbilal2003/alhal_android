@@ -10,10 +10,9 @@ class SupplierIndexService {
   SupplierIndexService._internal();
 
   static const String _fileName = 'supplier_index.json';
-  List<String> _suppliers = [];
-  List<String> _suppliersByInsertionOrder =
-      []; // <-- قائمة جديدة لحفظ ترتيب الإضافة
+  Map<int, String> _supplierMap = {}; // <-- خريطة تربط الرقم بالمورد
   bool _isInitialized = false;
+  int _nextId = 1; // <-- رقم المورد التالي للإضافة
 
   Future<void> _ensureInitialized() async {
     if (!_isInitialized) {
@@ -36,38 +35,47 @@ class SupplierIndexService {
         final jsonString = await file.readAsString();
         final Map<String, dynamic> jsonData = jsonDecode(jsonString);
 
-        // تحميل البيانات الجديدة مع الترتيب
         if (jsonData.containsKey('suppliers') &&
-            jsonData.containsKey('insertionOrder')) {
-          final List<dynamic> jsonList = jsonData['suppliers'];
-          final List<dynamic> orderList = jsonData['insertionOrder'];
+            jsonData.containsKey('nextId')) {
+          final Map<String, dynamic> suppliersJson = jsonData['suppliers'];
 
-          _suppliers = jsonList.map((item) => item.toString()).toList();
-          _suppliersByInsertionOrder =
-              orderList.map((item) => item.toString()).toList();
+          // تحميل الخريطة من JSON
+          _supplierMap.clear();
+          suppliersJson.forEach((key, value) {
+            _supplierMap[int.parse(key)] = value.toString();
+          });
 
-          // ترتيب قائمة الاقتراحات أبجدياً
-          _suppliers.sort((a, b) => a.compareTo(b));
+          _nextId = jsonData['nextId'] ?? 1;
 
-          // التأكد من تطابق القائمتين في المحتوى
-          if (_suppliers.length != _suppliersByInsertionOrder.length) {
-            _suppliersByInsertionOrder = List.from(_suppliers);
+          if (kDebugMode) {
+            debugPrint('✅ تم تحميل ${_supplierMap.length} مورد من الفهرس');
+            debugPrint(
+                'الموردين: ${_supplierMap.entries.map((e) => '${e.key}:${e.value}').join(', ')}');
           }
         } else {
           // دعم الملفات القديمة
-          final List<dynamic> jsonList = jsonDecode(jsonString);
-          _suppliers = jsonList.map((item) => item.toString()).toList();
-          _suppliersByInsertionOrder = List.from(_suppliers);
-          _suppliers.sort((a, b) => a.compareTo(b));
-        }
+          _supplierMap.clear();
+          if (jsonData is List) {
+            // تنسيق قديم: قائمة فقط
+            for (int i = 0; i < jsonData.length; i++) {
+              _supplierMap[i + 1] = jsonData[i].toString();
+            }
+            _nextId = jsonData.length + 1;
+          } else if (jsonData.containsKey('suppliers')) {
+            // تنسيق قديم آخر
+            final List<dynamic> jsonList = jsonData['suppliers'];
+            for (int i = 0; i < jsonList.length; i++) {
+              _supplierMap[i + 1] = jsonList[i].toString();
+            }
+            _nextId = jsonList.length + 1;
+          }
 
-        if (kDebugMode) {
-          debugPrint('✅ تم تحميل ${_suppliers.length} مورد من الفهرس');
-          debugPrint('ترتيب الإضافة: ${_suppliersByInsertionOrder.join(', ')}');
+          // حفظ بالتنسيق الجديد
+          await _saveToFile();
         }
       } else {
-        _suppliers = [];
-        _suppliersByInsertionOrder = [];
+        _supplierMap.clear();
+        _nextId = 1;
         if (kDebugMode) {
           debugPrint('✅ فهرس الموردين جديد - لا توجد موردين مخزنين');
         }
@@ -76,8 +84,8 @@ class SupplierIndexService {
       if (kDebugMode) {
         debugPrint('❌ خطأ في تحميل فهرس الموردين: $e');
       }
-      _suppliers = [];
-      _suppliersByInsertionOrder = [];
+      _supplierMap.clear();
+      _nextId = 1;
     }
   }
 
@@ -89,21 +97,17 @@ class SupplierIndexService {
     final normalizedSupplier = _normalizeSupplier(supplier);
 
     // التحقق من عدم وجود المورد مسبقاً
-    if (!_suppliers
+    if (!_supplierMap.values
         .any((s) => s.toLowerCase() == normalizedSupplier.toLowerCase())) {
-      // إضافة للقائمتين
-      _suppliers.add(normalizedSupplier);
-      _suppliersByInsertionOrder.add(normalizedSupplier);
-
-      // ترتيب قائمة الاقتراحات أبجدياً فقط
-      _suppliers.sort((a, b) => a.compareTo(b));
+      // إضافة مع رقم ثابت جديد
+      _supplierMap[_nextId] = normalizedSupplier;
+      _nextId++;
 
       await _saveToFile();
 
       if (kDebugMode) {
-        debugPrint('✅ تم إضافة مورد جديد: $normalizedSupplier');
         debugPrint(
-            'رقم المورد حسب ترتيب الإضافة: ${_suppliersByInsertionOrder.indexOf(normalizedSupplier) + 1}');
+            '✅ تم إضافة مورد جديد: $normalizedSupplier (رقم: ${_nextId - 1})');
       }
     }
   }
@@ -123,9 +127,10 @@ class SupplierIndexService {
 
     final normalizedQuery = query.toLowerCase().trim();
 
-    return _suppliers.where((supplier) {
-      return supplier.toLowerCase().contains(normalizedQuery);
-    }).toList();
+    return _supplierMap.entries
+        .where((entry) => entry.value.toLowerCase().contains(normalizedQuery))
+        .map((entry) => entry.value)
+        .toList();
   }
 
   Future<List<String>> getSuggestionsByFirstLetter(String letter) async {
@@ -135,12 +140,14 @@ class SupplierIndexService {
 
     final normalizedLetter = letter.toLowerCase().trim();
 
-    return _suppliers.where((supplier) {
-      return supplier.toLowerCase().startsWith(normalizedLetter);
-    }).toList();
+    return _supplierMap.entries
+        .where(
+            (entry) => entry.value.toLowerCase().startsWith(normalizedLetter))
+        .map((entry) => entry.value)
+        .toList();
   }
 
-  // دالة جديدة: الحصول على اقتراحات حسب الرقم (ترتيب الإضافة)
+  // دالة جديدة: الحصول على اقتراحات حسب الرقم (رقم الفهرس الثابت)
   Future<List<String>> getSuggestionsByNumber(String numberQuery) async {
     await _ensureInitialized();
 
@@ -149,12 +156,12 @@ class SupplierIndexService {
     try {
       final int queryNumber = int.parse(numberQuery);
 
-      if (queryNumber <= 0 || queryNumber > _suppliersByInsertionOrder.length) {
+      // البحث عن المورد بهذا الرقم
+      if (_supplierMap.containsKey(queryNumber)) {
+        return [_supplierMap[queryNumber]!];
+      } else {
         return [];
       }
-
-      // عرض عنصر واحد فقط حسب الرقم (ترتيب الإضافة)
-      return [_suppliersByInsertionOrder[queryNumber - 1]];
     } catch (e) {
       // إذا لم يكن النص رقماً، نعيد قائمة فارغة
       return [];
@@ -183,24 +190,38 @@ class SupplierIndexService {
 
   Future<List<String>> getAllSuppliers() async {
     await _ensureInitialized();
-    return List.from(_suppliers);
+
+    // ترتيب أبجدي للعرض فقط (لا يؤثر على الأرقام)
+    final suppliers = _supplierMap.values.toList();
+    suppliers.sort((a, b) => a.compareTo(b));
+    return suppliers;
   }
 
-  // دالة جديدة للحصول على الموردين حسب ترتيب الإضافة
+  // دالة جديدة للحصول على الموردين حسب ترتيب الإضافة (حسب الرقم)
   Future<List<String>> getAllSuppliersByInsertionOrder() async {
     await _ensureInitialized();
-    return List.from(_suppliersByInsertionOrder);
+
+    // ترتيب حسب الرقم (ترتيب الإضافة)
+    final sortedEntries = _supplierMap.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+
+    return sortedEntries.map((entry) => entry.value).toList();
   }
 
-  // دالة جديدة للحصول على رقم المورد حسب ترتيب الإضافة
+  // دالة جديدة للحصول على رقم المورد الثابت
   Future<int?> getSupplierPosition(String supplier) async {
     await _ensureInitialized();
 
     final normalizedSupplier = _normalizeSupplier(supplier);
-    final index = _suppliersByInsertionOrder
-        .indexWhere((s) => s.toLowerCase() == normalizedSupplier.toLowerCase());
 
-    return index >= 0 ? index + 1 : null;
+    // البحث عن المورد وإرجاع رقمها
+    for (var entry in _supplierMap.entries) {
+      if (entry.value.toLowerCase() == normalizedSupplier.toLowerCase()) {
+        return entry.key;
+      }
+    }
+
+    return null;
   }
 
   Future<void> removeSupplier(String supplier) async {
@@ -208,22 +229,28 @@ class SupplierIndexService {
 
     final normalizedSupplier = _normalizeSupplier(supplier);
 
-    // إزالة من القائمتين
-    _suppliers.removeWhere(
-        (s) => s.toLowerCase() == normalizedSupplier.toLowerCase());
-    _suppliersByInsertionOrder.removeWhere(
-        (s) => s.toLowerCase() == normalizedSupplier.toLowerCase());
+    // البحث عن الرقم الخاص بالمورد وحذفها
+    int? keyToRemove;
+    for (var entry in _supplierMap.entries) {
+      if (entry.value.toLowerCase() == normalizedSupplier.toLowerCase()) {
+        keyToRemove = entry.key;
+        break;
+      }
+    }
 
-    await _saveToFile();
+    if (keyToRemove != null) {
+      _supplierMap.remove(keyToRemove);
+      await _saveToFile();
 
-    if (kDebugMode) {
-      debugPrint('✅ تم حذف المورد: $supplier');
+      if (kDebugMode) {
+        debugPrint('✅ تم حذف المورد: $supplier (رقم: $keyToRemove)');
+      }
     }
   }
 
   Future<void> clearAll() async {
-    _suppliers.clear();
-    _suppliersByInsertionOrder.clear();
+    _supplierMap.clear();
+    _nextId = 1;
     await _saveToFile();
 
     if (kDebugMode) {
@@ -236,10 +263,16 @@ class SupplierIndexService {
       final filePath = await _getFilePath();
       final file = File(filePath);
 
-      // حفظ البيانات مع الترتيب
+      // تحويل الخريطة إلى Map<String, dynamic> للتخزين
+      final Map<String, dynamic> suppliersJson = {};
+      _supplierMap.forEach((key, value) {
+        suppliersJson[key.toString()] = value;
+      });
+
+      // حفظ البيانات مع الأرقام الثابتة
       final Map<String, dynamic> jsonData = {
-        'suppliers': _suppliers,
-        'insertionOrder': _suppliersByInsertionOrder,
+        'suppliers': suppliersJson,
+        'nextId': _nextId,
       };
 
       final jsonString = jsonEncode(jsonData);
@@ -253,11 +286,18 @@ class SupplierIndexService {
 
   Future<int> getCount() async {
     await _ensureInitialized();
-    return _suppliers.length;
+    return _supplierMap.length;
   }
 
   Future<bool> exists(String supplier) async {
     await _ensureInitialized();
-    return _suppliers.any((s) => s.toLowerCase() == supplier.toLowerCase());
+    return _supplierMap.values
+        .any((s) => s.toLowerCase() == supplier.toLowerCase());
+  }
+
+  // دالة جديدة: الحصول على جميع الموردين مع أرقامها
+  Future<Map<int, String>> getAllSuppliersWithNumbers() async {
+    await _ensureInitialized();
+    return Map.from(_supplierMap);
   }
 }

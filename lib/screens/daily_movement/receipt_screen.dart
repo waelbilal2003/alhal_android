@@ -885,7 +885,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
               ),
             Expanded(
               child: Text(
-                'يومية مبيعات رقم /$serialNumber/ تاريخ ${widget.selectedDate} البائع ${widget.sellerName}',
+                'يومية استلام رقم /$serialNumber/ تاريخ ${widget.selectedDate} البائع ${widget.sellerName}',
                 style:
                     const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                 textAlign: TextAlign.right,

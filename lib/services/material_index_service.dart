@@ -10,10 +10,9 @@ class MaterialIndexService {
   MaterialIndexService._internal();
 
   static const String _fileName = 'material_index.json';
-  List<String> _materials = [];
-  List<String> _materialsByInsertionOrder =
-      []; // <-- قائمة جديدة لحفظ ترتيب الإضافة
+  Map<int, String> _materialMap = {}; // <-- خريطة تربط الرقم بالمادة
   bool _isInitialized = false;
+  int _nextId = 1; // <-- رقم المادة التالي للإضافة
 
   Future<void> _ensureInitialized() async {
     if (!_isInitialized) {
@@ -36,38 +35,47 @@ class MaterialIndexService {
         final jsonString = await file.readAsString();
         final Map<String, dynamic> jsonData = jsonDecode(jsonString);
 
-        // تحميل البيانات الجديدة مع الترتيب
         if (jsonData.containsKey('materials') &&
-            jsonData.containsKey('insertionOrder')) {
-          final List<dynamic> jsonList = jsonData['materials'];
-          final List<dynamic> orderList = jsonData['insertionOrder'];
+            jsonData.containsKey('nextId')) {
+          final Map<String, dynamic> materialsJson = jsonData['materials'];
 
-          _materials = jsonList.map((item) => item.toString()).toList();
-          _materialsByInsertionOrder =
-              orderList.map((item) => item.toString()).toList();
+          // تحميل الخريطة من JSON
+          _materialMap.clear();
+          materialsJson.forEach((key, value) {
+            _materialMap[int.parse(key)] = value.toString();
+          });
 
-          // ترتيب قائمة الاقتراحات أبجدياً
-          _materials.sort((a, b) => a.compareTo(b));
+          _nextId = jsonData['nextId'] ?? 1;
 
-          // التأكد من تطابق القائمتين في المحتوى
-          if (_materials.length != _materialsByInsertionOrder.length) {
-            _materialsByInsertionOrder = List.from(_materials);
+          if (kDebugMode) {
+            debugPrint('✅ تم تحميل ${_materialMap.length} مادة من الفهرس');
+            debugPrint(
+                'المواد: ${_materialMap.entries.map((e) => '${e.key}:${e.value}').join(', ')}');
           }
         } else {
           // دعم الملفات القديمة
-          final List<dynamic> jsonList = jsonDecode(jsonString);
-          _materials = jsonList.map((item) => item.toString()).toList();
-          _materialsByInsertionOrder = List.from(_materials);
-          _materials.sort((a, b) => a.compareTo(b));
-        }
+          _materialMap.clear();
+          if (jsonData is List) {
+            // تنسيق قديم: قائمة فقط
+            for (int i = 0; i < jsonData.length; i++) {
+              _materialMap[i + 1] = jsonData[i].toString();
+            }
+            _nextId = jsonData.length + 1;
+          } else if (jsonData.containsKey('materials')) {
+            // تنسيق قديم آخر
+            final List<dynamic> jsonList = jsonData['materials'];
+            for (int i = 0; i < jsonList.length; i++) {
+              _materialMap[i + 1] = jsonList[i].toString();
+            }
+            _nextId = jsonList.length + 1;
+          }
 
-        if (kDebugMode) {
-          debugPrint('✅ تم تحميل ${_materials.length} مادة من الفهرس');
-          debugPrint('ترتيب الإضافة: ${_materialsByInsertionOrder.join(', ')}');
+          // حفظ بالتنسيق الجديد
+          await _saveToFile();
         }
       } else {
-        _materials = [];
-        _materialsByInsertionOrder = [];
+        _materialMap.clear();
+        _nextId = 1;
         if (kDebugMode) {
           debugPrint('✅ فهرس المواد جديد - لا توجد مواد مخزنة');
         }
@@ -76,8 +84,8 @@ class MaterialIndexService {
       if (kDebugMode) {
         debugPrint('❌ خطأ في تحميل فهرس المواد: $e');
       }
-      _materials = [];
-      _materialsByInsertionOrder = [];
+      _materialMap.clear();
+      _nextId = 1;
     }
   }
 
@@ -89,21 +97,17 @@ class MaterialIndexService {
     final normalizedMaterial = _normalizeMaterial(material);
 
     // التحقق من عدم وجود المادة مسبقاً
-    if (!_materials
+    if (!_materialMap.values
         .any((m) => m.toLowerCase() == normalizedMaterial.toLowerCase())) {
-      // إضافة للقائمتين
-      _materials.add(normalizedMaterial);
-      _materialsByInsertionOrder.add(normalizedMaterial);
-
-      // ترتيب قائمة الاقتراحات أبجدياً فقط
-      _materials.sort((a, b) => a.compareTo(b));
+      // إضافة مع رقم ثابت جديد
+      _materialMap[_nextId] = normalizedMaterial;
+      _nextId++;
 
       await _saveToFile();
 
       if (kDebugMode) {
-        debugPrint('✅ تم إضافة مادة جديدة: $normalizedMaterial');
         debugPrint(
-            'رقم المادة حسب ترتيب الإضافة: ${_materialsByInsertionOrder.indexOf(normalizedMaterial) + 1}');
+            '✅ تم إضافة مادة جديدة: $normalizedMaterial (رقم: ${_nextId - 1})');
       }
     }
   }
@@ -123,9 +127,10 @@ class MaterialIndexService {
 
     final normalizedQuery = query.toLowerCase().trim();
 
-    return _materials.where((material) {
-      return material.toLowerCase().contains(normalizedQuery);
-    }).toList();
+    return _materialMap.entries
+        .where((entry) => entry.value.toLowerCase().contains(normalizedQuery))
+        .map((entry) => entry.value)
+        .toList();
   }
 
   Future<List<String>> getSuggestionsByFirstLetter(String letter) async {
@@ -135,12 +140,14 @@ class MaterialIndexService {
 
     final normalizedLetter = letter.toLowerCase().trim();
 
-    return _materials.where((material) {
-      return material.toLowerCase().startsWith(normalizedLetter);
-    }).toList();
+    return _materialMap.entries
+        .where(
+            (entry) => entry.value.toLowerCase().startsWith(normalizedLetter))
+        .map((entry) => entry.value)
+        .toList();
   }
 
-  // دالة جديدة: الحصول على اقتراحات حسب الرقم (ترتيب الإضافة)
+  // دالة جديدة: الحصول على اقتراحات حسب الرقم (رقم الفهرس الثابت)
   Future<List<String>> getSuggestionsByNumber(String numberQuery) async {
     await _ensureInitialized();
 
@@ -149,12 +156,12 @@ class MaterialIndexService {
     try {
       final int queryNumber = int.parse(numberQuery);
 
-      if (queryNumber <= 0 || queryNumber > _materialsByInsertionOrder.length) {
+      // البحث عن المادة بهذا الرقم
+      if (_materialMap.containsKey(queryNumber)) {
+        return [_materialMap[queryNumber]!];
+      } else {
         return [];
       }
-
-      // عرض عنصر واحد فقط حسب الرقم (ترتيب الإضافة)
-      return [_materialsByInsertionOrder[queryNumber - 1]];
     } catch (e) {
       // إذا لم يكن النص رقماً، نعيد قائمة فارغة
       return [];
@@ -183,24 +190,38 @@ class MaterialIndexService {
 
   Future<List<String>> getAllMaterials() async {
     await _ensureInitialized();
-    return List.from(_materials);
+
+    // ترتيب أبجدي للعرض فقط (لا يؤثر على الأرقام)
+    final materials = _materialMap.values.toList();
+    materials.sort((a, b) => a.compareTo(b));
+    return materials;
   }
 
-  // دالة جديدة للحصول على المواد حسب ترتيب الإضافة
+  // دالة جديدة للحصول على المواد حسب ترتيب الإضافة (حسب الرقم)
   Future<List<String>> getAllMaterialsByInsertionOrder() async {
     await _ensureInitialized();
-    return List.from(_materialsByInsertionOrder);
+
+    // ترتيب حسب الرقم (ترتيب الإضافة)
+    final sortedEntries = _materialMap.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+
+    return sortedEntries.map((entry) => entry.value).toList();
   }
 
-  // دالة جديدة للحصول على رقم المادة حسب ترتيب الإضافة
+  // دالة جديدة للحصول على رقم المادة الثابت
   Future<int?> getMaterialPosition(String material) async {
     await _ensureInitialized();
 
     final normalizedMaterial = _normalizeMaterial(material);
-    final index = _materialsByInsertionOrder
-        .indexWhere((m) => m.toLowerCase() == normalizedMaterial.toLowerCase());
 
-    return index >= 0 ? index + 1 : null;
+    // البحث عن المادة وإرجاع رقمها
+    for (var entry in _materialMap.entries) {
+      if (entry.value.toLowerCase() == normalizedMaterial.toLowerCase()) {
+        return entry.key;
+      }
+    }
+
+    return null;
   }
 
   Future<void> removeMaterial(String material) async {
@@ -208,22 +229,28 @@ class MaterialIndexService {
 
     final normalizedMaterial = _normalizeMaterial(material);
 
-    // إزالة من القائمتين
-    _materials.removeWhere(
-        (m) => m.toLowerCase() == normalizedMaterial.toLowerCase());
-    _materialsByInsertionOrder.removeWhere(
-        (m) => m.toLowerCase() == normalizedMaterial.toLowerCase());
+    // البحث عن الرقم الخاص بالمادة وحذفها
+    int? keyToRemove;
+    for (var entry in _materialMap.entries) {
+      if (entry.value.toLowerCase() == normalizedMaterial.toLowerCase()) {
+        keyToRemove = entry.key;
+        break;
+      }
+    }
 
-    await _saveToFile();
+    if (keyToRemove != null) {
+      _materialMap.remove(keyToRemove);
+      await _saveToFile();
 
-    if (kDebugMode) {
-      debugPrint('✅ تم حذف المادة: $material');
+      if (kDebugMode) {
+        debugPrint('✅ تم حذف المادة: $material (رقم: $keyToRemove)');
+      }
     }
   }
 
   Future<void> clearAll() async {
-    _materials.clear();
-    _materialsByInsertionOrder.clear();
+    _materialMap.clear();
+    _nextId = 1;
     await _saveToFile();
 
     if (kDebugMode) {
@@ -236,10 +263,16 @@ class MaterialIndexService {
       final filePath = await _getFilePath();
       final file = File(filePath);
 
-      // حفظ البيانات مع الترتيب
+      // تحويل الخريطة إلى Map<String, dynamic> للتخزين
+      final Map<String, dynamic> materialsJson = {};
+      _materialMap.forEach((key, value) {
+        materialsJson[key.toString()] = value;
+      });
+
+      // حفظ البيانات مع الأرقام الثابتة
       final Map<String, dynamic> jsonData = {
-        'materials': _materials,
-        'insertionOrder': _materialsByInsertionOrder,
+        'materials': materialsJson,
+        'nextId': _nextId,
       };
 
       final jsonString = jsonEncode(jsonData);
@@ -253,11 +286,18 @@ class MaterialIndexService {
 
   Future<int> getCount() async {
     await _ensureInitialized();
-    return _materials.length;
+    return _materialMap.length;
   }
 
   Future<bool> exists(String material) async {
     await _ensureInitialized();
-    return _materials.any((m) => m.toLowerCase() == material.toLowerCase());
+    return _materialMap.values
+        .any((m) => m.toLowerCase() == material.toLowerCase());
+  }
+
+  // دالة جديدة: الحصول على جميع المواد مع أرقامها
+  Future<Map<int, String>> getAllMaterialsWithNumbers() async {
+    await _ensureInitialized();
+    return Map.from(_materialMap);
   }
 }

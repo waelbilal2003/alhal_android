@@ -1059,7 +1059,7 @@ class _BoxScreenState extends State<BoxScreen> {
               ),
             Expanded(
               child: Text(
-                'يومية مبيعات رقم /$serialNumber/ تاريخ ${widget.selectedDate} البائع ${widget.sellerName}',
+                'يومية صندوق رقم /$serialNumber/ تاريخ ${widget.selectedDate} البائع ${widget.sellerName}',
                 style:
                     const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                 textAlign: TextAlign.right,

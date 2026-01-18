@@ -51,11 +51,33 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
   List<String> _materials = [];
   List<String> _packagings = [];
 
+  // متغيرات للتحكم في التعديل
+  TextEditingController _addItemController = TextEditingController();
+  FocusNode _addItemFocusNode = FocusNode();
+  Map<int, TextEditingController> _itemControllers = {};
+  Map<int, FocusNode> _itemFocusNodes = {};
+  bool _isAddingNewItem = false;
+
   @override
   void initState() {
     super.initState();
     _loadAccounts();
     _loadStoreName();
+  }
+
+  @override
+  void dispose() {
+    _addItemController.dispose();
+    _addItemFocusNode.dispose();
+    _disposeItemControllers();
+    super.dispose();
+  }
+
+  void _disposeItemControllers() {
+    _itemControllers.values.forEach((controller) => controller.dispose());
+    _itemFocusNodes.values.forEach((focusNode) => focusNode.dispose());
+    _itemControllers.clear();
+    _itemFocusNodes.clear();
   }
 
   Future<void> _loadStoreName() async {
@@ -77,12 +99,42 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
   }
 
   Future<void> _loadAllIndexes() async {
-    _customers = await _customerIndexService.getAllCustomers();
-    _suppliers = await _supplierIndexService.getAllSuppliers();
-    _materials = await _materialIndexService.getAllMaterials();
-    _packagings = await _packagingIndexService.getAllPackagings();
+    // استخدام دالة getAll...ByInsertionOrder للحصول على العناصر حسب الأرقام الأصلية
+    _customers = await _customerIndexService.getAllCustomersByInsertionOrder();
+    _suppliers = await _supplierIndexService.getAllSuppliersByInsertionOrder();
+    _materials = await _materialIndexService.getAllMaterialsByInsertionOrder();
+    _packagings =
+        await _packagingIndexService.getAllPackagingsByInsertionOrder();
+
+    // تهيئة المتحكمات للعناصر الموجودة
+    _initializeItemControllers();
 
     setState(() {});
+  }
+
+  void _initializeItemControllers() {
+    _disposeItemControllers();
+
+    List<String> currentList = [];
+    if (_showCustomerList)
+      currentList = _customers;
+    else if (_showSupplierList)
+      currentList = _suppliers;
+    else if (_showMaterialList)
+      currentList = _materials;
+    else if (_showPackagingList) currentList = _packagings;
+
+    for (int i = 0; i < currentList.length; i++) {
+      _itemControllers[i] = TextEditingController(text: currentList[i]);
+      _itemFocusNodes[i] = FocusNode();
+
+      // إضافة listener لحفظ التعديل عند الخروج من الحقل
+      _itemFocusNodes[i]!.addListener(() {
+        if (!_itemFocusNodes[i]!.hasFocus) {
+          _saveItemEdit(i, currentList[i]);
+        }
+      });
+    }
   }
 
   Widget _buildManagementScreen() {
@@ -268,55 +320,354 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
   }
 
   Widget _buildCustomerList() {
-    if (_customers.isEmpty) {
+    if (_customers.isEmpty && !_isAddingNewItem) {
       return _buildEmptyListMessage('لا يوجد زبائن مسجلين');
     }
 
-    return _buildGenericList(
+    return _buildEditableList(
       title: 'فهرس الزبائن المسجلين',
+      service: _customerIndexService,
       items: _customers,
-      showDelete: true,
-      onDelete: (index, item) => _confirmDeleteCustomer(item),
+      onRefresh: () => _handleCustomerIndex(),
     );
   }
 
   Widget _buildSupplierList() {
-    if (_suppliers.isEmpty) {
+    if (_suppliers.isEmpty && !_isAddingNewItem) {
       return _buildEmptyListMessage('لا يوجد موردين مسجلين');
     }
 
-    return _buildGenericList(
+    return _buildEditableList(
       title: 'فهرس الموردين المسجلين',
+      service: _supplierIndexService,
       items: _suppliers,
-      showDelete: true,
-      onDelete: (index, item) => _confirmDeleteSupplier(item),
+      onRefresh: () => _handleSupplierIndex(),
     );
   }
 
   Widget _buildMaterialList() {
-    if (_materials.isEmpty) {
+    if (_materials.isEmpty && !_isAddingNewItem) {
       return _buildEmptyListMessage('لا يوجد مواد مسجلة');
     }
 
-    return _buildGenericList(
+    return _buildEditableList(
       title: 'فهرس المواد المسجلة',
+      service: _materialIndexService,
       items: _materials,
-      showDelete: true,
-      onDelete: (index, item) => _confirmDeleteMaterial(item),
+      onRefresh: () => _handleMaterialIndex(),
     );
   }
 
   Widget _buildPackagingList() {
-    if (_packagings.isEmpty) {
+    if (_packagings.isEmpty && !_isAddingNewItem) {
       return _buildEmptyListMessage('لا يوجد عبوات مسجلة');
     }
 
-    return _buildGenericList(
+    return _buildEditableList(
       title: 'فهرس العبوات المسجلة',
+      service: _packagingIndexService,
       items: _packagings,
-      showDelete: true,
-      onDelete: (index, item) => _confirmDeletePackaging(item),
+      onRefresh: () => _handlePackagingIndex(),
     );
+  }
+
+  Widget _buildEditableList({
+    required String title,
+    required dynamic service,
+    required List<String> items,
+    required VoidCallback onRefresh,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // العنوان وزر الإضافة
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            textDirection: TextDirection.rtl,
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              IconButton(
+                icon: Icon(
+                  _isAddingNewItem ? Icons.close : Icons.add,
+                  color: Colors.white,
+                  size: 28,
+                ),
+                onPressed: () {
+                  setState(() {
+                    _isAddingNewItem = !_isAddingNewItem;
+                    if (!_isAddingNewItem) {
+                      _addItemController.clear();
+                    } else {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        _addItemFocusNode.requestFocus();
+                      });
+                    }
+                  });
+                },
+              ),
+            ],
+          ),
+
+          // حقل إضافة جديد
+          if (_isAddingNewItem) ...[
+            const SizedBox(height: 15),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.9),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                textDirection: TextDirection.rtl,
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _addItemController,
+                      focusNode: _addItemFocusNode,
+                      textDirection: TextDirection.rtl,
+                      decoration: const InputDecoration(
+                        hintText: 'أدخل العنصر الجديد...',
+                        border: InputBorder.none,
+                        hintTextDirection: TextDirection.rtl,
+                      ),
+                      onSubmitted: (value) {
+                        _addNewItem(service, value);
+                      },
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.check, color: Colors.teal),
+                    onPressed: () {
+                      if (_addItemController.text.trim().isNotEmpty) {
+                        _addNewItem(service, _addItemController.text);
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 15),
+          ],
+
+          // جدول العناوين
+          Row(
+            textDirection: TextDirection.rtl,
+            children: [
+              const SizedBox(width: 60), // مساحة لزر الحذف
+              Expanded(
+                child: Text(
+                  'رقم',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              Expanded(
+                flex: 3,
+                child: Text(
+                  'الاسم',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ],
+          ),
+          Divider(color: Colors.white70, thickness: 1),
+
+          // البيانات القابلة للتعديل
+          if (items.isNotEmpty || _isAddingNewItem) ...[
+            ...items.asMap().entries.map((entry) {
+              final index = entry.key;
+              final item = entry.value;
+
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8.0),
+                child: Row(
+                  textDirection: TextDirection.rtl,
+                  children: [
+                    // زر الحذف
+                    SizedBox(
+                      width: 60,
+                      child: IconButton(
+                        icon: const Icon(Icons.delete, color: Colors.red),
+                        onPressed: () {
+                          if (service is CustomerIndexService) {
+                            _confirmDeleteCustomer(item);
+                          } else if (service is SupplierIndexService) {
+                            _confirmDeleteSupplier(item);
+                          } else if (service is MaterialIndexService) {
+                            _confirmDeleteMaterial(item);
+                          } else if (service is PackagingIndexService) {
+                            _confirmDeletePackaging(item);
+                          }
+                        },
+                      ),
+                    ),
+
+                    // الرقم
+                    Expanded(
+                      child: Text(
+                        (index + 1).toString(),
+                        style: TextStyle(fontSize: 16, color: Colors.white),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+
+                    // حقل الاسم القابل للتعديل
+                    Expanded(
+                      flex: 3,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: TextField(
+                          controller: _itemControllers[index],
+                          focusNode: _itemFocusNodes[index],
+                          textDirection: TextDirection.rtl,
+                          style: TextStyle(fontSize: 16, color: Colors.white),
+                          decoration: const InputDecoration(
+                            border: InputBorder.none,
+                            contentPadding: EdgeInsets.symmetric(horizontal: 8),
+                          ),
+                          onSubmitted: (value) {
+                            _saveItemEdit(index, item);
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ] else ...[
+            Container(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                'انقر على زر (+) لإضافة عنصر جديد',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.white.withOpacity(0.8),
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _addNewItem(dynamic service, String value) async {
+    if (value.trim().isEmpty) return;
+
+    try {
+      if (service is CustomerIndexService) {
+        await service.saveCustomer(value);
+        await _loadAllIndexes();
+      } else if (service is SupplierIndexService) {
+        await service.saveSupplier(value);
+        await _loadAllIndexes();
+      } else if (service is MaterialIndexService) {
+        await service.saveMaterial(value);
+        await _loadAllIndexes();
+      } else if (service is PackagingIndexService) {
+        await service.savePackaging(value);
+        await _loadAllIndexes();
+      }
+
+      _addItemController.clear();
+      setState(() {
+        _isAddingNewItem = false;
+      });
+
+      // إظهار رسالة نجاح
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('تم إضافة "$value" بنجاح'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('حدث خطأ أثناء الإضافة: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _saveItemEdit(int index, String originalValue) async {
+    final newValue = _itemControllers[index]?.text.trim() ?? '';
+    if (newValue.isEmpty || newValue == originalValue) {
+      // إذا كان الحقل فارغاً أو لم يتغير، نعيد القيمة الأصلية
+      _itemControllers[index]?.text = originalValue;
+      return;
+    }
+
+    try {
+      // الحصول على الخدمة المناسبة والقائمة الحالية
+      if (_showCustomerList) {
+        await _customerIndexService.removeCustomer(originalValue);
+        await _customerIndexService.saveCustomer(newValue);
+      } else if (_showSupplierList) {
+        await _supplierIndexService.removeSupplier(originalValue);
+        await _supplierIndexService.saveSupplier(newValue);
+      } else if (_showMaterialList) {
+        await _materialIndexService.removeMaterial(originalValue);
+        await _materialIndexService.saveMaterial(newValue);
+      } else if (_showPackagingList) {
+        await _packagingIndexService.removePackaging(originalValue);
+        await _packagingIndexService.savePackaging(newValue);
+      } else {
+        return;
+      }
+
+      // تحديث القائمة
+      await _loadAllIndexes();
+
+      // إظهار رسالة نجاح
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('تم تعديل "$originalValue" إلى "$newValue"'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      // في حالة الخطأ، نعيد القيمة الأصلية
+      _itemControllers[index]?.text = originalValue;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('حدث خطأ أثناء التعديل: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   Widget _buildEmptyListMessage(String message) {
@@ -326,13 +677,36 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
         color: Colors.white.withOpacity(0.1),
         borderRadius: BorderRadius.circular(12),
       ),
-      child: Text(
-        message,
-        style: const TextStyle(
-          fontSize: 18,
-          color: Colors.white,
-        ),
-        textAlign: TextAlign.center,
+      child: Column(
+        children: [
+          Text(
+            message,
+            style: const TextStyle(
+              fontSize: 18,
+              color: Colors.white,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          IconButton(
+            icon: const Icon(Icons.add_circle, color: Colors.white, size: 40),
+            onPressed: () {
+              setState(() {
+                _isAddingNewItem = true;
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  _addItemFocusNode.requestFocus();
+                });
+              });
+            },
+          ),
+          const Text(
+            'انقر لإضافة عنصر جديد',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.white70,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -474,6 +848,7 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
       _showSupplierList = false;
       _showMaterialList = false;
       _showPackagingList = false;
+      _isAddingNewItem = false;
     });
   }
 
@@ -485,6 +860,7 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
       _showSupplierList = false;
       _showMaterialList = false;
       _showPackagingList = false;
+      _isAddingNewItem = false;
     });
   }
 
@@ -496,6 +872,7 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
       _showSupplierList = true;
       _showMaterialList = false;
       _showPackagingList = false;
+      _isAddingNewItem = false;
     });
   }
 
@@ -507,6 +884,7 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
       _showSupplierList = false;
       _showMaterialList = true;
       _showPackagingList = false;
+      _isAddingNewItem = false;
     });
   }
 
@@ -518,6 +896,7 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
       _showSupplierList = false;
       _showMaterialList = false;
       _showPackagingList = true;
+      _isAddingNewItem = false;
     });
   }
 
@@ -605,6 +984,7 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
     if (result == true) {
       await _customerIndexService.removeCustomer(customer);
       _customers.remove(customer);
+      _initializeItemControllers();
       setState(() {});
     }
   }
@@ -639,6 +1019,7 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
     if (result == true) {
       await _supplierIndexService.removeSupplier(supplier);
       _suppliers.remove(supplier);
+      _initializeItemControllers();
       setState(() {});
     }
   }
@@ -673,6 +1054,7 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
     if (result == true) {
       await _materialIndexService.removeMaterial(material);
       _materials.remove(material);
+      _initializeItemControllers();
       setState(() {});
     }
   }
@@ -707,6 +1089,7 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
     if (result == true) {
       await _packagingIndexService.removePackaging(packaging);
       _packagings.remove(packaging);
+      _initializeItemControllers();
       setState(() {});
     }
   }

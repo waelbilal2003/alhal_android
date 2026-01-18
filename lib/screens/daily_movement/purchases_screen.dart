@@ -1108,7 +1108,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
               ),
             Expanded(
               child: Text(
-                'يومية مبيعات رقم /$serialNumber/ تاريخ ${widget.selectedDate} البائع ${widget.sellerName}',
+                'يومية مشتريات رقم /$serialNumber/ تاريخ ${widget.selectedDate} البائع ${widget.sellerName}',
                 style:
                     const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                 textAlign: TextAlign.right,

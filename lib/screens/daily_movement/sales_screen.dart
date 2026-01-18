@@ -902,22 +902,13 @@ class _SalesScreenState extends State<SalesScreen> {
     return cell;
   }
 
-  // خلية خاصة لحقل المادة مع الاقتراحات
   Widget _buildMaterialCell(
       TextEditingController controller,
       FocusNode focusNode,
       int rowIndex,
       int colIndex,
       bool isOwnedByCurrentSeller) {
-    focusNode.addListener(() {
-      if (focusNode.hasFocus) {
-        // حساب موقع الحقل عندما يحصل على التركيز
-        _calculateFieldPosition(focusNode, rowIndex, colIndex);
-      } else {
-        _toggleFullScreenSuggestions(type: 'material', show: false);
-      }
-    });
-    Widget cell = TableBuilder.buildTableCell(
+    return TableBuilder.buildTableCell(
       controller: controller,
       focusNode: focusNode,
       isSerialField: false,
@@ -925,56 +916,20 @@ class _SalesScreenState extends State<SalesScreen> {
       rowIndex: rowIndex,
       colIndex: colIndex,
       scrollToField: _scrollToField,
-      onFieldSubmitted: (value, rIndex, cIndex) {
-        _handleFieldSubmitted(value, rIndex, cIndex);
-        if (value.trim().isNotEmpty && value.trim().length > 1) {
-          _saveMaterialToIndex(value);
-        }
-        _toggleFullScreenSuggestions(type: 'material', show: false);
-      },
-      onFieldChanged: (value, rIndex, cIndex) {
-        _handleFieldChanged(value, rIndex, cIndex);
-        // عند الكتابة، نعرض الاقتراحات
-        if (value.isNotEmpty && _activeMaterialRowIndex == rowIndex) {
-          _toggleFullScreenSuggestions(type: 'material', show: true);
-        }
-      },
+      onFieldSubmitted: (value, rIndex, cIndex) =>
+          _handleFieldSubmitted(value, rIndex, cIndex),
+      onFieldChanged: (value, rIndex, cIndex) =>
+          _handleFieldChanged(value, rIndex, cIndex),
     );
-
-    // إزالة الجزء الذي يحاول عرض الاقتراحات داخل الخلية
-    // لأننا الآن نعرضها على كامل الشاشة
-
-    if (!isOwnedByCurrentSeller) {
-      return IgnorePointer(
-        child: Opacity(
-          opacity: 0.7,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.grey[100],
-            ),
-            child: cell,
-          ),
-        ),
-      );
-    }
-
-    return cell;
   }
 
-// خلية خاصة لحقل العبوة مع الاقتراحات - مثل purchases_screen
   Widget _buildPackagingCell(
       TextEditingController controller,
       FocusNode focusNode,
       int rowIndex,
       int colIndex,
       bool isOwnedByCurrentSeller) {
-    focusNode.addListener(() {
-      if (!focusNode.hasFocus) {
-        _hideAllSuggestionsImmediately();
-      }
-    });
-
-    Widget cell = TableBuilder.buildTableCell(
+    return TableBuilder.buildTableCell(
       controller: controller,
       focusNode: focusNode,
       isSerialField: false,
@@ -982,47 +937,20 @@ class _SalesScreenState extends State<SalesScreen> {
       rowIndex: rowIndex,
       colIndex: colIndex,
       scrollToField: _scrollToField,
-      onFieldSubmitted: (value, rIndex, cIndex) {
-        _handleFieldSubmitted(value, rIndex, cIndex);
-        if (value.trim().isNotEmpty) {
-          _savePackagingToIndex(value);
-        }
-      },
+      onFieldSubmitted: (value, rIndex, cIndex) =>
+          _handleFieldSubmitted(value, rIndex, cIndex),
       onFieldChanged: (value, rIndex, cIndex) =>
           _handleFieldChanged(value, rIndex, cIndex),
     );
-
-    if (!isOwnedByCurrentSeller) {
-      return IgnorePointer(
-        child: Opacity(
-          opacity: 0.7,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.grey[100],
-            ),
-            child: cell,
-          ),
-        ),
-      );
-    }
-
-    return cell;
   }
 
-// خلية خاصة لحقل العائدية (الموردين) مع الاقتراحات - مثل purchases_screen
   Widget _buildSupplierCell(
       TextEditingController controller,
       FocusNode focusNode,
       int rowIndex,
       int colIndex,
       bool isOwnedByCurrentSeller) {
-    focusNode.addListener(() {
-      if (!focusNode.hasFocus) {
-        _hideAllSuggestionsImmediately();
-      }
-    });
-
-    Widget cell = TableBuilder.buildTableCell(
+    return TableBuilder.buildTableCell(
       controller: controller,
       focusNode: focusNode,
       isSerialField: false,
@@ -1030,31 +958,11 @@ class _SalesScreenState extends State<SalesScreen> {
       rowIndex: rowIndex,
       colIndex: colIndex,
       scrollToField: _scrollToField,
-      onFieldSubmitted: (value, rIndex, cIndex) {
-        _handleFieldSubmitted(value, rIndex, cIndex);
-        if (value.trim().isNotEmpty) {
-          _saveSupplierToIndex(value);
-        }
-      },
+      onFieldSubmitted: (value, rIndex, cIndex) =>
+          _handleFieldSubmitted(value, rIndex, cIndex),
       onFieldChanged: (value, rIndex, cIndex) =>
           _handleFieldChanged(value, rIndex, cIndex),
     );
-
-    if (!isOwnedByCurrentSeller) {
-      return IgnorePointer(
-        child: Opacity(
-          opacity: 0.7,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.grey[100],
-            ),
-            child: cell,
-          ),
-        ),
-      );
-    }
-
-    return cell;
   }
 
   void _handleFieldSubmitted(String value, int rowIndex, int colIndex) {
@@ -1525,20 +1433,6 @@ class _SalesScreenState extends State<SalesScreen> {
   Widget _buildMainContent() {
     return _buildTableWithStickyHeader(); // فقط الجدول بدون Stack
     // لأن الاقتراحات الآن تظهر في AppBar
-  }
-
-// تعديل دالة _calculateFieldPosition في sales_screen.dart
-  void _calculateFieldPosition(
-      FocusNode focusNode, int rowIndex, int colIndex) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final renderBox = context.findRenderObject() as RenderBox?;
-      if (renderBox != null) {
-        final fieldPosition = focusNode.context?.findRenderObject();
-        if (fieldPosition is RenderBox) {
-          setState(() {});
-        }
-      }
-    });
   }
 
   Widget _buildFloatingActionButton() {

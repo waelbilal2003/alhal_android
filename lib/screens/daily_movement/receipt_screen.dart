@@ -1033,21 +1033,30 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
         ],
       ),
       body: _buildTableWithStickyHeader(),
-      // إضافة الزر العائم هنا
-      floatingActionButton: _buildFloatingActionButton(),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-    );
-  }
-
-  // دالة لبناء الزر العائم
-  Widget _buildFloatingActionButton() {
-    return FloatingActionButton(
-      onPressed: _addNewRow,
-      backgroundColor: Colors.blue[700],
-      foregroundColor: Colors.white,
-      child: const Icon(Icons.add),
-      tooltip: 'إضافة سجل جديد',
-      heroTag: 'receipt_fab',
+      floatingActionButton: Container(
+        margin: const EdgeInsets.only(bottom: 16, right: 16),
+        child: Material(
+          color: Colors.blue[700],
+          borderRadius: BorderRadius.circular(12),
+          elevation: 8,
+          child: InkWell(
+            onTap: _addNewRow,
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
+              child: const Text(
+                'إضافة',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.startDocked,
     );
   }
 

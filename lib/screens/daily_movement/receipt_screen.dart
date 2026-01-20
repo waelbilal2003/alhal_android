@@ -1032,31 +1032,38 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
           ),
         ],
       ),
-      body: _buildTableWithStickyHeader(),
-      floatingActionButton: Container(
-        margin: const EdgeInsets.only(bottom: 16, right: 16),
-        child: Material(
-          color: Colors.blue[700],
-          borderRadius: BorderRadius.circular(12),
-          elevation: 8,
-          child: InkWell(
-            onTap: _addNewRow,
-            borderRadius: BorderRadius.circular(12),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
-              child: const Text(
-                'إضافة',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
+      body: Stack(
+        children: [
+          _buildMainContent(),
+          // زر الإضافة الثابت
+          Positioned(
+            left: 16,
+            bottom: 16,
+            child: Material(
+              color: Colors.blue[700],
+              borderRadius: BorderRadius.circular(12),
+              elevation: 8,
+              child: InkWell(
+                onTap: _addNewRow,
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
+                  child: const Text(
+                    'إضافة',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                    ),
+                  ),
                 ),
               ),
             ),
           ),
-        ),
+        ],
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.startDocked,
+      resizeToAvoidBottomInset: false,
     );
   }
 

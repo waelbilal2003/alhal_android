@@ -7,17 +7,20 @@ class CustomerData {
   String name;
   double balance;
   String mobile;
+  bool isBalanceLocked; // قفل الرصيد بعد أول عملية أو إدخال أولي
 
   CustomerData({
     required this.name,
     this.balance = 0.0,
     this.mobile = '',
+    this.isBalanceLocked = false,
   });
 
   Map<String, dynamic> toJson() => {
         'name': name,
         'balance': balance,
         'mobile': mobile,
+        'isBalanceLocked': isBalanceLocked,
       };
 
   factory CustomerData.fromJson(dynamic json) {
@@ -28,6 +31,7 @@ class CustomerData {
       name: json['name'] ?? '',
       balance: (json['balance'] ?? 0.0).toDouble(),
       mobile: json['mobile'] ?? '',
+      isBalanceLocked: json['isBalanceLocked'] ?? false,
     );
   }
 }
@@ -129,7 +133,8 @@ class CustomerIndexService {
     if (query.isEmpty) return [];
     final normalizedQuery = query.toLowerCase().trim();
     return _customerMap.entries
-        .where((entry) => entry.value.name.toLowerCase().contains(normalizedQuery))
+        .where(
+            (entry) => entry.value.name.toLowerCase().contains(normalizedQuery))
         .map((entry) => entry.value.name)
         .toList();
   }
@@ -171,7 +176,22 @@ class CustomerIndexService {
     for (var entry in _customerMap.entries) {
       if (entry.value.name.toLowerCase() == normalizedCustomer.toLowerCase()) {
         entry.value.balance += amount;
+        entry.value.isBalanceLocked = true; // قفل الرصيد بعد أول عملية حسابية
         await _saveToFile();
+        return;
+      }
+    }
+  }
+
+  Future<void> setInitialBalance(String customerName, double balance) async {
+    await _ensureInitialized();
+    final normalizedCustomer = _normalizeCustomer(customerName);
+    for (var entry in _customerMap.entries) {
+      if (entry.value.name.toLowerCase() == normalizedCustomer.toLowerCase()) {
+        if (!entry.value.isBalanceLocked) {
+          entry.value.balance = balance;
+          await _saveToFile();
+        }
         return;
       }
     }

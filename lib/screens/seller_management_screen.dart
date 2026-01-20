@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../services/store_db_service.dart';
@@ -47,7 +48,9 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
 
   // قوائم البيانات مع الأرقام الحقيقية
   Map<int, String> _customersWithNumbers = {};
+  Map<int, CustomerData> _customersWithData = {};
   Map<int, String> _suppliersWithNumbers = {};
+  Map<int, SupplierData> _suppliersWithData = {};
   Map<int, String> _materialsWithNumbers = {};
   Map<int, String> _packagingsWithNumbers = {};
 
@@ -56,6 +59,10 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
   FocusNode _addItemFocusNode = FocusNode();
   Map<String, TextEditingController> _itemControllers = {};
   Map<String, FocusNode> _itemFocusNodes = {};
+  Map<String, TextEditingController> _mobileControllers = {};
+  Map<String, FocusNode> _mobileFocusNodes = {};
+  Map<String, TextEditingController> _balanceControllers = {};
+  Map<String, FocusNode> _balanceFocusNodes = {};
   bool _isAddingNewItem = false;
 
   @override
@@ -76,8 +83,16 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
   void _disposeItemControllers() {
     _itemControllers.values.forEach((controller) => controller.dispose());
     _itemFocusNodes.values.forEach((focusNode) => focusNode.dispose());
+    _mobileControllers.values.forEach((controller) => controller.dispose());
+    _mobileFocusNodes.values.forEach((focusNode) => focusNode.dispose());
+    _balanceControllers.values.forEach((controller) => controller.dispose());
+    _balanceFocusNodes.values.forEach((focusNode) => focusNode.dispose());
     _itemControllers.clear();
     _itemFocusNodes.clear();
+    _mobileControllers.clear();
+    _mobileFocusNodes.clear();
+    _balanceControllers.clear();
+    _balanceFocusNodes.clear();
   }
 
   Future<void> _loadStoreName() async {
@@ -99,20 +114,21 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
   }
 
   Future<void> _loadAllIndexesWithNumbers() async {
-    // تحميل جميع الفهارس مع الأرقام الحقيقية في نفس الوقت
     try {
       _customersWithNumbers =
           await _customerIndexService.getAllCustomersWithNumbers();
+      _customersWithData =
+          await _customerIndexService.getAllCustomersWithData();
       _suppliersWithNumbers =
           await _supplierIndexService.getAllSuppliersWithNumbers();
+      _suppliersWithData =
+          await _supplierIndexService.getAllSuppliersWithData();
       _materialsWithNumbers =
           await _materialIndexService.getAllMaterialsWithNumbers();
       _packagingsWithNumbers =
           await _packagingIndexService.getAllPackagingsWithNumbers();
 
-      // تهيئة المتحكمات للعناصر الموجودة
       _initializeItemControllers();
-
       setState(() {});
     } catch (e) {
       print('خطأ في تحميل الفهارس: $e');
@@ -121,31 +137,68 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
 
   void _initializeItemControllers() {
     _disposeItemControllers();
-
     Map<int, String> currentMap = _getCurrentMap();
 
     currentMap.forEach((key, value) {
       _itemControllers[value] = TextEditingController(text: value);
       _itemFocusNodes[value] = FocusNode();
-
-      // إضافة listener لحفظ التعديل عند الخروج من الحقل
       _itemFocusNodes[value]!.addListener(() {
         if (!_itemFocusNodes[value]!.hasFocus) {
-          _saveItemEdit(value);
+          _saveItemEdit(key, value);
         }
       });
+
+      if (_showCustomerList && _customersWithData.containsKey(key)) {
+        final mobile = _customersWithData[key]!.mobile;
+        final balance = _customersWithData[key]!.balance;
+        _mobileControllers[value] = TextEditingController(text: mobile);
+        _mobileFocusNodes[value] = FocusNode();
+        _mobileFocusNodes[value]!.addListener(() {
+          if (!_mobileFocusNodes[value]!.hasFocus) {
+            _saveMobileEdit(value);
+          }
+        });
+        _balanceControllers[value] =
+            TextEditingController(text: balance.toStringAsFixed(2));
+        _balanceFocusNodes[value] = FocusNode();
+        _balanceFocusNodes[value]!.addListener(() {
+          if (!_balanceFocusNodes[value]!.hasFocus) {
+            _saveBalanceEdit(value);
+          }
+        });
+      } else if (_showSupplierList && _suppliersWithData.containsKey(key)) {
+        final mobile = _suppliersWithData[key]!.mobile;
+        final balance = _suppliersWithData[key]!.balance;
+        _mobileControllers[value] = TextEditingController(text: mobile);
+        _mobileFocusNodes[value] = FocusNode();
+        _mobileFocusNodes[value]!.addListener(() {
+          if (!_mobileFocusNodes[value]!.hasFocus) {
+            _saveMobileEdit(value);
+          }
+        });
+        _balanceControllers[value] =
+            TextEditingController(text: balance.toStringAsFixed(2));
+        _balanceFocusNodes[value] = FocusNode();
+        _balanceFocusNodes[value]!.addListener(() {
+          if (!_balanceFocusNodes[value]!.hasFocus) {
+            _saveBalanceEdit(value);
+          }
+        });
+      }
     });
   }
 
   Map<int, String> _getCurrentMap() {
-    if (_showCustomerList)
-      return _customersWithNumbers;
-    else if (_showSupplierList)
-      return _suppliersWithNumbers;
-    else if (_showMaterialList)
-      return _materialsWithNumbers;
-    else if (_showPackagingList) return _packagingsWithNumbers;
+    if (_showCustomerList) return _customersWithNumbers;
+    if (_showSupplierList) return _suppliersWithNumbers;
+    if (_showMaterialList) return _materialsWithNumbers;
+    if (_showPackagingList) return _packagingsWithNumbers;
     return {};
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _buildManagementScreen();
   }
 
   Widget _buildManagementScreen() {
@@ -165,7 +218,6 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // اسم المحل
                 Text(
                   _currentStoreName,
                   style: const TextStyle(
@@ -175,16 +227,10 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
                   ),
                 ),
                 const SizedBox(height: 30),
-
-                // أزرار الإدارة الرئيسية
                 _buildMainManagementButtons(),
                 const SizedBox(height: 20),
-
-                // أزرار الفهارس
                 _buildIndexButtons(),
                 const SizedBox(height: 40),
-
-                // عرض الفهرس المحدد
                 _buildCurrentIndexList(),
               ],
             ),
@@ -227,10 +273,7 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
   }
 
   Widget _buildActionButton(
-    String text,
-    IconData icon,
-    VoidCallback onPressed,
-  ) {
+      String text, IconData icon, VoidCallback onPressed) {
     return Expanded(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8.0),
@@ -241,20 +284,15 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(vertical: 15),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildIndexButton(
-    String text,
-    IconData icon,
-    VoidCallback onPressed,
-  ) {
+  Widget _buildIndexButton(String text, IconData icon, VoidCallback onPressed) {
     return Expanded(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4.0),
@@ -269,9 +307,8 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           ),
         ),
       ),
@@ -308,17 +345,13 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
     if (_showSupplierList) return _buildSupplierList();
     if (_showMaterialList) return _buildMaterialList();
     if (_showPackagingList) return _buildPackagingList();
-
     return const SizedBox.shrink();
   }
 
   Widget _buildSellerList() {
     final sellerNames = _accounts.keys.toList();
-
-    if (sellerNames.isEmpty) {
+    if (sellerNames.isEmpty)
       return _buildEmptyListMessage('لا يوجد بائعين مسجلين');
-    }
-
     return _buildGenericList(
       title: 'فهرس البائعين المسجلين',
       items: sellerNames,
@@ -332,7 +365,6 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
     if (_customersWithNumbers.isEmpty && !_isAddingNewItem) {
       return _buildEmptyListMessage('لا يوجد زبائن مسجلين');
     }
-
     return _buildEditableListWithNumbers(
       title: 'فهرس الزبائن المسجلين',
       service: _customerIndexService,
@@ -344,7 +376,6 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
     if (_suppliersWithNumbers.isEmpty && !_isAddingNewItem) {
       return _buildEmptyListMessage('لا يوجد موردين مسجلين');
     }
-
     return _buildEditableListWithNumbers(
       title: 'فهرس الموردين المسجلين',
       service: _supplierIndexService,
@@ -356,7 +387,6 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
     if (_materialsWithNumbers.isEmpty && !_isAddingNewItem) {
       return _buildEmptyListMessage('لا يوجد مواد مسجلة');
     }
-
     return _buildEditableListWithNumbers(
       title: 'فهرس المواد المسجلة',
       service: _materialIndexService,
@@ -368,7 +398,6 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
     if (_packagingsWithNumbers.isEmpty && !_isAddingNewItem) {
       return _buildEmptyListMessage('لا يوجد عبوات مسجلة');
     }
-
     return _buildEditableListWithNumbers(
       title: 'فهرس العبوات المسجلة',
       service: _packagingIndexService,
@@ -381,9 +410,12 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
     required dynamic service,
     required Map<int, String> itemsMap,
   }) {
-    // تحويل الخريطة إلى قائمة مرتبة حسب الأرقام
     List<MapEntry<int, String>> sortedEntries = itemsMap.entries.toList()
       ..sort((a, b) => a.key.compareTo(b.key));
+
+    bool isCustomer = service is CustomerIndexService;
+    bool isSupplier = service is SupplierIndexService;
+    bool hasExtraCols = isCustomer || isSupplier;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -394,7 +426,6 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // العنوان وزر الإضافة
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             textDirection: TextDirection.rtl,
@@ -403,19 +434,15 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
                 child: Text(
                   title,
                   style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white),
                   textAlign: TextAlign.center,
                 ),
               ),
               IconButton(
-                icon: Icon(
-                  _isAddingNewItem ? Icons.close : Icons.add,
-                  color: Colors.white,
-                  size: 28,
-                ),
+                icon: Icon(_isAddingNewItem ? Icons.close : Icons.add,
+                    color: Colors.white, size: 28),
                 onPressed: () {
                   setState(() {
                     _isAddingNewItem = !_isAddingNewItem;
@@ -431,16 +458,13 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
               ),
             ],
           ),
-
-          // حقل إضافة جديد
           if (_isAddingNewItem) ...[
             const SizedBox(height: 15),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.9),
-                borderRadius: BorderRadius.circular(8),
-              ),
+                  color: Colors.white.withOpacity(0.9),
+                  borderRadius: BorderRadius.circular(8)),
               child: Row(
                 textDirection: TextDirection.rtl,
                 children: [
@@ -450,13 +474,9 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
                       focusNode: _addItemFocusNode,
                       textDirection: TextDirection.rtl,
                       decoration: const InputDecoration(
-                        hintText: 'أدخل العنصر الجديد...',
-                        border: InputBorder.none,
-                        hintTextDirection: TextDirection.rtl,
-                      ),
-                      onSubmitted: (value) {
-                        _addNewItem(service, value);
-                      },
+                          hintText: 'أدخل العنصر الجديد...',
+                          border: InputBorder.none),
+                      onSubmitted: (value) => _addNewItem(service, value),
                     ),
                   ),
                   IconButton(
@@ -472,221 +492,262 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
             ),
             const SizedBox(height: 15),
           ],
-
-          // جدول العناوين
           Row(
             textDirection: TextDirection.rtl,
             children: [
-              const SizedBox(width: 60), // مساحة لزر الحذف
-              Expanded(
-                child: Text(
-                  'الرقم الحقيقي',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-              Expanded(
-                flex: 3,
-                child: Text(
-                  'الاسم',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ),
+              const SizedBox(width: 50),
+              _buildHeaderCell('الرقم', 1),
+              _buildHeaderCell('الاسم', 3),
+              if (hasExtraCols) ...[
+                _buildHeaderCell('الرصيد', 2),
+                _buildHeaderCell('الموبايل', 2),
+              ],
             ],
           ),
           Divider(color: Colors.white70, thickness: 1),
-
-          // البيانات القابلة للتعديل
           if (sortedEntries.isNotEmpty || _isAddingNewItem) ...[
             ...sortedEntries.map((entry) {
               final key = entry.key;
               final item = entry.value;
 
+              double balance = 0;
+              String mobile = '';
+              bool isLocked = true;
+
+              if (isCustomer && _customersWithData.containsKey(key)) {
+                balance = _customersWithData[key]!.balance;
+                mobile = _customersWithData[key]!.mobile;
+                isLocked = _customersWithData[key]!.isBalanceLocked;
+              } else if (isSupplier && _suppliersWithData.containsKey(key)) {
+                balance = _suppliersWithData[key]!.balance;
+                mobile = _suppliersWithData[key]!.mobile;
+                isLocked = _suppliersWithData[key]!.isBalanceLocked;
+              }
+
               return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8.0),
+                padding: const EdgeInsets.symmetric(vertical: 4.0),
                 child: Row(
                   textDirection: TextDirection.rtl,
                   children: [
-                    // زر الحذف
                     SizedBox(
-                      width: 60,
+                      width: 50,
                       child: IconButton(
-                        icon: const Icon(Icons.delete, color: Colors.red),
+                        icon: const Icon(Icons.delete,
+                            color: Colors.red, size: 20),
                         onPressed: () {
-                          if (service is CustomerIndexService) {
+                          if (service is CustomerIndexService)
                             _confirmDeleteCustomer(item);
-                          } else if (service is SupplierIndexService) {
+                          else if (service is SupplierIndexService)
                             _confirmDeleteSupplier(item);
-                          } else if (service is MaterialIndexService) {
+                          else if (service is MaterialIndexService)
                             _confirmDeleteMaterial(item);
-                          } else if (service is PackagingIndexService) {
+                          else if (service is PackagingIndexService)
                             _confirmDeletePackaging(item);
-                          }
                         },
                       ),
                     ),
-
-                    // الرقم الحقيقي
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.05),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          key.toString(),
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    ),
-
-                    // حقل الاسم القابل للتعديل
+                    _buildDataCell(key.toString(), 1),
                     Expanded(
                       flex: 3,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: TextField(
-                          controller: _itemControllers[item] ??
-                              TextEditingController(text: item),
-                          focusNode: _itemFocusNodes[item] ?? FocusNode(),
-                          textDirection: TextDirection.rtl,
-                          style: TextStyle(fontSize: 16, color: Colors.white),
-                          decoration: const InputDecoration(
-                            border: InputBorder.none,
-                            contentPadding: EdgeInsets.symmetric(horizontal: 8),
-                          ),
-                          onSubmitted: (value) {
-                            _saveItemEdit(item);
-                          },
-                        ),
+                      child: _buildEditableTextField(
+                        controller: _itemControllers[item] ??
+                            TextEditingController(text: item),
+                        focusNode: _itemFocusNodes[item] ?? FocusNode(),
+                        onSubmitted: (val) => _saveItemEdit(key, item),
                       ),
                     ),
+                    if (hasExtraCols) ...[
+                      Expanded(
+                        flex: 2,
+                        child: _buildEditableTextField(
+                          controller: _balanceControllers[item] ??
+                              TextEditingController(
+                                  text: balance.toStringAsFixed(2)),
+                          focusNode: _balanceFocusNodes[item] ?? FocusNode(),
+                          onSubmitted: (val) => _saveBalanceEdit(item),
+                          isNumeric: true,
+                          isReadOnly: isLocked, // قفل الرصيد إذا كان locked
+                        ),
+                      ),
+                      Expanded(
+                        flex: 2,
+                        child: _buildEditableTextField(
+                          controller: _mobileControllers[item] ??
+                              TextEditingController(text: mobile),
+                          focusNode: _mobileFocusNodes[item] ?? FocusNode(),
+                          onSubmitted: (val) => _saveMobileEdit(item),
+                          isNumeric: true,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               );
             }).toList(),
-          ] else ...[
-            Container(
-              padding: const EdgeInsets.all(16),
-              child: Text(
-                'انقر على زر (+) لإضافة عنصر جديد',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.white.withOpacity(0.8),
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ),
           ],
         ],
       ),
     );
   }
 
+  Widget _buildHeaderCell(String text, int flex) {
+    return Expanded(
+      flex: flex,
+      child: Text(
+        text,
+        style: const TextStyle(
+            fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+        textAlign: TextAlign.center,
+      ),
+    );
+  }
+
+  Widget _buildDataCell(String text, int flex, {bool isReadOnly = false}) {
+    return Expanded(
+      flex: flex,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 2),
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color:
+              isReadOnly ? Colors.white.withOpacity(0.05) : Colors.transparent,
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Text(
+          text,
+          style: const TextStyle(fontSize: 14, color: Colors.white),
+          textAlign: TextAlign.center,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEditableTextField({
+    required TextEditingController controller,
+    required FocusNode focusNode,
+    required Function(String) onSubmitted,
+    bool isNumeric = false,
+    bool isReadOnly = false,
+  }) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      decoration: BoxDecoration(
+          color: isReadOnly
+              ? Colors.grey.withOpacity(0.2)
+              : Colors.white.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(4)),
+      child: TextField(
+        controller: controller,
+        focusNode: focusNode,
+        enabled: !isReadOnly,
+        textDirection: TextDirection.rtl,
+        keyboardType: isNumeric
+            ? const TextInputType.numberWithOptions(decimal: true)
+            : TextInputType.text,
+        inputFormatters: isNumeric
+            ? [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))]
+            : null,
+        style: TextStyle(
+            fontSize: 14, color: isReadOnly ? Colors.white70 : Colors.white),
+        decoration: const InputDecoration(
+            border: InputBorder.none,
+            isDense: true,
+            contentPadding: EdgeInsets.symmetric(vertical: 8)),
+        onSubmitted: onSubmitted,
+      ),
+    );
+  }
+
   Future<void> _addNewItem(dynamic service, String value) async {
     if (value.trim().isEmpty) return;
-
     try {
-      if (service is CustomerIndexService) {
+      if (service is CustomerIndexService)
         await service.saveCustomer(value);
-      } else if (service is SupplierIndexService) {
+      else if (service is SupplierIndexService)
         await service.saveSupplier(value);
-      } else if (service is MaterialIndexService) {
+      else if (service is MaterialIndexService)
         await service.saveMaterial(value);
-      } else if (service is PackagingIndexService) {
+      else if (service is PackagingIndexService)
         await service.savePackaging(value);
-      }
 
-      // تحميل جميع الفهارس مع الأرقام
       await _loadAllIndexesWithNumbers();
-
       _addItemController.clear();
-      setState(() {
-        _isAddingNewItem = false;
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+      setState(() => _isAddingNewItem = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('تم إضافة "$value" بنجاح'),
-          backgroundColor: Colors.green,
-        ),
-      );
+          backgroundColor: Colors.green));
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('حدث خطأ أثناء الإضافة: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+          backgroundColor: Colors.red));
     }
   }
 
-  Future<void> _saveItemEdit(String originalValue) async {
+  Future<void> _saveItemEdit(int id, String originalValue) async {
     final controller = _itemControllers[originalValue];
     if (controller == null) return;
-
     final newValue = controller.text.trim();
     if (newValue.isEmpty || newValue == originalValue) {
       controller.text = originalValue;
       return;
     }
+    if (_showCustomerList) {
+      await _customerIndexService.updateCustomerName(id, newValue);
+    } else if (_showSupplierList) {
+      await _supplierIndexService.updateSupplierName(id, newValue);
+    }
+    await _loadAllIndexesWithNumbers();
+  }
+
+  Future<void> _saveMobileEdit(String itemName) async {
+    final controller = _mobileControllers[itemName];
+    if (controller == null) return;
+    final newMobile = controller.text.trim();
+    if (_showCustomerList) {
+      await _customerIndexService.updateCustomerMobile(itemName, newMobile);
+    } else if (_showSupplierList) {
+      await _supplierIndexService.updateSupplierMobile(itemName, newMobile);
+    }
+    await _loadAllIndexesWithNumbers();
+  }
+
+  Future<void> _saveBalanceEdit(String itemName) async {
+    final controller = _balanceControllers[itemName];
+    if (controller == null) return;
+    final newBalance = double.tryParse(controller.text.trim()) ?? 0.0;
+    if (_showCustomerList) {
+      await _customerIndexService.setInitialBalance(itemName, newBalance);
+    } else if (_showSupplierList) {
+      await _supplierIndexService.setInitialBalance(itemName, newBalance);
+    }
+    await _loadAllIndexesWithNumbers();
   }
 
   Widget _buildEmptyListMessage(String message) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-      ),
+          color: Colors.white.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12)),
       child: Column(
         children: [
-          Text(
-            message,
-            style: const TextStyle(
-              fontSize: 18,
-              color: Colors.white,
-            ),
-            textAlign: TextAlign.center,
-          ),
+          Text(message,
+              style: const TextStyle(fontSize: 18, color: Colors.white),
+              textAlign: TextAlign.center),
           const SizedBox(height: 16),
           IconButton(
             icon: const Icon(Icons.add_circle, color: Colors.white, size: 40),
             onPressed: () {
               setState(() {
                 _isAddingNewItem = true;
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  _addItemFocusNode.requestFocus();
-                });
+                WidgetsBinding.instance.addPostFrameCallback(
+                    (_) => _addItemFocusNode.requestFocus());
               });
             },
           ),
-          const Text(
-            'انقر لإضافة عنصر جديد',
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.white70,
-            ),
-          ),
+          const Text('انقر لإضافة عنصر جديد',
+              style: TextStyle(fontSize: 14, color: Colors.white70)),
         ],
       ),
     );
@@ -702,117 +763,45 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-      ),
+          color: Colors.white.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-            textAlign: TextAlign.center,
-          ),
+          Text(title,
+              style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white),
+              textAlign: TextAlign.center),
           const SizedBox(height: 15),
-
-          // جدول العناوين
           Row(
             textDirection: TextDirection.rtl,
             children: [
-              const SizedBox(width: 60), // مساحة لزر الحذف
-              Expanded(
-                child: Text(
-                  'رقم',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-              Expanded(
-                flex: 2,
-                child: Text(
-                  'الاسم',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-              if (getPassword != null)
-                Expanded(
-                  flex: 2,
-                  child: Text(
-                    'كلمة السر',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
+              const SizedBox(width: 60),
+              _buildHeaderCell('رقم', 1),
+              _buildHeaderCell('الاسم', 2),
+              if (getPassword != null) _buildHeaderCell('كلمة السر', 2),
             ],
           ),
           Divider(color: Colors.white70, thickness: 1),
-
-          // البيانات
           ...items.asMap().entries.map((entry) {
             final index = entry.key + 1;
             final item = entry.value;
-
             return Padding(
               padding: const EdgeInsets.symmetric(vertical: 8.0),
               child: Row(
                 textDirection: TextDirection.rtl,
                 children: [
-                  // زر الحذف
                   if (showDelete)
                     SizedBox(
-                      width: 60,
-                      child: IconButton(
-                        icon: const Icon(Icons.delete, color: Colors.red),
-                        onPressed: () => onDelete(index, item),
-                      ),
-                    ),
-
-                  // الرقم
-                  Expanded(
-                    child: Text(
-                      index.toString(),
-                      style: TextStyle(fontSize: 16, color: Colors.white),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-
-                  // الاسم
-                  Expanded(
-                    flex: 2,
-                    child: Text(
-                      item,
-                      style: TextStyle(fontSize: 16, color: Colors.white),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-
-                  // كلمة السر (للبائعين فقط)
-                  if (getPassword != null)
-                    Expanded(
-                      flex: 2,
-                      child: Text(
-                        getPassword(item),
-                        style: TextStyle(fontSize: 16, color: Colors.white),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
+                        width: 60,
+                        child: IconButton(
+                            icon: const Icon(Icons.delete, color: Colors.red),
+                            onPressed: () => onDelete(index, item))),
+                  _buildDataCell(index.toString(), 1),
+                  _buildDataCell(item, 2),
+                  if (getPassword != null) _buildDataCell(getPassword(item), 2),
                 ],
               ),
             );
@@ -834,7 +823,6 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
   }
 
   void _handleCustomerIndex() async {
-    // تحميل جميع الفهارس مرة واحدة فقط
     await _loadAllIndexesWithNumbers();
     setState(() {
       _showSellerList = false;
@@ -847,7 +835,6 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
   }
 
   void _handleSupplierIndex() async {
-    // تحميل جميع الفهارس مرة واحدة فقط
     await _loadAllIndexesWithNumbers();
     setState(() {
       _showSellerList = false;
@@ -860,7 +847,6 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
   }
 
   void _handleMaterialIndex() async {
-    // تحميل جميع الفهارس مرة واحدة فقط
     await _loadAllIndexesWithNumbers();
     setState(() {
       _showSellerList = false;
@@ -873,7 +859,6 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
   }
 
   void _handlePackagingIndex() async {
-    // تحميل جميع الفهارس مرة واحدة فقط
     await _loadAllIndexesWithNumbers();
     setState(() {
       _showSellerList = false;
@@ -886,32 +871,8 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
   }
 
   Future<void> _confirmDeleteSeller(String sellerName) async {
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('تأكيد الحذف'),
-          content: Text(
-            'سيؤدي هذا إلى حذف البائع "$sellerName" بشكل نهائي. هل أنت متأكد؟',
-          ),
-          actions: <Widget>[
-            TextButton(
-              child: const Text('إلغاء'),
-              onPressed: () {
-                Navigator.of(context).pop(false);
-              },
-            ),
-            TextButton(
-              child: const Text('تأكيد'),
-              onPressed: () {
-                Navigator.of(context).pop(true);
-              },
-            ),
-          ],
-        );
-      },
-    );
-
+    final result = await _showConfirmDialog('تأكيد الحذف',
+        'سيؤدي هذا إلى حذف البائع "$sellerName" بشكل نهائي. هل أنت متأكد؟');
     if (result == true) {
       await _deleteSeller(sellerName);
       _loadAccounts();
@@ -921,157 +882,63 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
   Future<void> _deleteSeller(String sellerName) async {
     final prefs = await SharedPreferences.getInstance();
     final accountsJson = prefs.getString('accounts');
-
     if (accountsJson != null) {
       Map<String, dynamic> accounts = json.decode(accountsJson);
       accounts.remove(sellerName);
       await prefs.setString('accounts', json.encode(accounts));
-
-      final currentSeller = prefs.getString('current_seller');
-      if (currentSeller == sellerName) {
-        widget.onLogout();
-      }
-
-      setState(() {
-        _accounts = Map<String, String>.from(accounts);
-      });
+      if (prefs.getString('current_seller') == sellerName) widget.onLogout();
+      setState(() => _accounts = Map<String, String>.from(accounts));
     }
   }
 
   Future<void> _confirmDeleteCustomer(String customer) async {
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('تأكيد الحذف'),
-          content: Text(
-            'سيؤدي هذا إلى حذف الزبون "$customer" بشكل نهائي. هل أنت متأكد؟',
-          ),
-          actions: <Widget>[
-            TextButton(
-              child: const Text('إلغاء'),
-              onPressed: () {
-                Navigator.of(context).pop(false);
-              },
-            ),
-            TextButton(
-              child: const Text('تأكيد'),
-              onPressed: () {
-                Navigator.of(context).pop(true);
-              },
-            ),
-          ],
-        );
-      },
-    );
-
-    if (result == true) {
+    if (await _showConfirmDialog(
+        'تأكيد الحذف', 'هل أنت متأكد من حذف الزبون "$customer"؟')) {
       await _customerIndexService.removeCustomer(customer);
       await _loadAllIndexesWithNumbers();
     }
   }
 
   Future<void> _confirmDeleteSupplier(String supplier) async {
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('تأكيد الحذف'),
-          content: Text(
-            'سيؤدي هذا إلى حذف المورد "$supplier" بشكل نهائي. هل أنت متأكد؟',
-          ),
-          actions: <Widget>[
-            TextButton(
-              child: const Text('إلغاء'),
-              onPressed: () {
-                Navigator.of(context).pop(false);
-              },
-            ),
-            TextButton(
-              child: const Text('تأكيد'),
-              onPressed: () {
-                Navigator.of(context).pop(true);
-              },
-            ),
-          ],
-        );
-      },
-    );
-
-    if (result == true) {
+    if (await _showConfirmDialog(
+        'تأكيد الحذف', 'هل أنت متأكد من حذف المورد "$supplier"؟')) {
       await _supplierIndexService.removeSupplier(supplier);
       await _loadAllIndexesWithNumbers();
     }
   }
 
   Future<void> _confirmDeleteMaterial(String material) async {
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('تأكيد الحذف'),
-          content: Text(
-            'سيؤدي هذا إلى حذف المادة "$material" بشكل نهائي. هل أنت متأكد؟',
-          ),
-          actions: <Widget>[
-            TextButton(
-              child: const Text('إلغاء'),
-              onPressed: () {
-                Navigator.of(context).pop(false);
-              },
-            ),
-            TextButton(
-              child: const Text('تأكيد'),
-              onPressed: () {
-                Navigator.of(context).pop(true);
-              },
-            ),
-          ],
-        );
-      },
-    );
-
-    if (result == true) {
+    if (await _showConfirmDialog(
+        'تأكيد الحذف', 'هل أنت متأكد من حذف المادة "$material"؟')) {
       await _materialIndexService.removeMaterial(material);
       await _loadAllIndexesWithNumbers();
     }
   }
 
   Future<void> _confirmDeletePackaging(String packaging) async {
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('تأكيد الحذف'),
-          content: Text(
-            'سيؤدي هذا إلى حذف العبوة "$packaging" بشكل نهائي. هل أنت متأكد؟',
-          ),
-          actions: <Widget>[
-            TextButton(
-              child: const Text('إلغاء'),
-              onPressed: () {
-                Navigator.of(context).pop(false);
-              },
-            ),
-            TextButton(
-              child: const Text('تأكيد'),
-              onPressed: () {
-                Navigator.of(context).pop(true);
-              },
-            ),
-          ],
-        );
-      },
-    );
-
-    if (result == true) {
+    if (await _showConfirmDialog(
+        'تأكيد الحذف', 'هل أنت متأكد من حذف العبوة "$packaging"؟')) {
       await _packagingIndexService.removePackaging(packaging);
       await _loadAllIndexesWithNumbers();
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return _buildManagementScreen();
+  Future<bool> _showConfirmDialog(String title, String content) async {
+    return await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text(title),
+            content: Text(content),
+            actions: [
+              TextButton(
+                  child: const Text('إلغاء'),
+                  onPressed: () => Navigator.of(context).pop(false)),
+              TextButton(
+                  child: const Text('تأكيد'),
+                  onPressed: () => Navigator.of(context).pop(true)),
+            ],
+          ),
+        ) ??
+        false;
   }
 }

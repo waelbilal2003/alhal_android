@@ -1426,7 +1426,10 @@ class _SalesScreenState extends State<SalesScreen> {
       ),
       body: Stack(
         children: [
-          _buildMainContent(),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 100), // مساحة للزر في الأسفل
+            child: _buildMainContent(),
+          ),
           // زر الإضافة الثابت
           Positioned(
             left: 16,
@@ -1455,6 +1458,7 @@ class _SalesScreenState extends State<SalesScreen> {
           ),
         ],
       ),
+      resizeToAvoidBottomInset: false, // لمنع تحرك الواجهة مع الكيبورد
     );
   }
 

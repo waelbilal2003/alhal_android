@@ -1345,9 +1345,43 @@ class _BoxScreenState extends State<BoxScreen> {
       },
     );
 
+    // حساب فروقات الرصيد قبل الحفظ لتحديث أرصدة الزبائن
+    Map<String, double> balanceChanges = {};
+    
+    // 1. طرح القيم القديمة (إذا كان السجل موجوداً)
+    final existingDocument = await _storageService.loadBoxDocumentForDate(widget.selectedDate);
+    if (existingDocument != null) {
+      for (var trans in existingDocument.transactions) {
+        if (trans.sellerName == widget.sellerName && trans.accountType == 'زبون' && trans.accountName.isNotEmpty) {
+          double received = double.tryParse(trans.received) ?? 0;
+          double paid = double.tryParse(trans.paid) ?? 0;
+          // للزبون: المدفوع يزيد رصيده والمقبوض ينقص رصيده
+          double netChange = paid - received;
+          balanceChanges[trans.accountName] = (balanceChanges[trans.accountName] ?? 0) - netChange;
+        }
+      }
+    }
+    
+    // 2. إضافة القيم الجديدة
+    for (var trans in currentSellerTransactions) {
+      if (trans.accountType == 'زبون' && trans.accountName.isNotEmpty) {
+        double received = double.tryParse(trans.received) ?? 0;
+        double paid = double.tryParse(trans.paid) ?? 0;
+        double netChange = paid - received;
+        balanceChanges[trans.accountName] = (balanceChanges[trans.accountName] ?? 0) + netChange;
+      }
+    }
+
     final success = await _storageService.saveBoxDocument(document);
 
     if (success) {
+      // تحديث أرصدة الزبائن في الفهرس
+      for (var entry in balanceChanges.entries) {
+        if (entry.value != 0) {
+          await _customerIndexService.updateCustomerBalance(entry.key, entry.value);
+        }
+      }
+
       setState(() {
         _hasUnsavedChanges = false;
         serialNumber = journalNumber;

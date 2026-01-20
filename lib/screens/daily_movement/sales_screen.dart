@@ -1653,9 +1653,37 @@ class _SalesScreenState extends State<SalesScreen> {
       },
     );
 
+    // حساب فروقات الرصيد قبل الحفظ لتحديث أرصدة الزبائن
+    Map<String, double> balanceChanges = {};
+    
+    // 1. طرح القيم القديمة (إذا كان السجل موجوداً)
+    if (existingDocument != null) {
+      for (var sale in existingDocument.sales) {
+        if (sale.sellerName == widget.sellerName && sale.cashOrDebt == 'دين' && sale.customerName != null) {
+          double amount = double.tryParse(sale.total) ?? 0;
+          balanceChanges[sale.customerName!] = (balanceChanges[sale.customerName!] ?? 0) - amount;
+        }
+      }
+    }
+    
+    // 2. إضافة القيم الجديدة
+    for (var sale in currentSellerSales) {
+      if (sale.cashOrDebt == 'دين' && sale.customerName != null) {
+        double amount = double.tryParse(sale.total) ?? 0;
+        balanceChanges[sale.customerName!] = (balanceChanges[sale.customerName!] ?? 0) + amount;
+      }
+    }
+
     final success = await _storageService.saveSalesDocument(document);
 
     if (success) {
+      // تحديث أرصدة الزبائن في الفهرس
+      for (var entry in balanceChanges.entries) {
+        if (entry.value != 0) {
+          await _customerIndexService.updateCustomerBalance(entry.key, entry.value);
+        }
+      }
+
       setState(() {
         _hasUnsavedChanges = false;
         _recordCreator = widget.sellerName;

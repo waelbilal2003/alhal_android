@@ -1424,31 +1424,37 @@ class _SalesScreenState extends State<SalesScreen> {
           ),
         ],
       ),
-      body: _buildMainContent(),
-      floatingActionButton: Container(
-        margin: const EdgeInsets.only(bottom: 16, right: 16),
-        child: Material(
-          color: Colors.orange[700],
-          borderRadius: BorderRadius.circular(12),
-          elevation: 8,
-          child: InkWell(
-            onTap: _addNewRow,
-            borderRadius: BorderRadius.circular(12),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
-              child: const Text(
-                'إضافة',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
+      body: Stack(
+        children: [
+          _buildMainContent(),
+          // زر الإضافة الثابت
+          Positioned(
+            left: 16,
+            bottom: 16,
+            child: Material(
+              color: Colors.orange[700],
+              borderRadius: BorderRadius.circular(12),
+              elevation: 8,
+              child: InkWell(
+                onTap: _addNewRow,
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
+                  child: const Text(
+                    'إضافة',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                    ),
+                  ),
                 ),
               ),
             ),
           ),
-        ),
+        ],
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.startDocked,
     );
   }
 
@@ -1655,22 +1661,26 @@ class _SalesScreenState extends State<SalesScreen> {
 
     // حساب فروقات الرصيد قبل الحفظ لتحديث أرصدة الزبائن
     Map<String, double> balanceChanges = {};
-    
+
     // 1. طرح القيم القديمة (إذا كان السجل موجوداً)
     if (existingDocument != null) {
       for (var sale in existingDocument.sales) {
-        if (sale.sellerName == widget.sellerName && sale.cashOrDebt == 'دين' && sale.customerName != null) {
+        if (sale.sellerName == widget.sellerName &&
+            sale.cashOrDebt == 'دين' &&
+            sale.customerName != null) {
           double amount = double.tryParse(sale.total) ?? 0;
-          balanceChanges[sale.customerName!] = (balanceChanges[sale.customerName!] ?? 0) - amount;
+          balanceChanges[sale.customerName!] =
+              (balanceChanges[sale.customerName!] ?? 0) - amount;
         }
       }
     }
-    
+
     // 2. إضافة القيم الجديدة
     for (var sale in currentSellerSales) {
       if (sale.cashOrDebt == 'دين' && sale.customerName != null) {
         double amount = double.tryParse(sale.total) ?? 0;
-        balanceChanges[sale.customerName!] = (balanceChanges[sale.customerName!] ?? 0) + amount;
+        balanceChanges[sale.customerName!] =
+            (balanceChanges[sale.customerName!] ?? 0) + amount;
       }
     }
 
@@ -1680,7 +1690,8 @@ class _SalesScreenState extends State<SalesScreen> {
       // تحديث أرصدة الزبائن في الفهرس
       for (var entry in balanceChanges.entries) {
         if (entry.value != 0) {
-          await _customerIndexService.updateCustomerBalance(entry.key, entry.value);
+          await _customerIndexService.updateCustomerBalance(
+              entry.key, entry.value);
         }
       }
 

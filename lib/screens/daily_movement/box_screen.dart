@@ -1204,73 +1204,43 @@ class _BoxScreenState extends State<BoxScreen> {
           ),
         ],
       ),
-      body: _buildTableWithStickyHeader(),
-      floatingActionButton: Container(
-        margin: const EdgeInsets.only(bottom: 16, right: 16),
-        child: Material(
-          color: Colors.blue[700],
-          borderRadius: BorderRadius.circular(12),
-          elevation: 8,
-          child: InkWell(
-            onTap: _addNewRow,
-            borderRadius: BorderRadius.circular(12),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
-              child: const Text(
-                'إضافة',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.startDocked,
-    );
-  }
-
-  Widget _buildTableWithStickyHeader() {
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: CustomScrollView(
-        controller: _verticalScrollController,
-        slivers: [
-          SliverPersistentHeader(
-            pinned: true,
-            floating: false,
-            delegate: _StickyTableHeaderDelegate(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.grey[200],
-                  border: Border.all(color: Colors.grey),
-                ),
-                child: _buildTableHeader(),
-              ),
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: Container(
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey),
-              ),
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                controller: _horizontalScrollController,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    minWidth: MediaQuery.of(context).size.width,
+        body: Stack(
+        children: [
+          _buildMainContent(),
+          // زر الإضافة الثابت
+          Positioned(
+            left: 16,
+            bottom: 16,
+            child: Material(
+              color: Colors.blue[700],
+              borderRadius: BorderRadius.circular(12),
+              elevation: 8,
+              child: InkWell(
+                onTap: _addNewRow,
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
+                  child: const Text(
+                    'إضافة',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                    ),
                   ),
-                  child: _buildTableContent(),
                 ),
               ),
             ),
           ),
         ],
       ),
+      resizeToAvoidBottomInset: false,
     );
+  }
+  Widget _buildMainContent() {
+    return _buildTableWithStickyHeader(); // فقط الجدول بدون Stack
+    // لأن الاقتراحات الآن تظهر في AppBar
   }
 
   Future<void> _saveCurrentRecord({bool silent = false}) async {

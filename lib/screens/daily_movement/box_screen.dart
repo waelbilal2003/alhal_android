@@ -1204,7 +1204,7 @@ class _BoxScreenState extends State<BoxScreen> {
           ),
         ],
       ),
-        body: Stack(
+      body: Stack(
         children: [
           _buildMainContent(),
           // زر الإضافة الثابت
@@ -1238,9 +1238,51 @@ class _BoxScreenState extends State<BoxScreen> {
       resizeToAvoidBottomInset: false,
     );
   }
+
   Widget _buildMainContent() {
     return _buildTableWithStickyHeader(); // فقط الجدول بدون Stack
     // لأن الاقتراحات الآن تظهر في AppBar
+  }
+
+  Widget _buildTableWithStickyHeader() {
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: CustomScrollView(
+        controller: _verticalScrollController,
+        slivers: [
+          SliverPersistentHeader(
+            pinned: true,
+            floating: false,
+            delegate: _StickyTableHeaderDelegate(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.grey[200],
+                  border: Border.all(color: Colors.grey),
+                ),
+                child: _buildTableHeader(),
+              ),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Container(
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey),
+              ),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                controller: _horizontalScrollController,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minWidth: MediaQuery.of(context).size.width,
+                  ),
+                  child: _buildTableContent(),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _saveCurrentRecord({bool silent = false}) async {
@@ -1317,28 +1359,33 @@ class _BoxScreenState extends State<BoxScreen> {
 
     // حساب فروقات الرصيد قبل الحفظ لتحديث أرصدة الزبائن
     Map<String, double> balanceChanges = {};
-    
+
     // 1. طرح القيم القديمة (إذا كان السجل موجوداً)
-    final existingDocument = await _storageService.loadBoxDocumentForDate(widget.selectedDate);
+    final existingDocument =
+        await _storageService.loadBoxDocumentForDate(widget.selectedDate);
     if (existingDocument != null) {
       for (var trans in existingDocument.transactions) {
-        if (trans.sellerName == widget.sellerName && trans.accountType == 'زبون' && trans.accountName.isNotEmpty) {
+        if (trans.sellerName == widget.sellerName &&
+            trans.accountType == 'زبون' &&
+            trans.accountName.isNotEmpty) {
           double received = double.tryParse(trans.received) ?? 0;
           double paid = double.tryParse(trans.paid) ?? 0;
           // للزبون: المدفوع يزيد رصيده والمقبوض ينقص رصيده
           double netChange = paid - received;
-          balanceChanges[trans.accountName] = (balanceChanges[trans.accountName] ?? 0) - netChange;
+          balanceChanges[trans.accountName] =
+              (balanceChanges[trans.accountName] ?? 0) - netChange;
         }
       }
     }
-    
+
     // 2. إضافة القيم الجديدة
     for (var trans in currentSellerTransactions) {
       if (trans.accountType == 'زبون' && trans.accountName.isNotEmpty) {
         double received = double.tryParse(trans.received) ?? 0;
         double paid = double.tryParse(trans.paid) ?? 0;
         double netChange = paid - received;
-        balanceChanges[trans.accountName] = (balanceChanges[trans.accountName] ?? 0) + netChange;
+        balanceChanges[trans.accountName] =
+            (balanceChanges[trans.accountName] ?? 0) + netChange;
       }
     }
 
@@ -1348,7 +1395,8 @@ class _BoxScreenState extends State<BoxScreen> {
       // تحديث أرصدة الزبائن في الفهرس
       for (var entry in balanceChanges.entries) {
         if (entry.value != 0) {
-          await _customerIndexService.updateCustomerBalance(entry.key, entry.value);
+          await _customerIndexService.updateCustomerBalance(
+              entry.key, entry.value);
         }
       }
 

@@ -1291,10 +1291,52 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     );
   }
 
- Widget _buildMainContent() {
+  Widget _buildMainContent() {
     return _buildTableWithStickyHeader(); // فقط الجدول بدون Stack
     // لأن الاقتراحات الآن تظهر في AppBar
   }
+
+  Widget _buildTableWithStickyHeader() {
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: CustomScrollView(
+        controller: _verticalScrollController,
+        slivers: [
+          SliverPersistentHeader(
+            pinned: true,
+            floating: false,
+            delegate: _StickyTableHeaderDelegate(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.grey[200],
+                  border: Border.all(color: Colors.grey),
+                ),
+                child: _buildTableHeader(),
+              ),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Container(
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey),
+              ),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                controller: _horizontalScrollController,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minWidth: MediaQuery.of(context).size.width,
+                  ),
+                  child: _buildTableContent(),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _saveCurrentRecord({bool silent = false}) async {
     if (_isSaving) return;
 

@@ -893,7 +893,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
             ),
           ],
         ),
-        centerTitle: true,
+        centerTitle: false,
         backgroundColor: Colors.blue[700],
         foregroundColor: Colors.white,
         actions: [
@@ -951,7 +951,6 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
             tooltip: 'فتح يومية سابقة',
             onSelected: (selectedDate) async {
               if (selectedDate != widget.selectedDate) {
-                // التحقق من وجود تغييرات غير محفوظة
                 if (_hasUnsavedChanges) {
                   final shouldSave = await _showUnsavedChangesDialog();
                   if (shouldSave) {
@@ -959,7 +958,6 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
                   }
                 }
 
-                // الانتقال إلى الشاشة الجديدة بالتاريخ المحدد
                 Navigator.pushReplacement(
                   context,
                   MaterialPageRoute(
@@ -1032,37 +1030,31 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
           ),
         ],
       ),
-      body: Stack(
-        children: [
-          _buildMainContent(),
-          // زر الإضافة الثابت
-          Positioned(
-            left: 16,
-            bottom: 16,
-            child: Material(
-              color: Colors.blue[700],
-              borderRadius: BorderRadius.circular(12),
-              elevation: 8,
-              child: InkWell(
-                onTap: _addNewRow,
-                borderRadius: BorderRadius.circular(12),
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
-                  child: const Text(
-                    'إضافة',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                    ),
-                  ),
+      body: _buildMainContent(),
+      floatingActionButton: Container(
+        margin: const EdgeInsets.only(bottom: 16, right: 16),
+        child: Material(
+          color: Colors.blue[700],
+          borderRadius: BorderRadius.circular(12),
+          elevation: 8,
+          child: InkWell(
+            onTap: _addNewRow,
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
+              child: const Text(
+                'إضافة',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
                 ),
               ),
             ),
           ),
-        ],
+        ),
       ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.startDocked,
       resizeToAvoidBottomInset: false,
     );
   }

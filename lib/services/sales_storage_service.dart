@@ -364,6 +364,8 @@ class SalesStorageService {
   }
 
   // الحصول على التواريخ المتاحة مع أرقام اليوميات - مثل المشتريات بالضبط
+  // sales_storage_service.dart - تصحيح دالة getAvailableDatesWithNumbers
+
   Future<List<Map<String, String>>> getAvailableDatesWithNumbers() async {
     try {
       final basePath = await _getBasePath();
@@ -381,8 +383,10 @@ class SalesStorageService {
         if (file is File && file.path.endsWith('.json')) {
           try {
             final fileName = file.path.split('/').last;
-            // البحث فقط عن ملفات المبيعات sales-
+
+            // التعديل الهام: التأكد من أن الملف هو لـ SALES فقط
             if (fileName.startsWith('sales-')) {
+              // فقط ملفات المبيعات
               final jsonString = await file.readAsString();
               final jsonMap = jsonDecode(jsonString) as Map<String, dynamic>;
               final date = jsonMap['date']?.toString() ?? '';
@@ -404,11 +408,16 @@ class SalesStorageService {
         }
       }
 
-      // ترتيب حسب رقم اليومية (تصاعدي) - مثل المشتريات بالضبط
+      // ترتيب حسب التاريخ (من الأحدث إلى الأقدم)
       datesWithNumbers.sort((a, b) {
-        final numA = int.tryParse(a['journalNumber'] ?? '0') ?? 0;
-        final numB = int.tryParse(b['journalNumber'] ?? '0') ?? 0;
-        return numA.compareTo(numB);
+        // تحويل التواريخ من صيغة dd/MM/yyyy إلى DateTime للمقارنة
+        try {
+          final dateA = _parseDate(a['date'] ?? '');
+          final dateB = _parseDate(b['date'] ?? '');
+          return dateB.compareTo(dateA); // ترتيب تنازلي (من الأحدث)
+        } catch (e) {
+          return 0;
+        }
       });
 
       return datesWithNumbers;
@@ -418,5 +427,17 @@ class SalesStorageService {
       }
       return [];
     }
+  }
+
+// دالة مساعدة لتحويل التاريخ من صيغة dd/MM/yyyy إلى DateTime
+  DateTime _parseDate(String dateString) {
+    final parts = dateString.split('/');
+    if (parts.length == 3) {
+      final day = int.parse(parts[0]);
+      final month = int.parse(parts[1]);
+      final year = int.parse(parts[2]);
+      return DateTime(year, month, day);
+    }
+    return DateTime.now();
   }
 }

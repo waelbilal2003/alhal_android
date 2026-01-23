@@ -8,17 +8,34 @@ abstract class EnhancedIndexService {
   Future<List<String>> getEnhancedSuggestions(String query);
 }
 
+class SupplierTransaction {
+  final String
+      type; // 'purchase_debt', 'box_received', 'box_paid', 'receipt_payment', 'receipt_load'
+  final double amount;
+  final DateTime timestamp;
+  final String? reference; // رقم اليومية أو المرجع
+
+  SupplierTransaction({
+    required this.type,
+    required this.amount,
+    required this.timestamp,
+    this.reference,
+  });
+}
+
 class SupplierData {
   String name;
   double balance;
   String mobile;
-  bool isBalanceLocked; // قفل الرصيد بعد أول عملية أو إدخال أولي
+  bool isBalanceLocked;
+  List<SupplierTransaction> transactions; // <-- إضافة قائمة المعاملات
 
   SupplierData({
     required this.name,
     this.balance = 0.0,
     this.mobile = '',
     this.isBalanceLocked = false,
+    this.transactions = const [], // <-- إضافة افتراضية
   });
 
   Map<String, dynamic> toJson() => {
@@ -26,17 +43,40 @@ class SupplierData {
         'balance': balance,
         'mobile': mobile,
         'isBalanceLocked': isBalanceLocked,
+        'transactions': transactions
+            .map((t) => {
+                  'type': t.type,
+                  'amount': t.amount,
+                  'timestamp': t.timestamp.toIso8601String(),
+                  'reference': t.reference,
+                })
+            .toList(),
       };
 
   factory SupplierData.fromJson(dynamic json) {
     if (json is String) {
       return SupplierData(name: json);
     }
+
+    List<SupplierTransaction> transactions = [];
+    if (json['transactions'] != null) {
+      final List<dynamic> transList = json['transactions'];
+      transactions = transList
+          .map((t) => SupplierTransaction(
+                type: t['type'],
+                amount: (t['amount'] ?? 0.0).toDouble(),
+                timestamp: DateTime.parse(t['timestamp']),
+                reference: t['reference'],
+              ))
+          .toList();
+    }
+
     return SupplierData(
       name: json['name'] ?? '',
       balance: (json['balance'] ?? 0.0).toDouble(),
       mobile: json['mobile'] ?? '',
       isBalanceLocked: json['isBalanceLocked'] ?? false,
+      transactions: transactions,
     );
   }
 }
@@ -324,5 +364,120 @@ class SupplierIndexService implements EnhancedIndexService {
       }
     }
     return null;
+  }
+
+  // في supplier_index_service.dart
+  Future<void> updateSupplierBalanceWithTracking(
+    String supplierName,
+    double amount,
+    String transactionType,
+    String? reference,
+  ) async {
+    await _ensureInitialized();
+    final normalizedSupplier = _normalizeSupplier(supplierName);
+
+    for (var entry in _supplierMap.entries) {
+      if (entry.value.name.toLowerCase() == normalizedSupplier.toLowerCase()) {
+        // تسجيل المعاملة أولاً
+        final transaction = SupplierTransaction(
+          type: transactionType,
+          amount: amount,
+          timestamp: DateTime.now(),
+          reference: reference,
+        );
+
+        // إضافة المعاملة للقائمة
+        entry.value.transactions.add(transaction);
+
+        // تطبيق المعادلة: e = a + b - c - d
+        switch (transactionType) {
+          case 'purchase_debt': // a (+)
+          case 'box_received': // b (+)
+            entry.value.balance += amount;
+            break;
+          case 'box_paid': // c (-)
+          case 'receipt_payment': // d (-)
+          case 'receipt_load': // d (-)
+            entry.value.balance -= amount;
+            break;
+          default:
+            entry.value.balance += amount;
+        }
+
+        // تقييد الرصيد بعد أول عملية
+        if (!entry.value.isBalanceLocked && amount != 0) {
+          entry.value.isBalanceLocked = true;
+        }
+
+        // حصرية: لا يزيد الرصيد عن 5 معاملات (أو حسب الحاجة)
+        if (entry.value.transactions.length > 5) {
+          entry.value.transactions = entry.value.transactions
+              .sublist(entry.value.transactions.length - 5);
+        }
+
+        await _saveToFile();
+        return;
+      }
+    }
+  }
+
+// دالة لحساب الرصيد من البداية (للتدقيق)
+  Future<double> calculateSupplierBalanceFromHistory(
+      String supplierName) async {
+    await _ensureInitialized();
+    final normalizedSupplier = _normalizeSupplier(supplierName);
+
+    for (var entry in _supplierMap.entries) {
+      if (entry.value.name.toLowerCase() == normalizedSupplier.toLowerCase()) {
+        double balance = 0.0;
+
+        for (var transaction in entry.value.transactions) {
+          switch (transaction.type) {
+            case 'purchase_debt':
+            case 'box_received':
+              balance += transaction.amount;
+              break;
+            case 'box_paid':
+            case 'receipt_payment':
+            case 'receipt_load':
+              balance -= transaction.amount;
+              break;
+          }
+        }
+
+        return balance;
+      }
+    }
+
+    return 0.0;
+  }
+
+// دالة لتصحيح الرصيد يدوياً
+  Future<void> correctSupplierBalance(
+      String supplierName, double correctBalance) async {
+    await _ensureInitialized();
+    final normalizedSupplier = _normalizeSupplier(supplierName);
+
+    for (var entry in _supplierMap.entries) {
+      if (entry.value.name.toLowerCase() == normalizedSupplier.toLowerCase()) {
+        final double oldBalance = entry.value.balance;
+        entry.value.balance = correctBalance;
+        entry.value.isBalanceLocked = true;
+
+        // تسجيل تصحيح
+        entry.value.transactions.add(SupplierTransaction(
+          type: 'balance_correction',
+          amount: correctBalance - oldBalance,
+          timestamp: DateTime.now(),
+          reference: 'تصحيح رصيد',
+        ));
+
+        await _saveToFile();
+
+        print(
+            '✅ تم تصحيح رصيد ${entry.value.name} من $oldBalance إلى $correctBalance');
+        return;
+      }
+    }
   }
 }

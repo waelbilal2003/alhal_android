@@ -12,6 +12,7 @@ import '../../widgets/table_builder.dart' as TableBuilder;
 import '../../widgets/table_components.dart' as TableComponents;
 import '../../widgets/common_dialogs.dart' as CommonDialogs;
 import '../../widgets/suggestions_banner.dart';
+import '../../services/supplier_balance_tracker.dart';
 
 class ReceiptScreen extends StatefulWidget {
   final String sellerName;
@@ -90,6 +91,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
   String _currentSuggestionType = '';
   late ScrollController
       _horizontalSuggestionsController; // في initState قم بتعريفه: _horizontalSuggestionsController = ScrollController();
+  final SupplierBalanceTracker _balanceTracker = SupplierBalanceTracker();
   @override
   void initState() {
     super.initState();
@@ -146,6 +148,8 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
 
     // إغلاق المتحكم
     _horizontalSuggestionsController.dispose();
+
+    _balanceTracker.dispose();
     super.dispose();
   }
 
@@ -1184,32 +1188,32 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     );
 
     // ============ تحديث أرصدة الموردين من الاستلام ============
-    Map<String, double> supplierBalanceChanges = {};
+    Map<String, double> supplierDeductions = {};
 
-    // حساب الدفعات والحمولات للموردين
+    // جمع الدفعات والحمولات للموردين
     for (var receipt in currentSellerReceipts) {
       if (receipt.affiliation.isNotEmpty) {
-        double payment = double.tryParse(receipt.payment) ?? 0;
-        double load = double.tryParse(receipt.load) ?? 0;
+        double paymentAmount = double.tryParse(receipt.payment) ?? 0;
+        double loadAmount = double.tryParse(receipt.load) ?? 0;
 
         // الدفعة والحمولة تطرح من رصيد المورد
-        double totalDeduction = payment + load;
+        double totalDeduction = paymentAmount + loadAmount;
 
         if (totalDeduction > 0) {
-          supplierBalanceChanges[receipt.affiliation] =
-              (supplierBalanceChanges[receipt.affiliation] ?? 0) +
-                  totalDeduction;
+          supplierDeductions[receipt.affiliation] =
+              (supplierDeductions[receipt.affiliation] ?? 0) + totalDeduction;
         }
       }
     }
 
     // تطبيق التغييرات على أرصدة الموردين (طرح من الرصيد)
-    for (var entry in supplierBalanceChanges.entries) {
+    for (var entry in supplierDeductions.entries) {
       if (entry.value != 0) {
         // طرح الدفعة والحمولة من رصيد المورد
         await _supplierIndexService.updateSupplierBalance(
             entry.key, -entry.value // سالب لأننا نطرح من الرصيد
             );
+        print('📉 تم خصم ${entry.value} من رصيد المورد ${entry.key}');
       }
     }
     // ==========================================================
@@ -1231,29 +1235,6 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
           content: Text(success ? 'تم الحفظ بنجاح' : 'فشل الحفظ'),
           backgroundColor: success ? Colors.green : Colors.red,
         ),
-      );
-    }
-  }
-
-  Future<void> _shareFile() async {
-    final filePath = await _storageService.getFilePath(widget.selectedDate);
-
-    if (filePath == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('الرجاء حفظ اليومية أولاً'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
-      return;
-    }
-
-    if (mounted) {
-      CommonDialogs.showFilePathDialog(
-        context: context,
-        filePath: filePath,
       );
     }
   }
@@ -1350,6 +1331,29 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
 
       default:
         return -1;
+    }
+  }
+
+  Future<void> _shareFile() async {
+    final filePath = await _storageService.getFilePath(widget.selectedDate);
+
+    if (filePath == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('الرجاء حفظ اليومية أولاً'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
+    if (mounted) {
+      CommonDialogs.showFilePathDialog(
+        context: context,
+        filePath: filePath,
+      );
     }
   }
 }

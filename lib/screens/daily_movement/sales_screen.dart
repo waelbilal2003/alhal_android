@@ -1340,15 +1340,6 @@ class _SalesScreenState extends State<SalesScreen> {
             icon: const Icon(Icons.calendar_today),
             tooltip: 'فتح يومية سابقة',
             onSelected: (selectedDate) async {
-              // البحث عن رقم اليومية للتاريخ المحدد
-              String? selectedJournalNumber;
-              for (var record in _availableRecords) {
-                if (record['date'] == selectedDate) {
-                  selectedJournalNumber = record['journalNumber'];
-                  break;
-                }
-              }
-
               if (selectedDate != widget.selectedDate) {
                 if (_hasUnsavedChanges) {
                   final shouldSave = await _showUnsavedChangesDialog();
@@ -1377,7 +1368,7 @@ class _SalesScreenState extends State<SalesScreen> {
                   const PopupMenuItem<String>(
                     value: '',
                     enabled: false,
-                    child: Text('جاري التحميل...'),
+                    child: Center(child: Text('جاري التحميل...')),
                   ),
                 );
               } else if (_availableRecords.isEmpty) {
@@ -1385,7 +1376,7 @@ class _SalesScreenState extends State<SalesScreen> {
                   const PopupMenuItem<String>(
                     value: '',
                     enabled: false,
-                    child: Text('لا توجد يوميات سابقة'),
+                    child: Center(child: Text('لا توجد يوميات سابقة')),
                   ),
                 );
               } else {
@@ -1429,39 +1420,40 @@ class _SalesScreenState extends State<SalesScreen> {
           ),
         ],
       ),
-      body: _buildMainContent(),
-      floatingActionButton: Container(
-        margin: const EdgeInsets.only(bottom: 16, right: 16),
-        child: Material(
-          color: Colors.orange[700],
-          borderRadius: BorderRadius.circular(12),
-          elevation: 8,
-          child: InkWell(
-            onTap: _addNewRow,
-            borderRadius: BorderRadius.circular(12),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
-              child: const Text(
-                'إضافة',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
+      body: Stack(
+        children: [
+          // الجدول يتحرك بحرية ويتوسع
+          _buildTableWithStickyHeader(),
+
+          // زر الإضافة الثابت فوق الجدول
+          Positioned(
+            left: 16,
+            bottom: 16,
+            child: Material(
+              color: Colors.orange[700],
+              borderRadius: BorderRadius.circular(12),
+              elevation: 8,
+              child: InkWell(
+                onTap: _addNewRow,
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
+                  child: const Text(
+                    'إضافة',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                    ),
+                  ),
                 ),
               ),
             ),
           ),
-        ),
+        ],
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.startDocked,
-      resizeToAvoidBottomInset:
-          false, // هذا السطر هو المهم لمنع تحرك الزر مع الكيبورد
     );
-  }
-
-  Widget _buildMainContent() {
-    return _buildTableWithStickyHeader(); // فقط الجدول بدون Stack
-    // لأن الاقتراحات الآن تظهر في AppBar
   }
 
   Widget _buildTableWithStickyHeader() {
@@ -1850,15 +1842,17 @@ class _SalesScreenState extends State<SalesScreen> {
     try {
       // جلب التواريخ مع أرقام اليوميات
       final dates = await _storageService.getAvailableDatesWithNumbers();
+
+      if (kDebugMode) {
+        debugPrint('✅ تم تحميل ${dates.length} يومية مبيعات');
+        for (var date in dates) {
+          debugPrint(
+              '   - تاريخ: ${date['date']}, رقم: ${date['journalNumber']}');
+        }
+      }
+
       setState(() {
-        // تأكد من استخدام المفاتيح الصحيحة
-        _availableRecords = dates.map((dateMap) {
-          return {
-            'date': dateMap['date'] ?? '',
-            'journalNumber': dateMap['journalNumber'] ?? '1',
-            'fileName': dateMap['fileName'] ?? '',
-          };
-        }).toList();
+        _availableRecords = dates;
         _isLoadingRecords = false;
       });
     } catch (e) {
@@ -1866,8 +1860,9 @@ class _SalesScreenState extends State<SalesScreen> {
         _availableRecords = [];
         _isLoadingRecords = false;
       });
+
       if (kDebugMode) {
-        print('Error loading dates: $e');
+        debugPrint('❌ خطأ في تحميل اليوميات: $e');
       }
     }
   }

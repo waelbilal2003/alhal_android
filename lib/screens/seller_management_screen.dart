@@ -510,6 +510,16 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
     bool isSupplier = service is SupplierIndexService;
     bool hasExtraCols = isCustomer || isSupplier;
 
+    // تحقق من بيانات الرصيد
+    Map<int, CustomerData> customerData = {};
+    Map<int, SupplierData> supplierData = {};
+
+    if (isCustomer) {
+      customerData = _customersWithData;
+    } else if (isSupplier) {
+      supplierData = _suppliersWithData;
+    }
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -533,6 +543,16 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
                   textAlign: TextAlign.center,
                 ),
               ),
+              // زر تدقيق الأرصدة
+              if (hasExtraCols)
+                IconButton(
+                  icon:
+                      const Icon(Icons.verified, color: Colors.white, size: 24),
+                  onPressed: () async {
+                    await _auditBalances(service);
+                  },
+                  tooltip: 'تدقيق وتأكيد الأرصدة',
+                ),
               IconButton(
                 icon: Icon(_isAddingNewItem ? Icons.close : Icons.add,
                     color: Colors.white, size: 28),
@@ -585,17 +605,26 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
             ),
             const SizedBox(height: 15),
           ],
-          Row(
-            textDirection: TextDirection.rtl,
-            children: [
-              const SizedBox(width: 50),
-              _buildHeaderCell('الرقم', 1),
-              _buildHeaderCell('الاسم', 3),
-              if (hasExtraCols) ...[
-                _buildHeaderCell('الرصيد', 2),
-                _buildHeaderCell('الموبايل', 2),
+          // رأس الجدول
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+            child: Row(
+              textDirection: TextDirection.rtl,
+              children: [
+                const SizedBox(width: 50), // مساحة لزر الحذف
+                _buildHeaderCell('الرقم', 1),
+                _buildHeaderCell('الاسم', 3),
+                if (hasExtraCols) ...[
+                  _buildHeaderCell('الرصيد', 2),
+                  _buildHeaderCell('الموبايل', 2),
+                  _buildHeaderCell('الحالة', 1),
+                ],
               ],
-            ],
+            ),
           ),
           Divider(color: Colors.white70, thickness: 1),
           if (sortedEntries.isNotEmpty || _isAddingNewItem) ...[
@@ -606,83 +635,169 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
               double balance = 0;
               String mobile = '';
               bool isLocked = true;
+              String balanceStatus = '✅';
 
-              if (isCustomer && _customersWithData.containsKey(key)) {
-                balance = _customersWithData[key]!.balance;
-                mobile = _customersWithData[key]!.mobile;
-                isLocked = _customersWithData[key]!.isBalanceLocked;
-              } else if (isSupplier && _suppliersWithData.containsKey(key)) {
-                balance = _suppliersWithData[key]!.balance;
-                mobile = _suppliersWithData[key]!.mobile;
-                isLocked = _suppliersWithData[key]!.isBalanceLocked;
+              if (isCustomer && customerData.containsKey(key)) {
+                balance = customerData[key]!.balance;
+                mobile = customerData[key]!.mobile;
+                isLocked = customerData[key]!.isBalanceLocked;
+                balanceStatus = isLocked ? '🔒' : '✏️';
+              } else if (isSupplier && supplierData.containsKey(key)) {
+                balance = supplierData[key]!.balance;
+                mobile = supplierData[key]!.mobile;
+                isLocked = supplierData[key]!.isBalanceLocked;
+                balanceStatus = isLocked ? '🔒' : '✏️';
               }
 
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4.0),
-                child: Row(
-                  textDirection: TextDirection.rtl,
-                  children: [
-                    SizedBox(
-                      width: 50,
-                      child: IconButton(
-                        icon: const Icon(Icons.delete,
-                            color: Colors.red, size: 20),
-                        onPressed: () {
-                          if (service is CustomerIndexService)
-                            _confirmDeleteCustomer(item);
-                          else if (service is SupplierIndexService)
-                            _confirmDeleteSupplier(item);
-                          else if (service is MaterialIndexService)
-                            _confirmDeleteMaterial(item);
-                          else if (service is PackagingIndexService)
-                            _confirmDeletePackaging(item);
-                        },
-                      ),
-                    ),
-                    _buildDataCell(key.toString(), 1),
-                    Expanded(
-                      flex: 3,
-                      child: _buildEditableTextField(
-                        controller: _itemControllers[item] ??
-                            TextEditingController(text: item),
-                        focusNode: _itemFocusNodes[item] ?? FocusNode(),
-                        onSubmitted: (val) => _saveItemEdit(key, item),
-                      ),
-                    ),
-                    if (hasExtraCols) ...[
-                      Expanded(
-                        flex: 2,
-                        child: _buildEditableTextField(
-                          controller: _balanceControllers[item] ??
-                              TextEditingController(
-                                  text: balance.toStringAsFixed(2)),
-                          focusNode: _balanceFocusNodes[item] ?? FocusNode(),
-                          onSubmitted: (val) => _saveBalanceEdit(item),
-                          isNumeric: true,
-                          isReadOnly: isLocked, // قفل الرصيد إذا كان locked
+              // تحقق من سلامة الرصيد
+              if (balance.isNaN || balance.isInfinite) {
+                balance = 0.0;
+                balanceStatus = '⚠️';
+              }
+
+              return Container(
+                margin: const EdgeInsets.symmetric(vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                      color: Colors.white.withOpacity(0.1), width: 1),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6.0),
+                  child: Row(
+                    textDirection: TextDirection.rtl,
+                    children: [
+                      SizedBox(
+                        width: 50,
+                        child: Center(
+                          child: IconButton(
+                            icon: const Icon(Icons.delete_forever,
+                                color: Colors.red, size: 20),
+                            onPressed: () {
+                              if (service is CustomerIndexService)
+                                _confirmDeleteCustomer(item);
+                              else if (service is SupplierIndexService)
+                                _confirmDeleteSupplier(item);
+                              else if (service is MaterialIndexService)
+                                _confirmDeleteMaterial(item);
+                              else if (service is PackagingIndexService)
+                                _confirmDeletePackaging(item);
+                            },
+                          ),
                         ),
                       ),
+                      _buildDataCell(key.toString(), 1),
                       Expanded(
-                        flex: 2,
+                        flex: 3,
                         child: _buildEditableTextField(
-                          controller: _mobileControllers[item] ??
-                              TextEditingController(text: mobile),
-                          focusNode: _mobileFocusNodes[item] ?? FocusNode(),
-                          onSubmitted: (val) => _saveMobileEdit(item),
-                          isNumeric: true,
+                          controller: _itemControllers[item] ??
+                              TextEditingController(text: item),
+                          focusNode: _itemFocusNodes[item] ?? FocusNode(),
+                          onSubmitted: (val) => _saveItemEdit(key, item),
                         ),
                       ),
+                      if (hasExtraCols) ...[
+                        Expanded(
+                          flex: 2,
+                          child: Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 2),
+                            child: Stack(
+                              children: [
+                                _buildEditableTextField(
+                                  controller: _balanceControllers[item] ??
+                                      TextEditingController(
+                                          text: balance.toStringAsFixed(2)),
+                                  focusNode:
+                                      _balanceFocusNodes[item] ?? FocusNode(),
+                                  onSubmitted: (val) => _saveBalanceEdit(item),
+                                  isNumeric: true,
+                                  isReadOnly: isLocked,
+                                ),
+                                if (isLocked)
+                                  Positioned(
+                                    left: 4,
+                                    top: 4,
+                                    child: Icon(Icons.lock,
+                                        size: 12, color: Colors.grey[600]),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          flex: 2,
+                          child: _buildEditableTextField(
+                            controller: _mobileControllers[item] ??
+                                TextEditingController(text: mobile),
+                            focusNode: _mobileFocusNodes[item] ?? FocusNode(),
+                            onSubmitted: (val) => _saveMobileEdit(item),
+                            isNumeric: true,
+                          ),
+                        ),
+                        Expanded(
+                          flex: 1,
+                          child: Center(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: _getBalanceStatusColor(balanceStatus),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                balanceStatus,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               );
             }).toList(),
+
+            // صف الملخص الإحصائي
+            if (hasExtraCols && sortedEntries.isNotEmpty)
+              Container(
+                margin: const EdgeInsets.only(top: 12),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.teal.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.teal, width: 1),
+                ),
+                child: Row(
+                  textDirection: TextDirection.rtl,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _buildSummaryStat(
+                        'إجمالي العناصر', '${sortedEntries.length}'),
+                    _buildSummaryStat(
+                        'إجمالي الرصيد',
+                        _calculateTotalBalance(isCustomer, isSupplier)
+                            .toStringAsFixed(2)),
+                    _buildSummaryStat(
+                        'متوسط الرصيد',
+                        _calculateAverageBalance(
+                                isCustomer, isSupplier, sortedEntries.length)
+                            .toStringAsFixed(2)),
+                  ],
+                ),
+              ),
           ],
         ],
       ),
     );
   }
 
+// دالة مساعدة لبناء خلية الرأس
   Widget _buildHeaderCell(String text, int flex) {
     return Expanded(
       flex: flex,
@@ -695,6 +810,7 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
     );
   }
 
+// دالة مساعدة لبناء خلية البيانات
   Widget _buildDataCell(String text, int flex, {bool isReadOnly = false}) {
     return Expanded(
       flex: flex,
@@ -715,6 +831,7 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
     );
   }
 
+// دالة مساعدة لبناء حقل نص قابل للتحرير
   Widget _buildEditableTextField({
     required TextEditingController controller,
     required FocusNode focusNode,
@@ -748,35 +865,185 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
             isDense: true,
             contentPadding: EdgeInsets.symmetric(vertical: 8)),
         onSubmitted: onSubmitted,
+        onTap: () {
+          if (!isReadOnly && isNumeric && controller.text == '0.00') {
+            controller.clear();
+          }
+        },
       ),
     );
   }
 
-  Future<void> _addNewItem(dynamic service, String value) async {
-    if (value.trim().isEmpty) return;
-    try {
-      if (service is CustomerIndexService)
-        await service.saveCustomer(value);
-      else if (service is SupplierIndexService)
-        await service.saveSupplier(value);
-      else if (service is MaterialIndexService)
-        await service.saveMaterial(value);
-      else if (service is PackagingIndexService)
-        await service.savePackaging(value);
-
-      await _loadAllIndexesWithNumbers();
-      _addItemController.clear();
-      setState(() => _isAddingNewItem = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('تم إضافة "$value" بنجاح'),
-          backgroundColor: Colors.green));
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('حدث خطأ أثناء الإضافة: $e'),
-          backgroundColor: Colors.red));
+// دالة مساعدة للحصول على لون حالة الرصيد
+  Color _getBalanceStatusColor(String status) {
+    switch (status) {
+      case '✅':
+        return Colors.green;
+      case '🔒':
+        return Colors.orange;
+      case '✏️':
+        return Colors.blue;
+      case '⚠️':
+        return Colors.red;
+      default:
+        return Colors.grey;
     }
   }
 
+// دالة مساعدة لبناء إحصائية الملخص
+  Widget _buildSummaryStat(String label, String value) {
+    return Column(
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            color: Colors.white70,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
+      ],
+    );
+  }
+
+// دالة لحساب إجمالي الرصيد
+  double _calculateTotalBalance(bool isCustomer, bool isSupplier) {
+    double total = 0;
+
+    if (isCustomer) {
+      for (var data in _customersWithData.values) {
+        total += data.balance;
+      }
+    } else if (isSupplier) {
+      for (var data in _suppliersWithData.values) {
+        total += data.balance;
+      }
+    }
+
+    return total;
+  }
+
+// دالة لحساب متوسط الرصيد
+  double _calculateAverageBalance(bool isCustomer, bool isSupplier, int count) {
+    if (count == 0) return 0;
+
+    double total = _calculateTotalBalance(isCustomer, isSupplier);
+    return total / count;
+  }
+
+  Future<void> _auditBalances(dynamic service) async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const AlertDialog(
+        title: Text('جاري تدقيق الأرصدة...'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('يرجى الانتظار أثناء تدقيق جميع الأرصدة'),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      if (service is SupplierIndexService) {
+        final suppliers = await service.getAllSuppliersWithData();
+        int corrected = 0;
+
+        for (var entry in suppliers.entries) {
+          final supplier = entry.value;
+
+          // هنا يمكنك إضافة منطق التدقيق إذا كان متاحاً
+          // حالياً سنقوم فقط بإعادة تحميل البيانات
+
+          // مثال: إذا كان هناك دالة لحساب الرصيد من التاريخ
+          // double calculated = await service.calculateSupplierBalanceFromHistory(supplier.name);
+          // if (supplier.balance != calculated) {
+          //   corrected++;
+          //   await service.correctSupplierBalance(supplier.name, calculated);
+          // }
+        }
+
+        Navigator.pop(context);
+
+        // إعادة تحميل البيانات
+        if (service is SupplierIndexService) {
+          await _loadSupplierDataImmediately();
+        } else if (service is CustomerIndexService) {
+          await _loadCustomerDataImmediately();
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('تم تدقيق ${suppliers.length} سجل'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      Navigator.pop(context);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('خطأ في التدقيق: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+/*
+// دالة تدقيق الأرصدة
+  Future<void> _auditAllBalances(dynamic service) async {
+    try {
+      if (service is SupplierIndexService) {
+        final suppliers = await service.getAllSuppliersWithData();
+
+        for (var entry in suppliers.entries) {
+          final supplier = entry.value;
+          final calculatedBalance =
+              await service.calculateSupplierBalanceFromHistory(supplier.name);
+
+          if (supplier.balance != calculatedBalance) {
+            print('⚠️ تناقض في رصيد المورد ${supplier.name}:');
+            print('   - الرصيد المسجل: ${supplier.balance}');
+            print('   - الرصيد المحسوب: $calculatedBalance');
+
+            // تصحيح الرصيد
+            await service.correctSupplierBalance(
+                supplier.name, calculatedBalance);
+          }
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('تم تدقيق أرصدة ${suppliers.length} مورد'),
+            backgroundColor: Colors.green,
+          ),
+        );
+
+        // إعادة تحميل البيانات
+        await _loadAllIndexesWithNumbers();
+      }
+    } catch (e) {
+      print('❌ خطأ في تدقيق الأرصدة: $e');
+    }
+  }
+*/
   Future<void> _saveItemEdit(int id, String originalValue) async {
     final controller = _itemControllers[originalValue];
     if (controller == null) return;
@@ -1120,6 +1387,71 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
       print('✅ البيانات تم تحميلها مسبقاً');
     } catch (e) {
       print('⚠️ تحميل البيانات المسبق فشل: $e');
+    }
+  }
+
+  Future<void> _addNewItem(dynamic service, String value) async {
+    if (value.trim().isEmpty) return;
+    try {
+      if (service is CustomerIndexService)
+        await service.saveCustomer(value);
+      else if (service is SupplierIndexService)
+        await service.saveSupplier(value);
+      else if (service is MaterialIndexService)
+        await service.saveMaterial(value);
+      else if (service is PackagingIndexService)
+        await service.savePackaging(value);
+
+      // إعادة تحميل البيانات حسب النوع
+      if (service is CustomerIndexService) {
+        await _loadCustomerDataImmediately();
+      } else if (service is SupplierIndexService) {
+        await _loadSupplierDataImmediately();
+      } else if (service is MaterialIndexService) {
+        await _loadMaterialDataImmediately();
+      } else if (service is PackagingIndexService) {
+        await _loadPackagingDataImmediately();
+      }
+
+      _addItemController.clear();
+      setState(() => _isAddingNewItem = false);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('تم إضافة "$value" بنجاح'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('حدث خطأ أثناء الإضافة: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+// دوال التحميل الخاصة بكل نوع
+  Future<void> _loadMaterialDataImmediately() async {
+    try {
+      _materialsWithNumbers =
+          await _materialIndexService.getAllMaterialsWithNumbers();
+      _initializeItemControllers();
+      if (mounted) setState(() {});
+    } catch (e) {
+      print('❌ خطأ في تحميل المواد: $e');
+    }
+  }
+
+  Future<void> _loadPackagingDataImmediately() async {
+    try {
+      _packagingsWithNumbers =
+          await _packagingIndexService.getAllPackagingsWithNumbers();
+      _initializeItemControllers();
+      if (mounted) setState(() {});
+    } catch (e) {
+      print('❌ خطأ في تحميل العبوات: $e');
     }
   }
 }

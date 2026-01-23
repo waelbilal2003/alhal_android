@@ -11,6 +11,8 @@ import '../../widgets/table_components.dart' as TableComponents;
 import '../../widgets/common_dialogs.dart' as CommonDialogs;
 import '../../services/enhanced_index_service.dart';
 import '../../widgets/suggestions_banner.dart';
+import '../../services/supplier_balance_tracker.dart';
+import 'package:flutter/foundation.dart';
 
 class PurchasesScreen extends StatefulWidget {
   final String sellerName;
@@ -94,6 +96,8 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   String _currentSuggestionType = '';
   late ScrollController
       _horizontalSuggestionsController; // في initState قم بتعريفه: _horizontalSuggestionsController = ScrollController();
+
+  final SupplierBalanceTracker _balanceTracker = SupplierBalanceTracker();
   @override
   void initState() {
     super.initState();
@@ -150,6 +154,8 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
     // إغلاق المتحكم
     _horizontalSuggestionsController.dispose();
+
+    _balanceTracker.dispose();
     super.dispose();
   }
 
@@ -1441,33 +1447,40 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
         'totalGrand': totalGrandController.text,
       },
     );
+// ============ تحديث أرصدة الموردين من المشتريات ============
+    Map<String, double> supplierDebts = {};
 
-    // ============ تحديث أرصدة الموردين من المشتريات ============
-    Map<String, double> supplierBalanceChanges = {};
+// 1. جمع ديون المشتريات
+    for (var purchaseItem in currentSellerPurchases) {
+      if (purchaseItem.cashOrDebt == 'دين' &&
+          purchaseItem.affiliation.isNotEmpty &&
+          purchaseItem.total.isNotEmpty) {
+        double totalAmount = double.tryParse(purchaseItem.total) ?? 0;
 
-    // حساب الدين للموردين
-    for (var purchase in currentSellerPurchases) {
-      if (purchase.cashOrDebt == 'دين' &&
-          purchase.affiliation.isNotEmpty &&
-          purchase.total.isNotEmpty) {
-        double total = double.tryParse(purchase.total) ?? 0;
-
-        if (total > 0) {
-          supplierBalanceChanges[purchase.affiliation] =
-              (supplierBalanceChanges[purchase.affiliation] ?? 0) + total;
+        if (totalAmount > 0) {
+          supplierDebts[purchaseItem.affiliation] =
+              (supplierDebts[purchaseItem.affiliation] ?? 0) + totalAmount;
         }
       }
     }
 
-    // تطبيق التغييرات على أرصدة الموردين
-    for (var entry in supplierBalanceChanges.entries) {
-      if (entry.value != 0) {
-        await _supplierIndexService.updateSupplierBalance(
-            entry.key, entry.value);
+// 2. تطبيق التغييرات
+    for (var entry in supplierDebts.entries) {
+      if (entry.value > 0) {
+        // استخدام SupplierBalanceTracker مباشرة
+        SupplierBalanceTracker()
+            .recordChange(entry.key, entry.value, 'purchase_debt');
+
+        // أو استخدام الخدمة مباشرة إذا لم يكن التتبع مضبوطاً
+        // await _supplierIndexService.updateSupplierBalance(entry.key, entry.value);
+
+        if (kDebugMode) {
+          print(
+              '✅ تم إضافة دين ${entry.value.toStringAsFixed(2)} للمورد ${entry.key}');
+        }
       }
     }
-    // ==========================================================
-
+// ==========================================================
     final success = await _storageService.savePurchaseDocument(document);
 
     if (success) {

@@ -9,6 +9,7 @@ import '../../services/customer_index_service.dart';
 import '../../services/supplier_index_service.dart';
 import '../../services/enhanced_index_service.dart';
 import '../../widgets/suggestions_banner.dart';
+import '../../services/supplier_balance_tracker.dart';
 
 class BoxScreen extends StatefulWidget {
   final String sellerName;
@@ -81,6 +82,11 @@ class _BoxScreenState extends State<BoxScreen> {
   String _currentSuggestionType = '';
   late ScrollController
       _horizontalSuggestionsController; // في initState قم بتعريفه: _horizontalSuggestionsController = ScrollController();
+
+  // ============ تحديث أرصدة الموردين والزبائن ============
+  Map<String, double> customerBalanceChanges = {};
+  Map<String, double> supplierBalanceChanges = {};
+  final SupplierBalanceTracker _balanceTracker = SupplierBalanceTracker();
   @override
   void initState() {
     super.initState();
@@ -130,6 +136,8 @@ class _BoxScreenState extends State<BoxScreen> {
 
     // إغلاق المتحكم
     _horizontalSuggestionsController.dispose();
+
+    _balanceTracker.dispose();
     super.dispose();
   }
 
@@ -1361,18 +1369,18 @@ class _BoxScreenState extends State<BoxScreen> {
     if (existingDocument != null) {
       for (var trans in existingDocument.transactions) {
         if (trans.sellerName == widget.sellerName) {
-          double received = double.tryParse(trans.received) ?? 0;
-          double paid = double.tryParse(trans.paid) ?? 0;
+          double receivedAmount = double.tryParse(trans.received) ?? 0;
+          double paidAmount = double.tryParse(trans.paid) ?? 0;
 
           if (trans.accountType == 'زبون' && trans.accountName.isNotEmpty) {
             // للزبون: المدفوع يزيد رصيده والمقبوض ينقص رصيده
-            double netChange = paid - received;
+            double netChange = paidAmount - receivedAmount;
             customerBalanceChanges[trans.accountName] =
                 (customerBalanceChanges[trans.accountName] ?? 0) - netChange;
           } else if (trans.accountType == 'مورد' &&
               trans.accountName.isNotEmpty) {
             // للمورد: المقبوض يزيد رصيده والمدفوع ينقص رصيده
-            double netChange = received - paid;
+            double netChange = receivedAmount - paidAmount;
             supplierBalanceChanges[trans.accountName] =
                 (supplierBalanceChanges[trans.accountName] ?? 0) - netChange;
           }
@@ -1382,22 +1390,21 @@ class _BoxScreenState extends State<BoxScreen> {
 
     // 2. إضافة القيم الجديدة
     for (var trans in currentSellerTransactions) {
-      double received = double.tryParse(trans.received) ?? 0;
-      double paid = double.tryParse(trans.paid) ?? 0;
+      double receivedAmount = double.tryParse(trans.received) ?? 0;
+      double paidAmount = double.tryParse(trans.paid) ?? 0;
 
       if (trans.accountType == 'زبون' && trans.accountName.isNotEmpty) {
         // للزبون: المدفوع يزيد رصيده والمقبوض ينقص رصيده
-        double netChange = paid - received;
+        double netChange = paidAmount - receivedAmount;
         customerBalanceChanges[trans.accountName] =
             (customerBalanceChanges[trans.accountName] ?? 0) + netChange;
       } else if (trans.accountType == 'مورد' && trans.accountName.isNotEmpty) {
         // للمورد: المقبوض يزيد رصيده والمدفوع ينقص رصيده
-        double netChange = received - paid;
+        double netChange = receivedAmount - paidAmount;
         supplierBalanceChanges[trans.accountName] =
             (supplierBalanceChanges[trans.accountName] ?? 0) + netChange;
       }
     }
-    // ==========================================================
 
     final success = await _storageService.saveBoxDocument(document);
 
@@ -1407,6 +1414,7 @@ class _BoxScreenState extends State<BoxScreen> {
         if (entry.value != 0) {
           await _customerIndexService.updateCustomerBalance(
               entry.key, entry.value);
+          print('👤 تحديث زبون ${entry.key}: ${entry.value}');
         }
       }
 
@@ -1415,6 +1423,7 @@ class _BoxScreenState extends State<BoxScreen> {
         if (entry.value != 0) {
           await _supplierIndexService.updateSupplierBalance(
               entry.key, entry.value);
+          print('🏭 تحديث مورد ${entry.key}: ${entry.value}');
         }
       }
 

@@ -3,6 +3,11 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/foundation.dart';
 
+// 1. إضافة واجهة EnhancedIndexService
+abstract class EnhancedIndexService {
+  Future<List<String>> getEnhancedSuggestions(String query);
+}
+
 class SupplierData {
   String name;
   double balance;
@@ -36,7 +41,8 @@ class SupplierData {
   }
 }
 
-class SupplierIndexService {
+// 2. جعل SupplierIndexService تطبق واجهة EnhancedIndexService
+class SupplierIndexService implements EnhancedIndexService {
   static final SupplierIndexService _instance =
       SupplierIndexService._internal();
   factory SupplierIndexService() => _instance;
@@ -139,16 +145,22 @@ class SupplierIndexService {
         .toList();
   }
 
+  // 3. تنفيذ دالة getEnhancedSuggestions المطلوبة من الواجهة
+  @override
   Future<List<String>> getEnhancedSuggestions(String query) async {
     await _ensureInitialized();
     if (query.isEmpty) return [];
     final normalizedQuery = query.trim();
+
+    // البحث بالأرقام
     if (RegExp(r'^\d+$').hasMatch(normalizedQuery)) {
       final int? queryNumber = int.tryParse(normalizedQuery);
       if (queryNumber != null && _supplierMap.containsKey(queryNumber)) {
         return [_supplierMap[queryNumber]!.name];
       }
     }
+
+    // البحث النصي
     return await getSuggestions(normalizedQuery);
   }
 
@@ -259,5 +271,17 @@ class SupplierIndexService {
   Future<Map<int, String>> getAllSuppliersWithNumbers() async {
     await _ensureInitialized();
     return _supplierMap.map((key, value) => MapEntry(key, value.name));
+  }
+
+  // 4. إضافة دالة للحصول على بيانات مورد معين
+  Future<SupplierData?> getSupplierData(String supplierName) async {
+    await _ensureInitialized();
+    final normalizedSupplier = _normalizeSupplier(supplierName);
+    for (var entry in _supplierMap.entries) {
+      if (entry.value.name.toLowerCase() == normalizedSupplier.toLowerCase()) {
+        return entry.value;
+      }
+    }
+    return null;
   }
 }

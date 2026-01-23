@@ -1247,207 +1247,217 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   @override
-Widget build(BuildContext context) {
-  return Scaffold(
-    appBar: AppBar(
-      title: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          if (_showFullScreenSuggestions &&
-              _getSuggestionsByType().isNotEmpty)
-            SuggestionsBanner(
-              suggestions: _getSuggestionsByType(),
-              type: _currentSuggestionType,
-              currentRowIndex: _getCurrentRowIndexByType(),
-              scrollController: _horizontalSuggestionsController,
-              onSelect: (val, idx) {
-                if (_currentSuggestionType == 'material')
-                  _selectMaterialSuggestion(val, idx);
-                if (_currentSuggestionType == 'packaging')
-                  _selectPackagingSuggestion(val, idx);
-                if (_currentSuggestionType == 'supplier')
-                  _selectSupplierSuggestion(val, idx);
-                if (_currentSuggestionType == 'customer')
-                  _selectCustomerSuggestion(val, idx);
-              },
-              onClose: () =>
-                  _toggleFullScreenSuggestions(type: '', show: false),
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            if (_showFullScreenSuggestions &&
+                _getSuggestionsByType().isNotEmpty)
+              SuggestionsBanner(
+                suggestions: _getSuggestionsByType(),
+                type: _currentSuggestionType,
+                currentRowIndex: _getCurrentRowIndexByType(),
+                scrollController: _horizontalSuggestionsController,
+                onSelect: (val, idx) {
+                  if (_currentSuggestionType == 'material')
+                    _selectMaterialSuggestion(val, idx);
+                  if (_currentSuggestionType == 'packaging')
+                    _selectPackagingSuggestion(val, idx);
+                  if (_currentSuggestionType == 'supplier')
+                    _selectSupplierSuggestion(val, idx);
+                  if (_currentSuggestionType == 'customer')
+                    _selectCustomerSuggestion(val, idx);
+                },
+                onClose: () =>
+                    _toggleFullScreenSuggestions(type: '', show: false),
+              ),
+            Expanded(
+              child: Text(
+                'يومية مبيعات رقم /$serialNumber/ تاريخ ${widget.selectedDate} البائع ${widget.sellerName}',
+                style:
+                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                textAlign: TextAlign.right,
+              ),
             ),
-          Expanded(
-            child: Text(
-              'يومية مبيعات رقم /$serialNumber/ تاريخ ${widget.selectedDate} البائع ${widget.sellerName}',
-              style:
-                  const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-              textAlign: TextAlign.right,
-            ),
-          ),
-        ],
-      ),
-      centerTitle: false,
-      backgroundColor: Colors.orange[700],
-      foregroundColor: Colors.white,
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.share),
-          tooltip: 'مشاركة الملف',
-          onPressed: () => _shareFile(),
+          ],
         ),
-        IconButton(
-          icon: _isSaving
-              ? SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                  ),
-                )
-              : Stack(
-                  children: [
-                    const Icon(Icons.save),
-                    if (_hasUnsavedChanges)
-                      Positioned(
-                        right: 0,
-                        top: 0,
-                        child: Container(
-                          padding: const EdgeInsets.all(2),
-                          decoration: BoxDecoration(
-                            color: Colors.red,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          constraints: const BoxConstraints(
-                            minWidth: 12,
-                            minHeight: 12,
-                          ),
-                          child: const SizedBox(
-                            width: 8,
-                            height: 8,
+        centerTitle: false,
+        backgroundColor: Colors.orange[700],
+        foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.share),
+            tooltip: 'مشاركة الملف',
+            onPressed: () => _shareFile(),
+          ),
+          IconButton(
+            icon: _isSaving
+                ? SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
+                : Stack(
+                    children: [
+                      const Icon(Icons.save),
+                      if (_hasUnsavedChanges)
+                        Positioned(
+                          right: 0,
+                          top: 0,
+                          child: Container(
+                            padding: const EdgeInsets.all(2),
+                            decoration: BoxDecoration(
+                              color: Colors.red,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            constraints: const BoxConstraints(
+                              minWidth: 12,
+                              minHeight: 12,
+                            ),
+                            child: const SizedBox(
+                              width: 8,
+                              height: 8,
+                            ),
                           ),
                         ),
-                      ),
-                  ],
-                ),
-          tooltip: _hasUnsavedChanges
-              ? 'هناك تغييرات غير محفوظة - انقر للحفظ'
-              : 'حفظ يومية المبيعات',
-          onPressed: _isSaving
-              ? null
-              : () {
-                  _saveCurrentRecord();
-                },
-        ),
-        PopupMenuButton<String>(
-          icon: const Icon(Icons.calendar_today),
-          tooltip: 'فتح يومية سابقة',
-          onSelected: (selectedDate) async {
-            if (selectedDate != widget.selectedDate) {
-              if (_hasUnsavedChanges) {
-                final shouldSave = await _showUnsavedChangesDialog();
-                if (shouldSave) {
-                  await _saveCurrentRecord(silent: true);
+                    ],
+                  ),
+            tooltip: _hasUnsavedChanges
+                ? 'هناك تغييرات غير محفوظة - انقر للحفظ'
+                : 'حفظ يومية المبيعات',
+            onPressed: _isSaving
+                ? null
+                : () {
+                    _saveCurrentRecord();
+                  },
+          ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.calendar_today),
+            tooltip: 'فتح يومية سابقة',
+            onSelected: (selectedDate) async {
+              // البحث عن رقم اليومية للتاريخ المحدد
+              String? selectedJournalNumber;
+              for (var record in _availableRecords) {
+                if (record['date'] == selectedDate) {
+                  selectedJournalNumber = record['journalNumber'];
+                  break;
                 }
               }
 
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => SalesScreen(
-                    sellerName: widget.sellerName,
-                    selectedDate: selectedDate,
-                    storeName: widget.storeName,
-                  ),
-                ),
-              );
-            }
-          },
-          itemBuilder: (BuildContext context) {
-            List<PopupMenuEntry<String>> items = [];
+              if (selectedDate != widget.selectedDate) {
+                if (_hasUnsavedChanges) {
+                  final shouldSave = await _showUnsavedChangesDialog();
+                  if (shouldSave) {
+                    await _saveCurrentRecord(silent: true);
+                  }
+                }
 
-            if (_isLoadingRecords) {
-              items.add(
-                const PopupMenuItem<String>(
-                  value: '',
-                  enabled: false,
-                  child: Center(child: Text('جاري التحميل...')),
-                ),
-              );
-            } else if (_availableRecords.isEmpty) {
-              items.add(
-                const PopupMenuItem<String>(
-                  value: '',
-                  enabled: false,
-                  child: Center(child: Text('لا توجد يوميات سابقة')),
-                ),
-              );
-            } else {
-              items.add(
-                const PopupMenuItem<String>(
-                  value: '',
-                  enabled: false,
-                  child: Text(
-                    'اليوميات المتاحة',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-              );
-              items.add(const PopupMenuDivider());
-
-              for (var record in _availableRecords) {
-                final date = record['date']!;
-                final journalNumber = record['journalNumber']!;
-
-                items.add(
-                  PopupMenuItem<String>(
-                    value: date,
-                    child: Text(
-                      'يومية رقم $journalNumber - تاريخ $date',
-                      style: TextStyle(
-                        fontWeight: date == widget.selectedDate
-                            ? FontWeight.bold
-                            : FontWeight.normal,
-                        color: date == widget.selectedDate
-                            ? Colors.orange
-                            : Colors.black,
-                      ),
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => SalesScreen(
+                      sellerName: widget.sellerName,
+                      selectedDate: selectedDate,
+                      storeName: widget.storeName,
                     ),
                   ),
                 );
               }
-            }
+            },
+            itemBuilder: (BuildContext context) {
+              List<PopupMenuEntry<String>> items = [];
 
-            return items;
-          },
-        ),
-      ],
-    ),
-    body: _buildMainContent(),
-    floatingActionButton: Container(
-      margin: const EdgeInsets.only(bottom: 16, right: 16),
-      child: Material(
-        color: Colors.orange[700],
-        borderRadius: BorderRadius.circular(12),
-        elevation: 8,
-        child: InkWell(
-          onTap: _addNewRow,
+              if (_isLoadingRecords) {
+                items.add(
+                  const PopupMenuItem<String>(
+                    value: '',
+                    enabled: false,
+                    child: Text('جاري التحميل...'),
+                  ),
+                );
+              } else if (_availableRecords.isEmpty) {
+                items.add(
+                  const PopupMenuItem<String>(
+                    value: '',
+                    enabled: false,
+                    child: Text('لا توجد يوميات سابقة'),
+                  ),
+                );
+              } else {
+                items.add(
+                  const PopupMenuItem<String>(
+                    value: '',
+                    enabled: false,
+                    child: Text(
+                      'اليوميات المتاحة',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                );
+                items.add(const PopupMenuDivider());
+
+                for (var record in _availableRecords) {
+                  final date = record['date']!;
+                  final journalNumber = record['journalNumber']!;
+
+                  items.add(
+                    PopupMenuItem<String>(
+                      value: date,
+                      child: Text(
+                        'يومية رقم $journalNumber - تاريخ $date',
+                        style: TextStyle(
+                          fontWeight: date == widget.selectedDate
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                          color: date == widget.selectedDate
+                              ? Colors.orange
+                              : Colors.black,
+                        ),
+                      ),
+                    ),
+                  );
+                }
+              }
+
+              return items;
+            },
+          ),
+        ],
+      ),
+      body: _buildMainContent(),
+      floatingActionButton: Container(
+        margin: const EdgeInsets.only(bottom: 16, right: 16),
+        child: Material(
+          color: Colors.orange[700],
           borderRadius: BorderRadius.circular(12),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
-            child: const Text(
-              'إضافة',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
+          elevation: 8,
+          child: InkWell(
+            onTap: _addNewRow,
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
+              child: const Text(
+                'إضافة',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                ),
               ),
             ),
           ),
         ),
       ),
-    ),
-    floatingActionButtonLocation: FloatingActionButtonLocation.startDocked,
-    resizeToAvoidBottomInset: false, // هذا السطر هو المهم لمنع تحرك الزر مع الكيبورد
-  );
-}
+      floatingActionButtonLocation: FloatingActionButtonLocation.startDocked,
+      resizeToAvoidBottomInset:
+          false, // هذا السطر هو المهم لمنع تحرك الزر مع الكيبورد
+    );
+  }
 
   Widget _buildMainContent() {
     return _buildTableWithStickyHeader(); // فقط الجدول بدون Stack
@@ -1841,7 +1851,14 @@ Widget build(BuildContext context) {
       // جلب التواريخ مع أرقام اليوميات
       final dates = await _storageService.getAvailableDatesWithNumbers();
       setState(() {
-        _availableRecords = dates; // ببساطة استخدام البيانات كما هي
+        // تأكد من استخدام المفاتيح الصحيحة
+        _availableRecords = dates.map((dateMap) {
+          return {
+            'date': dateMap['date'] ?? '',
+            'journalNumber': dateMap['journalNumber'] ?? '1',
+            'fileName': dateMap['fileName'] ?? '',
+          };
+        }).toList();
         _isLoadingRecords = false;
       });
     } catch (e) {
@@ -1849,6 +1866,9 @@ Widget build(BuildContext context) {
         _availableRecords = [];
         _isLoadingRecords = false;
       });
+      if (kDebugMode) {
+        print('Error loading dates: $e');
+      }
     }
   }
 

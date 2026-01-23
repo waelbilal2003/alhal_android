@@ -70,6 +70,11 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
     super.initState();
     _loadAccounts();
     _loadStoreName();
+
+    // تحميل البيانات مسبقاً عند فتح الشاشة
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _preloadData();
+    });
   }
 
   @override
@@ -115,23 +120,55 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
 
   Future<void> _loadAllIndexesWithNumbers() async {
     try {
-      _customersWithNumbers =
-          await _customerIndexService.getAllCustomersWithNumbers();
-      _customersWithData =
-          await _customerIndexService.getAllCustomersWithData();
-      _suppliersWithNumbers =
-          await _supplierIndexService.getAllSuppliersWithNumbers();
-      _suppliersWithData =
-          await _supplierIndexService.getAllSuppliersWithData();
-      _materialsWithNumbers =
-          await _materialIndexService.getAllMaterialsWithNumbers();
-      _packagingsWithNumbers =
-          await _packagingIndexService.getAllPackagingsWithNumbers();
+      // جلب جميع البيانات بشكل متزامن
+      final customersFuture =
+          _customerIndexService.getAllCustomersWithNumbers();
+      final customersDataFuture =
+          _customerIndexService.getAllCustomersWithData();
+      final suppliersFuture =
+          _supplierIndexService.getAllSuppliersWithNumbers();
+      final suppliersDataFuture =
+          _supplierIndexService.getAllSuppliersWithData();
+      final materialsFuture =
+          _materialIndexService.getAllMaterialsWithNumbers();
+      final packagingsFuture =
+          _packagingIndexService.getAllPackagingsWithNumbers();
 
+      // انتظار جميع البيانات دفعة واحدة
+      final results = await Future.wait([
+        customersFuture,
+        customersDataFuture,
+        suppliersFuture,
+        suppliersDataFuture,
+        materialsFuture,
+        packagingsFuture,
+      ]);
+
+      // تعيين النتائج
+      _customersWithNumbers = results[0] as Map<int, String>;
+      _customersWithData = results[1] as Map<int, CustomerData>;
+      _suppliersWithNumbers = results[2] as Map<int, String>;
+      _suppliersWithData = results[3] as Map<int, SupplierData>;
+      _materialsWithNumbers = results[4] as Map<int, String>;
+      _packagingsWithNumbers = results[5] as Map<int, String>;
+
+      // تهيئة المتحكمات مرة واحدة
       _initializeItemControllers();
-      setState(() {});
+
+      // تحديث الواجهة مباشرة
+      if (mounted) {
+        setState(() {});
+      }
     } catch (e) {
-      print('خطأ في تحميل الفهارس: $e');
+      print('❌ خطأ في تحميل الفهارس: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('خطأ في تحميل الفهارس: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -140,6 +177,7 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
     Map<int, String> currentMap = _getCurrentMap();
 
     currentMap.forEach((key, value) {
+      // إنشاء المتحكمات للأسماء
       _itemControllers[value] = TextEditingController(text: value);
       _itemFocusNodes[value] = FocusNode();
       _itemFocusNodes[value]!.addListener(() {
@@ -148,9 +186,12 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
         }
       });
 
+      // إذا كان زبوناً
       if (_showCustomerList && _customersWithData.containsKey(key)) {
         final mobile = _customersWithData[key]!.mobile;
         final balance = _customersWithData[key]!.balance;
+        final isLocked = _customersWithData[key]!.isBalanceLocked;
+
         _mobileControllers[value] = TextEditingController(text: mobile);
         _mobileFocusNodes[value] = FocusNode();
         _mobileFocusNodes[value]!.addListener(() {
@@ -158,6 +199,7 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
             _saveMobileEdit(value);
           }
         });
+
         _balanceControllers[value] =
             TextEditingController(text: balance.toStringAsFixed(2));
         _balanceFocusNodes[value] = FocusNode();
@@ -166,9 +208,17 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
             _saveBalanceEdit(value);
           }
         });
-      } else if (_showSupplierList && _suppliersWithData.containsKey(key)) {
+
+        // تسجيل البيانات للتتبع
+        print(
+            'زبون: $value | الرصيد: $balance | الموبايل: $mobile | مقفل: $isLocked');
+      }
+      // إذا كان مورداً
+      else if (_showSupplierList && _suppliersWithData.containsKey(key)) {
         final mobile = _suppliersWithData[key]!.mobile;
         final balance = _suppliersWithData[key]!.balance;
+        final isLocked = _suppliersWithData[key]!.isBalanceLocked;
+
         _mobileControllers[value] = TextEditingController(text: mobile);
         _mobileFocusNodes[value] = FocusNode();
         _mobileFocusNodes[value]!.addListener(() {
@@ -176,6 +226,7 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
             _saveMobileEdit(value);
           }
         });
+
         _balanceControllers[value] =
             TextEditingController(text: balance.toStringAsFixed(2));
         _balanceFocusNodes[value] = FocusNode();
@@ -184,8 +235,14 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
             _saveBalanceEdit(value);
           }
         });
+
+        // تسجيل البيانات للتتبع
+        print(
+            'مورد: $value | الرصيد: $balance | الموبايل: $mobile | مقفل: $isLocked');
       }
     });
+
+    print('✅ تم تهيئة ${currentMap.length} متحكم');
   }
 
   Map<int, String> _getCurrentMap() {
@@ -362,9 +419,27 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
   }
 
   Widget _buildCustomerList() {
+    // إذا كانت القائمة فارغة ولم يكن هناك إضافة جديدة
     if (_customersWithNumbers.isEmpty && !_isAddingNewItem) {
+      // إذا كان العرض نشطاً ولكن البيانات لم تحمل بعد
+      if (_showCustomerList && _customersWithNumbers.isEmpty) {
+        // عرض مؤشر تحميل أثناء جلب البيانات
+        return Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(color: Colors.white),
+              SizedBox(height: 16),
+              Text('جاري تحميل بيانات الزبائن...',
+                  style: TextStyle(fontSize: 16, color: Colors.white)),
+            ],
+          ),
+        );
+      }
+
       return _buildEmptyListMessage('لا يوجد زبائن مسجلين');
     }
+
     return _buildEditableListWithNumbers(
       title: 'فهرس الزبائن المسجلين',
       service: _customerIndexService,
@@ -373,9 +448,27 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
   }
 
   Widget _buildSupplierList() {
+    // إذا كانت القائمة فارغة ولم يكن هناك إضافة جديدة
     if (_suppliersWithNumbers.isEmpty && !_isAddingNewItem) {
+      // إذا كان العرض نشطاً ولكن البيانات لم تحمل بعد
+      if (_showSupplierList && _suppliersWithNumbers.isEmpty) {
+        // عرض مؤشر تحميل أثناء جلب البيانات
+        return Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(color: Colors.white),
+              SizedBox(height: 16),
+              Text('جاري تحميل بيانات الموردين...',
+                  style: TextStyle(fontSize: 16, color: Colors.white)),
+            ],
+          ),
+        );
+      }
+
       return _buildEmptyListMessage('لا يوجد موردين مسجلين');
     }
+
     return _buildEditableListWithNumbers(
       title: 'فهرس الموردين المسجلين',
       service: _supplierIndexService,
@@ -704,6 +797,7 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
     final controller = _mobileControllers[itemName];
     if (controller == null) return;
     final newMobile = controller.text.trim();
+
     if (_showCustomerList) {
       await _customerIndexService.updateCustomerMobile(itemName, newMobile);
     } else if (_showSupplierList) {
@@ -823,7 +917,7 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
   }
 
   void _handleCustomerIndex() async {
-    await _loadAllIndexesWithNumbers();
+    // إظهار المؤشر تحميل فوراً
     setState(() {
       _showSellerList = false;
       _showCustomerList = true;
@@ -832,10 +926,46 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
       _showPackagingList = false;
       _isAddingNewItem = false;
     });
+
+    // جلب البيانات في الخلفية
+    await _loadCustomerDataImmediately();
+  }
+
+// دالة جديدة لجلب بيانات الزبائن فوراً
+  Future<void> _loadCustomerDataImmediately() async {
+    try {
+      // جلب البيانات بشكل متزامن
+      _customersWithNumbers =
+          await _customerIndexService.getAllCustomersWithNumbers();
+      _customersWithData =
+          await _customerIndexService.getAllCustomersWithData();
+
+      // تهيئة المتحكمات فوراً
+      _initializeItemControllers();
+
+      // تحديث الواجهة مباشرة
+      if (mounted) {
+        setState(() {});
+      }
+
+      // سجل للتتبع (يمكن إزالته)
+      print(
+          '✅ بيانات الزبائن تم تحميلها فوراً: ${_customersWithData.length} سجلاً');
+    } catch (e) {
+      print('❌ خطأ في تحميل بيانات الزبائن: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('خطأ في تحميل بيانات الزبائن: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   void _handleSupplierIndex() async {
-    await _loadAllIndexesWithNumbers();
+    // إظهار المؤشر تحميل فوراً
     setState(() {
       _showSellerList = false;
       _showCustomerList = false;
@@ -844,6 +974,42 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
       _showPackagingList = false;
       _isAddingNewItem = false;
     });
+
+    // جلب البيانات في الخلفية
+    await _loadSupplierDataImmediately();
+  }
+
+// دالة جديدة لجلب بيانات الموردين فوراً
+  Future<void> _loadSupplierDataImmediately() async {
+    try {
+      // جلب البيانات بشكل متزامن
+      _suppliersWithNumbers =
+          await _supplierIndexService.getAllSuppliersWithNumbers();
+      _suppliersWithData =
+          await _supplierIndexService.getAllSuppliersWithData();
+
+      // تهيئة المتحكمات فوراً
+      _initializeItemControllers();
+
+      // تحديث الواجهة مباشرة
+      if (mounted) {
+        setState(() {});
+      }
+
+      // سجل للتتبع (يمكن إزالته)
+      print(
+          '✅ بيانات الموردين تم تحميلها فوراً: ${_suppliersWithData.length} سجلاً');
+    } catch (e) {
+      print('❌ خطأ في تحميل بيانات الموردين: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('خطأ في تحميل بيانات الموردين: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   void _handleMaterialIndex() async {
@@ -940,5 +1106,20 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
           ),
         ) ??
         false;
+  }
+
+// تحميل مسبق للبيانات
+  Future<void> _preloadData() async {
+    try {
+      // جلب بيانات الزبائن والموردين مسبقاً
+      await Future.wait([
+        _customerIndexService.getAllCustomersWithData(),
+        _supplierIndexService.getAllSuppliersWithData(),
+      ]);
+
+      print('✅ البيانات تم تحميلها مسبقاً');
+    } catch (e) {
+      print('⚠️ تحميل البيانات المسبق فشل: $e');
+    }
   }
 }

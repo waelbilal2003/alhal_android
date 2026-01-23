@@ -182,17 +182,58 @@ class SupplierIndexService implements EnhancedIndexService {
     return null;
   }
 
-  Future<void> updateSupplierBalance(String supplierName, double amount) async {
+  Future<void> updateSupplierBalance(String supplierName, double amount,
+      {String operationType = ''}) async {
     await _ensureInitialized();
     final normalizedSupplier = _normalizeSupplier(supplierName);
+
     for (var entry in _supplierMap.entries) {
       if (entry.value.name.toLowerCase() == normalizedSupplier.toLowerCase()) {
-        entry.value.balance += amount;
-        entry.value.isBalanceLocked = true; // قفل الرصيد بعد أول عملية حسابية
+        // تطبيق القواعد الخاصة بالموردين
+        switch (operationType) {
+          case 'purchase_debt': // دين من المشتريات
+          case 'box_received': // مقبوض من الصندوق
+            entry.value.balance += amount;
+            break;
+          case 'box_paid': // مدفوع من الصندوق
+          case 'receipt_load': // حمولة من الاستلام
+          case 'receipt_payment': // دفعة من الاستلام
+            entry.value.balance -= amount;
+            break;
+          default:
+            entry.value.balance += amount;
+        }
+
+        entry.value.isBalanceLocked = true;
         await _saveToFile();
         return;
       }
     }
+  }
+
+// إضافة دالة لتحديث رصيد المورد بناءً على العملية
+  Future<void> updateSupplierBalanceByOperation(
+      String supplierName, double amount, String operation) async {
+    String operationType = '';
+
+    switch (operation) {
+      case 'purchase':
+        operationType = 'purchase_debt';
+        break;
+      case 'box_received':
+        operationType = 'box_received';
+        break;
+      case 'box_paid':
+        operationType = 'box_paid';
+        break;
+      case 'receipt':
+        // للاستلام: الدفعة والحمولة تطرح من الرصيد
+        operationType = 'receipt_payment_load';
+        break;
+    }
+
+    await updateSupplierBalance(supplierName, amount,
+        operationType: operationType);
   }
 
   Future<void> setInitialBalance(String supplierName, double balance) async {

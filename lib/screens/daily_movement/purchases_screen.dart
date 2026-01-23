@@ -1428,7 +1428,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     }
 
     final document = PurchaseDocument(
-      recordNumber: journalNumber, // <-- استخدام رقم اليومية
+      recordNumber: journalNumber,
       date: widget.selectedDate,
       sellerName: widget.sellerName,
       storeName: widget.storeName,
@@ -1442,12 +1442,38 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       },
     );
 
+    // ============ تحديث أرصدة الموردين من المشتريات ============
+    Map<String, double> supplierBalanceChanges = {};
+
+    // حساب الدين للموردين
+    for (var purchase in currentSellerPurchases) {
+      if (purchase.cashOrDebt == 'دين' &&
+          purchase.affiliation.isNotEmpty &&
+          purchase.total.isNotEmpty) {
+        double total = double.tryParse(purchase.total) ?? 0;
+
+        if (total > 0) {
+          supplierBalanceChanges[purchase.affiliation] =
+              (supplierBalanceChanges[purchase.affiliation] ?? 0) + total;
+        }
+      }
+    }
+
+    // تطبيق التغييرات على أرصدة الموردين
+    for (var entry in supplierBalanceChanges.entries) {
+      if (entry.value != 0) {
+        await _supplierIndexService.updateSupplierBalance(
+            entry.key, entry.value);
+      }
+    }
+    // ==========================================================
+
     final success = await _storageService.savePurchaseDocument(document);
 
     if (success) {
       setState(() {
         _hasUnsavedChanges = false;
-        serialNumber = journalNumber; // تحديث الرقم المعروض
+        serialNumber = journalNumber;
       });
     }
 

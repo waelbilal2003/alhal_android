@@ -1351,45 +1351,69 @@ class _BoxScreenState extends State<BoxScreen> {
       },
     );
 
-    // حساب فروقات الرصيد قبل الحفظ لتحديث أرصدة الزبائن
-    Map<String, double> balanceChanges = {};
+    // ============ تحديث أرصدة الموردين والزبائن ============
+    Map<String, double> customerBalanceChanges = {};
+    Map<String, double> supplierBalanceChanges = {};
 
     // 1. طرح القيم القديمة (إذا كان السجل موجوداً)
     final existingDocument =
         await _storageService.loadBoxDocumentForDate(widget.selectedDate);
     if (existingDocument != null) {
       for (var trans in existingDocument.transactions) {
-        if (trans.sellerName == widget.sellerName &&
-            trans.accountType == 'زبون' &&
-            trans.accountName.isNotEmpty) {
+        if (trans.sellerName == widget.sellerName) {
           double received = double.tryParse(trans.received) ?? 0;
           double paid = double.tryParse(trans.paid) ?? 0;
-          // للزبون: المدفوع يزيد رصيده والمقبوض ينقص رصيده
-          double netChange = paid - received;
-          balanceChanges[trans.accountName] =
-              (balanceChanges[trans.accountName] ?? 0) - netChange;
+
+          if (trans.accountType == 'زبون' && trans.accountName.isNotEmpty) {
+            // للزبون: المدفوع يزيد رصيده والمقبوض ينقص رصيده
+            double netChange = paid - received;
+            customerBalanceChanges[trans.accountName] =
+                (customerBalanceChanges[trans.accountName] ?? 0) - netChange;
+          } else if (trans.accountType == 'مورد' &&
+              trans.accountName.isNotEmpty) {
+            // للمورد: المقبوض يزيد رصيده والمدفوع ينقص رصيده
+            double netChange = received - paid;
+            supplierBalanceChanges[trans.accountName] =
+                (supplierBalanceChanges[trans.accountName] ?? 0) - netChange;
+          }
         }
       }
     }
 
     // 2. إضافة القيم الجديدة
     for (var trans in currentSellerTransactions) {
+      double received = double.tryParse(trans.received) ?? 0;
+      double paid = double.tryParse(trans.paid) ?? 0;
+
       if (trans.accountType == 'زبون' && trans.accountName.isNotEmpty) {
-        double received = double.tryParse(trans.received) ?? 0;
-        double paid = double.tryParse(trans.paid) ?? 0;
+        // للزبون: المدفوع يزيد رصيده والمقبوض ينقص رصيده
         double netChange = paid - received;
-        balanceChanges[trans.accountName] =
-            (balanceChanges[trans.accountName] ?? 0) + netChange;
+        customerBalanceChanges[trans.accountName] =
+            (customerBalanceChanges[trans.accountName] ?? 0) + netChange;
+      } else if (trans.accountType == 'مورد' && trans.accountName.isNotEmpty) {
+        // للمورد: المقبوض يزيد رصيده والمدفوع ينقص رصيده
+        double netChange = received - paid;
+        supplierBalanceChanges[trans.accountName] =
+            (supplierBalanceChanges[trans.accountName] ?? 0) + netChange;
       }
     }
+    // ==========================================================
 
     final success = await _storageService.saveBoxDocument(document);
 
     if (success) {
       // تحديث أرصدة الزبائن في الفهرس
-      for (var entry in balanceChanges.entries) {
+      for (var entry in customerBalanceChanges.entries) {
         if (entry.value != 0) {
           await _customerIndexService.updateCustomerBalance(
+              entry.key, entry.value);
+        }
+      }
+
+      // تحديث أرصدة الموردين في الفهرس
+      for (var entry in supplierBalanceChanges.entries) {
+        if (entry.value != 0) {
+          await _supplierIndexService.updateSupplierBalance(
               entry.key, entry.value);
         }
       }

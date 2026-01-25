@@ -241,7 +241,7 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
         _balanceFocusNodes[value]!.onKeyEvent = (node, event) {
           if (event is KeyDownEvent &&
               event.logicalKey == LogicalKeyboardKey.enter) {
-            // من الرصيد إلى الاسم في الصف التالي أو الأول
+            // من الرصيد إلى **أول حقل قابل للتحرير في الصف التالي**
             final entries = currentMap.entries.toList();
             final currentIndex =
                 entries.indexWhere((entry) => entry.value == value);
@@ -253,7 +253,7 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
                     .requestFocus(_itemFocusNodes[nextValue]!);
               }
             } else {
-              // إذا كان آخر صف، انتقل إلى بداية القائمة
+              // إذا كان آخر صف، انتقل إلى أول حقل قابل للتحرير في الصف الأول
               if (entries.isNotEmpty) {
                 final firstValue = entries.first.value;
                 if (_itemFocusNodes.containsKey(firstValue)) {
@@ -950,11 +950,6 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
                         'إجمالي الرصيد',
                         _calculateTotalBalance(isCustomer, isSupplier)
                             .toStringAsFixed(2)),
-                    _buildSummaryStat(
-                        'متوسط الرصيد',
-                        _calculateAverageBalance(
-                                isCustomer, isSupplier, sortedEntries.length)
-                            .toStringAsFixed(2)),
                   ],
                 ),
               ),
@@ -1100,14 +1095,6 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
     }
 
     return total;
-  }
-
-// دالة لحساب متوسط الرصيد
-  double _calculateAverageBalance(bool isCustomer, bool isSupplier, int count) {
-    if (count == 0) return 0;
-
-    double total = _calculateTotalBalance(isCustomer, isSupplier);
-    return total / count;
   }
 
   Future<void> _auditBalances(dynamic service) async {

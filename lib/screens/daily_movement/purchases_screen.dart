@@ -1353,25 +1353,20 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   Future<void> _saveCurrentRecord({bool silent = false}) async {
     if (_isSaving) return;
 
-    // التحقق من وجود سجلات للحفظ
     if (rowControllers.isEmpty) {
       if (!silent && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('لا توجد بيانات للحفظ'),
-            backgroundColor: Colors.orange,
-          ),
+              content: Text('لا توجد بيانات للحفظ'),
+              backgroundColor: Colors.orange),
         );
       }
       return;
     }
 
-    // إنشاء قائمة بالمشتريات للبائع الحالي فقط
     final currentSellerPurchases = <Purchase>[];
     for (int i = 0; i < rowControllers.length; i++) {
       final controllers = rowControllers[i];
-
-      // التحقق إذا كان السجل فارغاً
       if (controllers[1].text.isNotEmpty || controllers[3].text.isNotEmpty) {
         currentSellerPurchases.add(Purchase(
           serialNumber: controllers[0].text,
@@ -1394,15 +1389,14 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       if (!silent && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('لا توجد سجلات مضافة للحفظ'),
-            backgroundColor: Colors.orange,
-          ),
+              content: Text('لا توجد سجلات مضافة للحفظ'),
+              backgroundColor: Colors.orange),
         );
       }
       return;
     }
 
-    // التحقق من قاعدة القائم والصافي
+    // التحقق من قاعدة القائم والصافي (تمت إعادته من الكود الأصلي)
     bool hasInvalidNetValue = false;
     for (int i = 0; i < rowControllers.length; i++) {
       final controllers = rowControllers[i];
@@ -1420,7 +1414,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       }
     }
 
-    // إذا كانت هناك قيم غير صحيحة، نطلب تأكيد
     if (hasInvalidNetValue && !silent && mounted) {
       bool confirmed = await _showNetValueWarning();
       if (!confirmed) {
@@ -1429,23 +1422,47 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       }
     }
 
-    // إعادة حساب المجاميع بعد التصحيح
     _calculateAllTotals();
-
     setState(() => _isSaving = true);
 
-    // الحصول على رقم اليومية الحالي أو الجديد
+    // ============ منطق حساب الفرق للموردين (الجزء الجديد والمهم) ============
+    Map<String, double> supplierBalanceChanges = {};
+
+    // 1. تحميل السجل القديم للحصول على القيم السابقة
+    final existingDocument =
+        await _storageService.loadPurchaseDocument(widget.selectedDate);
+
+    // 2. طرح القيم القديمة (إن وجدت)
+    if (existingDocument != null) {
+      for (var purchase in existingDocument.purchases) {
+        if (purchase.sellerName == widget.sellerName &&
+            purchase.cashOrDebt == 'دين' &&
+            purchase.affiliation.isNotEmpty) {
+          double oldAmount = double.tryParse(purchase.total) ?? 0;
+          supplierBalanceChanges[purchase.affiliation] =
+              (supplierBalanceChanges[purchase.affiliation] ?? 0) - oldAmount;
+        }
+      }
+    }
+
+    // 3. إضافة القيم الجديدة
+    for (var purchase in currentSellerPurchases) {
+      if (purchase.cashOrDebt == 'دين' && purchase.affiliation.isNotEmpty) {
+        double newAmount = double.tryParse(purchase.total) ?? 0;
+        supplierBalanceChanges[purchase.affiliation] =
+            (supplierBalanceChanges[purchase.affiliation] ?? 0) + newAmount;
+      }
+    }
+    // =======================================================================
+
     String journalNumber = serialNumber;
     if (journalNumber.isEmpty || journalNumber == '1') {
-      // إذا كان الرقم فارغاً أو 1، نطلب رقم جديد إذا كانت اليومية جديدة
-      final document =
+      final doc =
           await _storageService.loadPurchaseDocument(widget.selectedDate);
-      if (document == null) {
-        // اليومية جديدة - الحصول على الرقم التالي
+      if (doc == null) {
         journalNumber = await _storageService.getNextJournalNumber();
       } else {
-        // اليومية موجودة - استخدام رقمها الحالي
-        journalNumber = document.recordNumber;
+        journalNumber = doc.recordNumber;
       }
     }
 
@@ -1463,43 +1480,22 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
         'totalGrand': totalGrandController.text,
       },
     );
-// ============ تحديث أرصدة الموردين من المشتريات ============
-    Map<String, double> supplierDebts = {};
 
-// 1. جمع ديون المشتريات
-    for (var purchaseItem in currentSellerPurchases) {
-      if (purchaseItem.cashOrDebt == 'دين' &&
-          purchaseItem.affiliation.isNotEmpty &&
-          purchaseItem.total.isNotEmpty) {
-        double totalAmount = double.tryParse(purchaseItem.total) ?? 0;
-
-        if (totalAmount > 0) {
-          supplierDebts[purchaseItem.affiliation] =
-              (supplierDebts[purchaseItem.affiliation] ?? 0) + totalAmount;
-        }
-      }
-    }
-
-// 2. تطبيق التغييرات
-    for (var entry in supplierDebts.entries) {
-      if (entry.value > 0) {
-        // استخدام SupplierBalanceTracker مباشرة
-        SupplierBalanceTracker()
-            .recordChange(entry.key, entry.value, 'purchase_debt');
-
-        // أو استخدام الخدمة مباشرة إذا لم يكن التتبع مضبوطاً
-        // await _supplierIndexService.updateSupplierBalance(entry.key, entry.value);
-
-        if (kDebugMode) {
-          print(
-              '✅ تم إضافة دين ${entry.value.toStringAsFixed(2)} للمورد ${entry.key}');
-        }
-      }
-    }
-// ==========================================================
     final success = await _storageService.savePurchaseDocument(document);
 
     if (success) {
+      // 4. تطبيق الفرق الصافي على أرصدة الموردين
+      for (var entry in supplierBalanceChanges.entries) {
+        if (entry.value != 0) {
+          await _supplierIndexService.updateSupplierBalance(
+              entry.key, entry.value);
+          if (kDebugMode) {
+            print(
+                '🔄 تم تحديث رصيد المورد ${entry.key} بمقدار: ${entry.value.toStringAsFixed(2)}');
+          }
+        }
+      }
+
       setState(() {
         _hasUnsavedChanges = false;
         serialNumber = journalNumber;

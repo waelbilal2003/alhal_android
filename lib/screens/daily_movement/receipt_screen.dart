@@ -14,6 +14,7 @@ import '../../widgets/table_components.dart' as TableComponents;
 import '../../widgets/common_dialogs.dart' as CommonDialogs;
 import '../../widgets/suggestions_banner.dart';
 import '../../services/supplier_balance_tracker.dart';
+import 'package:flutter/foundation.dart';
 
 class ReceiptScreen extends StatefulWidget {
   final String sellerName;
@@ -1128,25 +1129,18 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
   Future<void> _saveCurrentRecord({bool silent = false}) async {
     if (_isSaving) return;
 
-    // التحقق من وجود سجلات للحفظ
-    if (rowControllers.isEmpty) {
-      if (!silent && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+    if (rowControllers.isEmpty && !silent) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
             content: Text('لا توجد بيانات للحفظ'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
+            backgroundColor: Colors.orange),
+      );
       return;
     }
 
-    // إنشاء قائمة بالاستلام للبائع الحالي فقط
     final currentSellerReceipts = <Receipt>[];
     for (int i = 0; i < rowControllers.length; i++) {
       final controllers = rowControllers[i];
-
-      // التحقق إذا كان السجل فارغاً
       if (controllers[1].text.isNotEmpty || controllers[3].text.isNotEmpty) {
         currentSellerReceipts.add(Receipt(
           serialNumber: controllers[0].text,
@@ -1162,29 +1156,61 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
       }
     }
 
-    if (currentSellerReceipts.isEmpty) {
-      if (!silent && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+    if (currentSellerReceipts.isEmpty && !silent) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
             content: Text('لا توجد سجلات مضافة للحفظ'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
+            backgroundColor: Colors.orange),
+      );
       return;
     }
 
     setState(() => _isSaving = true);
 
-    // الحصول على رقم اليومية الحالي أو الجديد
+    // ============ منطق حساب الفرق للموردين (الجزء الجديد والمهم) ============
+    Map<String, double> supplierBalanceChanges = {};
+
+    // 1. تحميل السجل القديم للحصول على القيم السابقة
+    final existingDocument =
+        await _storageService.loadReceiptDocumentForDate(widget.selectedDate);
+
+    // 2. طرح القيم القديمة (عن طريق إضافتها مرة أخرى للرصيد لإلغاء تأثيرها)
+    if (existingDocument != null) {
+      for (var receipt in existingDocument.receipts) {
+        if (receipt.sellerName == widget.sellerName &&
+            receipt.affiliation.isNotEmpty) {
+          double oldPayment = double.tryParse(receipt.payment) ?? 0;
+          double oldLoad = double.tryParse(receipt.load) ?? 0;
+          double oldDeduction = oldPayment + oldLoad;
+
+          // نطرح القيمة السالبة (مما يعني إضافة) لإلغاء الخصم القديم
+          supplierBalanceChanges[receipt.affiliation] =
+              (supplierBalanceChanges[receipt.affiliation] ?? 0) + oldDeduction;
+        }
+      }
+    }
+
+    // 3. إضافة القيم الجديدة (عن طريق طرحها من الرصيد)
+    for (var receipt in currentSellerReceipts) {
+      if (receipt.affiliation.isNotEmpty) {
+        double newPayment = double.tryParse(receipt.payment) ?? 0;
+        double newLoad = double.tryParse(receipt.load) ?? 0;
+        double newDeduction = newPayment + newLoad;
+
+        supplierBalanceChanges[receipt.affiliation] =
+            (supplierBalanceChanges[receipt.affiliation] ?? 0) - newDeduction;
+      }
+    }
+    // =======================================================================
+
     String journalNumber = serialNumber;
     if (journalNumber.isEmpty || journalNumber == '1') {
-      final document =
+      final doc =
           await _storageService.loadReceiptDocumentForDate(widget.selectedDate);
-      if (document == null) {
+      if (doc == null) {
         journalNumber = await _storageService.getNextJournalNumber();
       } else {
-        journalNumber = document.recordNumber;
+        journalNumber = doc.recordNumber;
       }
     }
 
@@ -1203,40 +1229,22 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
       },
     );
 
-    // ============ تحديث أرصدة الموردين من الاستلام ============
-    Map<String, double> supplierDeductions = {};
-
-    // جمع الدفعات والحمولات للموردين
-    for (var receipt in currentSellerReceipts) {
-      if (receipt.affiliation.isNotEmpty) {
-        double paymentAmount = double.tryParse(receipt.payment) ?? 0;
-        double loadAmount = double.tryParse(receipt.load) ?? 0;
-
-        // الدفعة والحمولة تطرح من رصيد المورد
-        double totalDeduction = paymentAmount + loadAmount;
-
-        if (totalDeduction > 0) {
-          supplierDeductions[receipt.affiliation] =
-              (supplierDeductions[receipt.affiliation] ?? 0) + totalDeduction;
-        }
-      }
-    }
-
-    // تطبيق التغييرات على أرصدة الموردين (طرح من الرصيد)
-    for (var entry in supplierDeductions.entries) {
-      if (entry.value != 0) {
-        // طرح الدفعة والحمولة من رصيد المورد
-        await _supplierIndexService.updateSupplierBalance(
-            entry.key, -entry.value // سالب لأننا نطرح من الرصيد
-            );
-        print('📉 تم خصم ${entry.value} من رصيد المورد ${entry.key}');
-      }
-    }
-    // ==========================================================
-
     final success = await _storageService.saveReceiptDocument(document);
 
     if (success) {
+      // 4. تطبيق الفرق الصافي على أرصدة الموردين
+      for (var entry in supplierBalanceChanges.entries) {
+        if (entry.value != 0) {
+          // نستخدم entry.value مباشرة لأنها تحتوي على الإشارة الصحيحة (سالبة أو موجبة)
+          await _supplierIndexService.updateSupplierBalance(
+              entry.key, entry.value);
+          if (kDebugMode) {
+            print(
+                '🔄 تم تحديث رصيد المورد ${entry.key} بمقدار: ${entry.value.toStringAsFixed(2)}');
+          }
+        }
+      }
+
       setState(() {
         _hasUnsavedChanges = false;
         serialNumber = journalNumber;

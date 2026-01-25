@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:async';
 import '../../models/box_model.dart';
 import '../../services/box_storage_service.dart';
 import '../../widgets/table_builder.dart' as TableBuilder;
@@ -87,6 +88,9 @@ class _BoxScreenState extends State<BoxScreen> {
   Map<String, double> customerBalanceChanges = {};
   Map<String, double> supplierBalanceChanges = {};
   final SupplierBalanceTracker _balanceTracker = SupplierBalanceTracker();
+  // متغير لتأخير حساب المجاميع (debouncing)
+  Timer? _calculateTotalsDebouncer;
+  bool _isCalculating = false;
   @override
   void initState() {
     super.initState();
@@ -138,6 +142,7 @@ class _BoxScreenState extends State<BoxScreen> {
     _horizontalSuggestionsController.dispose();
 
     _balanceTracker.dispose();
+    _calculateTotalsDebouncer?.cancel();
     super.dispose();
   }
 
@@ -339,23 +344,33 @@ class _BoxScreenState extends State<BoxScreen> {
   }
 
   void _calculateAllTotals() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    // إلغاء أي حساب سابق منتظر
+    _calculateTotalsDebouncer?.cancel();
+
+    // تأخير الحساب لتجنب التكرار المتعدد
+    _calculateTotalsDebouncer = Timer(const Duration(milliseconds: 50), () {
+      if (!mounted || _isCalculating) return;
+
+      _isCalculating = true;
+
+      double totalReceived = 0;
+      double totalPaid = 0;
+
+      for (var controllers in rowControllers) {
+        try {
+          totalReceived += double.tryParse(controllers[1].text) ?? 0;
+          totalPaid += double.tryParse(controllers[2].text) ?? 0;
+        } catch (e) {}
+      }
+
       if (mounted) {
         setState(() {
-          double totalReceived = 0;
-          double totalPaid = 0;
-
-          for (var controllers in rowControllers) {
-            try {
-              totalReceived += double.tryParse(controllers[1].text) ?? 0;
-              totalPaid += double.tryParse(controllers[2].text) ?? 0;
-            } catch (e) {}
-          }
-
           totalReceivedController.text = totalReceived.toStringAsFixed(2);
           totalPaidController.text = totalPaid.toStringAsFixed(2);
         });
       }
+
+      _isCalculating = false;
     });
   }
 

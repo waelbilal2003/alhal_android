@@ -174,13 +174,21 @@ class _SalesScreenState extends State<SalesScreen> {
 
   // تحميل السجل إذا كان موجوداً، أو إنشاء جديد
   Future<void> _loadOrCreateRecord() async {
-    final recordNumbers =
-        await _storageService.getAvailableRecords(widget.selectedDate);
+    // الحصول على اليوميات المتاحة مع أرقامها
+    final availableDates = await _storageService.getAvailableDatesWithNumbers();
 
-    if (recordNumbers.isNotEmpty) {
-      // تحميل آخر سجل
-      final lastRecord = recordNumbers.last;
-      await _loadRecord(lastRecord);
+    // البحث عن يومية بنفس التاريخ المحدد
+    String? existingRecordNumber;
+    for (var dateInfo in availableDates) {
+      if (dateInfo['date'] == widget.selectedDate) {
+        existingRecordNumber = dateInfo['journalNumber'];
+        break;
+      }
+    }
+
+    if (existingRecordNumber != null) {
+      // تحميل اليومية الموجودة برقمها الصحيح
+      await _loadRecord(existingRecordNumber);
     } else {
       // إنشاء سجل جديد
       _createNewRecordAutomatically();
@@ -1420,40 +1428,37 @@ class _SalesScreenState extends State<SalesScreen> {
           ),
         ],
       ),
-      body: Stack(
-        children: [
-          // الجدول يتحرك بحرية ويتوسع
-          _buildTableWithStickyHeader(),
-
-          // زر الإضافة الثابت فوق الجدول
-          Positioned(
-            left: 16,
-            bottom: 16,
-            child: Material(
-              color: Colors.orange[700],
-              borderRadius: BorderRadius.circular(12),
-              elevation: 8,
-              child: InkWell(
-                onTap: _addNewRow,
-                borderRadius: BorderRadius.circular(12),
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
-                  child: const Text(
-                    'إضافة',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                    ),
-                  ),
+      body: _buildMainContent(),
+      floatingActionButton: Container(
+        margin: const EdgeInsets.only(bottom: 16, right: 16),
+        child: Material(
+          color: Colors.orange[700],
+          borderRadius: BorderRadius.circular(12),
+          elevation: 8,
+          child: InkWell(
+            onTap: _addNewRow,
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
+              child: const Text(
+                'إضافة',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
                 ),
               ),
             ),
           ),
-        ],
+        ),
       ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.startDocked,
+      resizeToAvoidBottomInset: true,
     );
+  }
+
+  Widget _buildMainContent() {
+    return _buildTableWithStickyHeader();
   }
 
   Widget _buildTableWithStickyHeader() {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:async';
 import '../../models/receipt_model.dart';
 import '../../services/receipt_storage_service.dart';
 // استيراد خدمات الفهرس
@@ -92,6 +93,10 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
   late ScrollController
       _horizontalSuggestionsController; // في initState قم بتعريفه: _horizontalSuggestionsController = ScrollController();
   final SupplierBalanceTracker _balanceTracker = SupplierBalanceTracker();
+
+  // متغير لتأخير حساب المجاميع (debouncing)
+  Timer? _calculateTotalsDebouncer;
+  bool _isCalculating = false;
   @override
   void initState() {
     super.initState();
@@ -150,6 +155,8 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     _horizontalSuggestionsController.dispose();
 
     _balanceTracker.dispose();
+
+    _calculateTotalsDebouncer?.cancel();
     super.dispose();
   }
 
@@ -467,33 +474,42 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     }
   }
 
-  // تحسين _calculateAllTotals
   void _calculateAllTotals() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    // إلغاء أي حساب سابق منتظر
+    _calculateTotalsDebouncer?.cancel();
+
+    // تأخير الحساب لتجنب التكرار المتعدد
+    _calculateTotalsDebouncer = Timer(const Duration(milliseconds: 50), () {
+      if (!mounted || _isCalculating) return;
+
+      _isCalculating = true;
+
+      double totalCount = 0;
+      double totalStanding = 0;
+      double totalPayment = 0;
+      double totalLoad = 0;
+
+      for (var controllers in rowControllers) {
+        try {
+          totalCount += double.tryParse(controllers[3].text) ?? 0;
+          totalStanding += double.tryParse(controllers[5].text) ?? 0;
+          totalPayment += double.tryParse(controllers[6].text) ?? 0;
+          totalLoad += double.tryParse(controllers[7].text) ?? 0;
+        } catch (e) {
+          // تجاهل الأخطاء
+        }
+      }
+
       if (mounted) {
         setState(() {
-          double totalCount = 0;
-          double totalStanding = 0;
-          double totalPayment = 0;
-          double totalLoad = 0;
-
-          for (var controllers in rowControllers) {
-            try {
-              totalCount += double.tryParse(controllers[3].text) ?? 0;
-              totalStanding += double.tryParse(controllers[5].text) ?? 0;
-              totalPayment += double.tryParse(controllers[6].text) ?? 0;
-              totalLoad += double.tryParse(controllers[7].text) ?? 0;
-            } catch (e) {
-              // تجاهل الأخطاء
-            }
-          }
-
           totalCountController.text = totalCount.toStringAsFixed(0);
           totalStandingController.text = totalStanding.toStringAsFixed(2);
           totalPaymentController.text = totalPayment.toStringAsFixed(2);
           totalLoadController.text = totalLoad.toStringAsFixed(2);
         });
       }
+
+      _isCalculating = false;
     });
   }
 

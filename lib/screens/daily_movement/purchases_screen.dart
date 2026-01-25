@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:async';
 import '../../models/purchase_model.dart';
 import '../../services/purchase_storage_service.dart';
 // استيراد خدمات الفهرس
@@ -98,6 +99,12 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       _horizontalSuggestionsController; // في initState قم بتعريفه: _horizontalSuggestionsController = ScrollController();
 
   final SupplierBalanceTracker _balanceTracker = SupplierBalanceTracker();
+
+  // متغير لتأخير حساب المجاميع (debouncing)
+  Timer? _calculateTotalsDebouncer;
+  Timer? _calculateRowDebouncer;
+  bool _isCalculating = false;
+
   @override
   void initState() {
     super.initState();
@@ -156,6 +163,8 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     _horizontalSuggestionsController.dispose();
 
     _balanceTracker.dispose();
+    _calculateTotalsDebouncer?.cancel();
+    _calculateRowDebouncer?.cancel();
     super.dispose();
   }
 
@@ -516,63 +525,70 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     }
   }
 
-// تحسين _calculateRowValues للتأكد من التحديث
   void _calculateRowValues(int rowIndex) {
     if (rowIndex >= rowControllers.length) return;
 
     final controllers = rowControllers[rowIndex];
 
-    // التأكد من تحديث الواجهة
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        setState(() {
-          try {
-            double count = (double.tryParse(controllers[3].text) ?? 0).abs();
-            double net = (double.tryParse(controllers[6].text) ?? 0).abs();
-            double price = (double.tryParse(controllers[7].text) ?? 0).abs();
+    // حساب فوري بدون تأخير للصف الواحد
+    try {
+      double count = (double.tryParse(controllers[3].text) ?? 0).abs();
+      double net = (double.tryParse(controllers[6].text) ?? 0).abs();
+      double price = (double.tryParse(controllers[7].text) ?? 0).abs();
 
-            double baseValue = net > 0 ? net : count;
-            double total = baseValue * price;
-            controllers[8].text = total.toStringAsFixed(2);
-          } catch (e) {
-            controllers[8].text = '';
-          }
-        });
+      double baseValue = net > 0 ? net : count;
+      double total = baseValue * price;
+
+      final newTotal = total.toStringAsFixed(2);
+      if (controllers[8].text != newTotal) {
+        controllers[8].text = newTotal;
       }
-    });
+    } catch (e) {
+      if (controllers[8].text.isNotEmpty) {
+        controllers[8].text = '';
+      }
+    }
   }
 
-// تحسين _calculateAllTotals
   void _calculateAllTotals() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    // إلغاء أي حساب سابق منتظر
+    _calculateTotalsDebouncer?.cancel();
+
+    // تأخير الحساب لتجنب التكرار المتعدد
+    _calculateTotalsDebouncer = Timer(const Duration(milliseconds: 50), () {
+      if (!mounted || _isCalculating) return;
+
+      _isCalculating = true;
+
+      double totalCount = 0;
+      double totalBase = 0;
+      double totalNet = 0;
+      double totalGrand = 0;
+
+      for (var controllers in rowControllers) {
+        try {
+          totalCount += double.tryParse(controllers[3].text) ?? 0;
+          totalBase += double.tryParse(controllers[5].text) ?? 0;
+          totalNet += double.tryParse(controllers[6].text) ?? 0;
+          totalGrand += double.tryParse(controllers[8].text) ?? 0;
+        } catch (e) {
+          // تجاهل الأخطاء
+        }
+      }
+
       if (mounted) {
         setState(() {
-          double totalCount = 0;
-          double totalBase = 0;
-          double totalNet = 0;
-          double totalGrand = 0;
-
-          for (var controllers in rowControllers) {
-            try {
-              totalCount += double.tryParse(controllers[3].text) ?? 0;
-              totalBase += double.tryParse(controllers[5].text) ?? 0;
-              totalNet += double.tryParse(controllers[6].text) ?? 0;
-              totalGrand += double.tryParse(controllers[8].text) ?? 0;
-            } catch (e) {
-              // تجاهل الأخطاء
-            }
-          }
-
           totalCountController.text = totalCount.toStringAsFixed(0);
           totalBaseController.text = totalBase.toStringAsFixed(2);
           totalNetController.text = totalNet.toStringAsFixed(2);
           totalGrandController.text = totalGrand.toStringAsFixed(2);
         });
       }
+
+      _isCalculating = false;
     });
   }
 
-// تعديل _loadJournal لاستخدام الدالة المساعدة
   void _loadJournal(PurchaseDocument document) {
     setState(() {
       // تنظيف المتحكمات القديمة

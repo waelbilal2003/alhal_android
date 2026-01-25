@@ -1133,16 +1133,7 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
       if (service is SupplierIndexService) {
         final suppliers = await service.getAllSuppliersWithData();
 
-       
-
         Navigator.pop(context);
-
-        // إعادة تحميل البيانات
-        if () {
-          await _loadSupplierDataImmediately();
-        } else if (service is CustomerIndexService) {
-          await _loadCustomerDataImmediately();
-        }
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

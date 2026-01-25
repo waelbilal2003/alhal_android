@@ -1437,11 +1437,14 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     // الحصول على رقم اليومية الحالي أو الجديد
     String journalNumber = serialNumber;
     if (journalNumber.isEmpty || journalNumber == '1') {
+      // إذا كان الرقم فارغاً أو 1، نطلب رقم جديد إذا كانت اليومية جديدة
       final document =
           await _storageService.loadPurchaseDocument(widget.selectedDate);
       if (document == null) {
+        // اليومية جديدة - الحصول على الرقم التالي
         journalNumber = await _storageService.getNextJournalNumber();
       } else {
+        // اليومية موجودة - استخدام رقمها الحالي
         journalNumber = document.recordNumber;
       }
     }
@@ -1460,10 +1463,40 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
         'totalGrand': totalGrandController.text,
       },
     );
+// ============ تحديث أرصدة الموردين من المشتريات ============
+    Map<String, double> supplierDebts = {};
 
-    // ============ إزالة قسم تحديث أرصدة الموردين ============
-    // تم نقل هذه العملية إلى فهرس الموردين في شاشة الخدمات
+// 1. جمع ديون المشتريات
+    for (var purchaseItem in currentSellerPurchases) {
+      if (purchaseItem.cashOrDebt == 'دين' &&
+          purchaseItem.affiliation.isNotEmpty &&
+          purchaseItem.total.isNotEmpty) {
+        double totalAmount = double.tryParse(purchaseItem.total) ?? 0;
 
+        if (totalAmount > 0) {
+          supplierDebts[purchaseItem.affiliation] =
+              (supplierDebts[purchaseItem.affiliation] ?? 0) + totalAmount;
+        }
+      }
+    }
+
+// 2. تطبيق التغييرات
+    for (var entry in supplierDebts.entries) {
+      if (entry.value > 0) {
+        // استخدام SupplierBalanceTracker مباشرة
+        SupplierBalanceTracker()
+            .recordChange(entry.key, entry.value, 'purchase_debt');
+
+        // أو استخدام الخدمة مباشرة إذا لم يكن التتبع مضبوطاً
+        // await _supplierIndexService.updateSupplierBalance(entry.key, entry.value);
+
+        if (kDebugMode) {
+          print(
+              '✅ تم إضافة دين ${entry.value.toStringAsFixed(2)} للمورد ${entry.key}');
+        }
+      }
+    }
+// ==========================================================
     final success = await _storageService.savePurchaseDocument(document);
 
     if (success) {

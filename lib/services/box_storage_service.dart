@@ -418,25 +418,6 @@ class BoxStorageService {
     }
   }
 
-/*
-  // حساب المجاميع
-  Map<String, String> _calculateTotals(List<BoxTransaction> transactions) {
-    double totalReceived = 0;
-    double totalPaid = 0;
-
-    for (var transaction in transactions) {
-      try {
-        totalReceived += double.tryParse(transaction.received) ?? 0;
-        totalPaid += double.tryParse(transaction.paid) ?? 0;
-      } catch (e) {}
-    }
-
-    return {
-      'totalReceived': totalReceived.toStringAsFixed(2),
-      'totalPaid': totalPaid.toStringAsFixed(2),
-    };
-  }
-*/
   // الحصول على رقم اليومية لتاريخ معين
   Future<String> getJournalNumberForDate(String date) async {
     try {

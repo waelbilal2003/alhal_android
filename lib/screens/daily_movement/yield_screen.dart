@@ -687,34 +687,7 @@ class _YieldScreenState extends State<YieldScreen> {
                         ],
                       ),
                     ),
-                    /*
-                   // معلومات عن الحقول
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                          vertical: 16.0, horizontal: 8.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildInfoItem(
-                            'مبيعات نقدية',
-                            'إجمالي المبيعات النقدية من شاشة المبيعات (لا تشمل المبيعات بالدين)',
-                          ),
-                          _buildInfoItem(
-                            'مشتريات نقدية',
-                            'إجمالي المشتريات النقدية من شاشة المشتريات',
-                          ),
-                          _buildInfoItem(
-                            'مقبوضات',
-                            'إجمالي المقبوضات من شاشة الصندوق',
-                          ),
-                          _buildInfoItem(
-                            'مدفوعات',
-                            'إجمالي المدفوعات من شاشة الصندوق + إجمالي الدفعة والحمولة من شاشة الاستلام',
-                          ),
-                        ],
-                      ),
-                    ),
-*/
+
                     // مسافة إضافية في الأسفل
                     const SizedBox(height: 40),
                   ],
@@ -727,50 +700,6 @@ class _YieldScreenState extends State<YieldScreen> {
     );
   }
 
-/*
-  Widget _buildInfoItem(String title, String description) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            margin: const EdgeInsets.only(top: 6, right: 8),
-            decoration: BoxDecoration(
-              color: Colors.teal,
-              borderRadius: BorderRadius.circular(4),
-            ),
-          ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.teal,
-                  ),
-                ),
-                Text(
-                  description,
-                  style: const TextStyle(
-                    fontSize: 10,
-                    color: Colors.grey,
-                  ),
-                  textAlign: TextAlign.start,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-*/
   Widget _buildReadOnlyField(
     String label,
     TextEditingController controller, {

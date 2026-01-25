@@ -414,31 +414,6 @@ class ReceiptStorageService {
     }
   }
 
-/*
-  // حساب المجاميع
-  Map<String, String> _calculateTotals(List<Receipt> receipts) {
-    double totalCount = 0;
-    double totalStanding = 0;
-    double totalPayment = 0;
-    double totalLoad = 0;
-
-    for (var receipt in receipts) {
-      try {
-        totalCount += double.tryParse(receipt.count) ?? 0;
-        totalStanding += double.tryParse(receipt.standing) ?? 0;
-        totalPayment += double.tryParse(receipt.payment) ?? 0;
-        totalLoad += double.tryParse(receipt.load) ?? 0;
-      } catch (e) {}
-    }
-
-    return {
-      'totalCount': totalCount.toStringAsFixed(0),
-      'totalStanding': totalStanding.toStringAsFixed(2),
-      'totalPayment': totalPayment.toStringAsFixed(2),
-      'totalLoad': totalLoad.toStringAsFixed(2),
-    };
-  }
-*/
   // الحصول على رقم اليومية لتاريخ معين
   Future<String> getJournalNumberForDate(String date) async {
     try {

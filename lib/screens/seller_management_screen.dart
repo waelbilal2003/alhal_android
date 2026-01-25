@@ -1155,44 +1155,6 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
     }
   }
 
-/*
-// دالة تدقيق الأرصدة
-  Future<void> _auditAllBalances(dynamic service) async {
-    try {
-      if (service is SupplierIndexService) {
-        final suppliers = await service.getAllSuppliersWithData();
-
-        for (var entry in suppliers.entries) {
-          final supplier = entry.value;
-          final calculatedBalance =
-              await service.calculateSupplierBalanceFromHistory(supplier.name);
-
-          if (supplier.balance != calculatedBalance) {
-            print('⚠️ تناقض في رصيد المورد ${supplier.name}:');
-            print('   - الرصيد المسجل: ${supplier.balance}');
-            print('   - الرصيد المحسوب: $calculatedBalance');
-
-            // تصحيح الرصيد
-            await service.correctSupplierBalance(
-                supplier.name, calculatedBalance);
-          }
-        }
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('تم تدقيق أرصدة ${suppliers.length} مورد'),
-            backgroundColor: Colors.green,
-          ),
-        );
-
-        // إعادة تحميل البيانات
-        await _loadAllIndexesWithNumbers();
-      }
-    } catch (e) {
-      print('❌ خطأ في تدقيق الأرصدة: $e');
-    }
-  }
-*/
   Future<void> _saveItemEdit(int id, String originalValue) async {
     final controller = _itemControllers[originalValue];
     if (controller == null) return;

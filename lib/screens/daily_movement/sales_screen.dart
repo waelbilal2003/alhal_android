@@ -174,13 +174,21 @@ class _SalesScreenState extends State<SalesScreen> {
 
   // تحميل السجل إذا كان موجوداً، أو إنشاء جديد
   Future<void> _loadOrCreateRecord() async {
-    final recordNumbers =
-        await _storageService.getAvailableRecords(widget.selectedDate);
+    // الحصول على اليوميات المتاحة مع أرقامها
+    final availableDates = await _storageService.getAvailableDatesWithNumbers();
 
-    if (recordNumbers.isNotEmpty) {
-      // تحميل آخر سجل
-      final lastRecord = recordNumbers.last;
-      await _loadRecord(lastRecord);
+    // البحث عن يومية بنفس التاريخ المحدد
+    String? existingRecordNumber;
+    for (var dateInfo in availableDates) {
+      if (dateInfo['date'] == widget.selectedDate) {
+        existingRecordNumber = dateInfo['journalNumber'];
+        break;
+      }
+    }
+
+    if (existingRecordNumber != null) {
+      // تحميل اليومية الموجودة برقمها الصحيح
+      await _loadRecord(existingRecordNumber);
     } else {
       // إنشاء سجل جديد
       _createNewRecordAutomatically();
@@ -1445,14 +1453,12 @@ class _SalesScreenState extends State<SalesScreen> {
         ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startDocked,
-      resizeToAvoidBottomInset:
-          false, // هذا السطر هو المهم لمنع تحرك الزر مع الكيبورد
+      resizeToAvoidBottomInset: true,
     );
   }
 
   Widget _buildMainContent() {
-    return _buildTableWithStickyHeader(); // فقط الجدول بدون Stack
-    // لأن الاقتراحات الآن تظهر في AppBar
+    return _buildTableWithStickyHeader();
   }
 
   Widget _buildTableWithStickyHeader() {
@@ -1841,8 +1847,17 @@ class _SalesScreenState extends State<SalesScreen> {
     try {
       // جلب التواريخ مع أرقام اليوميات
       final dates = await _storageService.getAvailableDatesWithNumbers();
+
+      if (kDebugMode) {
+        debugPrint('✅ تم تحميل ${dates.length} يومية مبيعات');
+        for (var date in dates) {
+          debugPrint(
+              '   - تاريخ: ${date['date']}, رقم: ${date['journalNumber']}');
+        }
+      }
+
       setState(() {
-        _availableRecords = dates; // ببساطة استخدام البيانات كما هي
+        _availableRecords = dates;
         _isLoadingRecords = false;
       });
     } catch (e) {
@@ -1850,6 +1865,10 @@ class _SalesScreenState extends State<SalesScreen> {
         _availableRecords = [];
         _isLoadingRecords = false;
       });
+
+      if (kDebugMode) {
+        debugPrint('❌ خطأ في تحميل اليوميات: $e');
+      }
     }
   }
 

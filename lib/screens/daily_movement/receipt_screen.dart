@@ -1203,36 +1203,8 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
       },
     );
 
-    // ============ تحديث أرصدة الموردين من الاستلام ============
-    Map<String, double> supplierDeductions = {};
-
-    // جمع الدفعات والحمولات للموردين
-    for (var receipt in currentSellerReceipts) {
-      if (receipt.affiliation.isNotEmpty) {
-        double paymentAmount = double.tryParse(receipt.payment) ?? 0;
-        double loadAmount = double.tryParse(receipt.load) ?? 0;
-
-        // الدفعة والحمولة تطرح من رصيد المورد
-        double totalDeduction = paymentAmount + loadAmount;
-
-        if (totalDeduction > 0) {
-          supplierDeductions[receipt.affiliation] =
-              (supplierDeductions[receipt.affiliation] ?? 0) + totalDeduction;
-        }
-      }
-    }
-
-    // تطبيق التغييرات على أرصدة الموردين (طرح من الرصيد)
-    for (var entry in supplierDeductions.entries) {
-      if (entry.value != 0) {
-        // طرح الدفعة والحمولة من رصيد المورد
-        await _supplierIndexService.updateSupplierBalance(
-            entry.key, -entry.value // سالب لأننا نطرح من الرصيد
-            );
-        print('📉 تم خصم ${entry.value} من رصيد المورد ${entry.key}');
-      }
-    }
-    // ==========================================================
+    // ============ إزالة قسم تحديث أرصدة الموردين ============
+    // تم نقل هذه العملية إلى فهرس الموردين في شاشة الخدمات
 
     final success = await _storageService.saveReceiptDocument(document);
 

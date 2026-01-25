@@ -186,11 +186,26 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
         }
       });
 
+      // إضافة معالجة Enter لحقل الاسم
+      _itemFocusNodes[value]!.onKeyEvent = (node, event) {
+        if (event is KeyDownEvent &&
+            event.logicalKey == LogicalKeyboardKey.enter) {
+          // إذا كان هذا حقل الاسم، انتقل إلى الرصيد إن كان موجوداً
+          if (_balanceFocusNodes.containsKey(value)) {
+            FocusScope.of(context).requestFocus(_balanceFocusNodes[value]!);
+            return KeyEventResult.handled;
+          } else if (_mobileFocusNodes.containsKey(value)) {
+            FocusScope.of(context).requestFocus(_mobileFocusNodes[value]!);
+            return KeyEventResult.handled;
+          }
+        }
+        return KeyEventResult.ignored;
+      };
+
       // إذا كان زبوناً
       if (_showCustomerList && _customersWithData.containsKey(key)) {
         final mobile = _customersWithData[key]!.mobile;
         final balance = _customersWithData[key]!.balance;
-        final isLocked = _customersWithData[key]!.isBalanceLocked;
 
         _mobileControllers[value] = TextEditingController(text: mobile);
         _mobileFocusNodes[value] = FocusNode();
@@ -199,6 +214,19 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
             _saveMobileEdit(value);
           }
         });
+
+        // إضافة معالجة Enter لحقل الموبايل
+        _mobileFocusNodes[value]!.onKeyEvent = (node, event) {
+          if (event is KeyDownEvent &&
+              event.logicalKey == LogicalKeyboardKey.enter) {
+            // من الموبايل إلى الرصيد
+            if (_balanceFocusNodes.containsKey(value)) {
+              FocusScope.of(context).requestFocus(_balanceFocusNodes[value]!);
+              return KeyEventResult.handled;
+            }
+          }
+          return KeyEventResult.ignored;
+        };
 
         _balanceControllers[value] =
             TextEditingController(text: balance.toStringAsFixed(2));
@@ -209,15 +237,40 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
           }
         });
 
-        // تسجيل البيانات للتتبع
-        print(
-            'زبون: $value | الرصيد: $balance | الموبايل: $mobile | مقفل: $isLocked');
+        // إضافة معالجة Enter لحقل الرصيد
+        _balanceFocusNodes[value]!.onKeyEvent = (node, event) {
+          if (event is KeyDownEvent &&
+              event.logicalKey == LogicalKeyboardKey.enter) {
+            // من الرصيد إلى الاسم في الصف التالي أو الأول
+            final entries = currentMap.entries.toList();
+            final currentIndex =
+                entries.indexWhere((entry) => entry.value == value);
+
+            if (currentIndex != -1 && currentIndex < entries.length - 1) {
+              final nextValue = entries[currentIndex + 1].value;
+              if (_itemFocusNodes.containsKey(nextValue)) {
+                FocusScope.of(context)
+                    .requestFocus(_itemFocusNodes[nextValue]!);
+              }
+            } else {
+              // إذا كان آخر صف، انتقل إلى بداية القائمة
+              if (entries.isNotEmpty) {
+                final firstValue = entries.first.value;
+                if (_itemFocusNodes.containsKey(firstValue)) {
+                  FocusScope.of(context)
+                      .requestFocus(_itemFocusNodes[firstValue]!);
+                }
+              }
+            }
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        };
       }
-      // إذا كان مورداً
+      // إذا كان مورداً (نفس المنطق للزبائن)
       else if (_showSupplierList && _suppliersWithData.containsKey(key)) {
         final mobile = _suppliersWithData[key]!.mobile;
         final balance = _suppliersWithData[key]!.balance;
-        final isLocked = _suppliersWithData[key]!.isBalanceLocked;
 
         _mobileControllers[value] = TextEditingController(text: mobile);
         _mobileFocusNodes[value] = FocusNode();
@@ -226,6 +279,19 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
             _saveMobileEdit(value);
           }
         });
+
+        // إضافة معالجة Enter لحقل الموبايل
+        _mobileFocusNodes[value]!.onKeyEvent = (node, event) {
+          if (event is KeyDownEvent &&
+              event.logicalKey == LogicalKeyboardKey.enter) {
+            // من الموبايل إلى الرصيد
+            if (_balanceFocusNodes.containsKey(value)) {
+              FocusScope.of(context).requestFocus(_balanceFocusNodes[value]!);
+              return KeyEventResult.handled;
+            }
+          }
+          return KeyEventResult.ignored;
+        };
 
         _balanceControllers[value] =
             TextEditingController(text: balance.toStringAsFixed(2));
@@ -236,9 +302,35 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
           }
         });
 
-        // تسجيل البيانات للتتبع
-        print(
-            'مورد: $value | الرصيد: $balance | الموبايل: $mobile | مقفل: $isLocked');
+        // إضافة معالجة Enter لحقل الرصيد
+        _balanceFocusNodes[value]!.onKeyEvent = (node, event) {
+          if (event is KeyDownEvent &&
+              event.logicalKey == LogicalKeyboardKey.enter) {
+            // من الرصيد إلى الاسم في الصف التالي أو الأول
+            final entries = currentMap.entries.toList();
+            final currentIndex =
+                entries.indexWhere((entry) => entry.value == value);
+
+            if (currentIndex != -1 && currentIndex < entries.length - 1) {
+              final nextValue = entries[currentIndex + 1].value;
+              if (_itemFocusNodes.containsKey(nextValue)) {
+                FocusScope.of(context)
+                    .requestFocus(_itemFocusNodes[nextValue]!);
+              }
+            } else {
+              // إذا كان آخر صف، انتقل إلى بداية القائمة
+              if (entries.isNotEmpty) {
+                final firstValue = entries.first.value;
+                if (_itemFocusNodes.containsKey(firstValue)) {
+                  FocusScope.of(context)
+                      .requestFocus(_itemFocusNodes[firstValue]!);
+                }
+              }
+            }
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        };
       }
     });
 
@@ -635,23 +727,47 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
               double balance = 0;
               String mobile = '';
               bool isLocked = true;
-              String balanceStatus = '✅';
+              String balanceText = '';
+              String balanceStatus = '';
 
               if (isCustomer && customerData.containsKey(key)) {
                 balance = customerData[key]!.balance;
                 mobile = customerData[key]!.mobile;
                 isLocked = customerData[key]!.isBalanceLocked;
-                balanceStatus = isLocked ? '🔒' : '✏️';
+
+                // تحديد النص بناءً على قيمة الرصيد للزبائن
+                if (balance > 0) {
+                  balanceText = 'لنا';
+                  balanceStatus = 'لنا';
+                } else if (balance < 0) {
+                  balanceText = 'علينا';
+                  balanceStatus = 'علينا';
+                } else {
+                  balanceText = 'صفر';
+                  balanceStatus = 'صفر';
+                }
               } else if (isSupplier && supplierData.containsKey(key)) {
                 balance = supplierData[key]!.balance;
                 mobile = supplierData[key]!.mobile;
                 isLocked = supplierData[key]!.isBalanceLocked;
-                balanceStatus = isLocked ? '🔒' : '✏️';
+
+                // تحديد النص بناءً على قيمة الرصيد للموردين
+                if (balance > 0) {
+                  balanceText = 'علينا';
+                  balanceStatus = 'علينا';
+                } else if (balance < 0) {
+                  balanceText = 'لنا';
+                  balanceStatus = 'لنا';
+                } else {
+                  balanceText = 'صفر';
+                  balanceStatus = 'صفر';
+                }
               }
 
               // تحقق من سلامة الرصيد
               if (balance.isNaN || balance.isInfinite) {
                 balance = 0.0;
+                balanceText = 'خطأ';
                 balanceStatus = '⚠️';
               }
 
@@ -675,6 +791,18 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
                             icon: const Icon(Icons.delete_forever,
                                 color: Colors.red, size: 20),
                             onPressed: () {
+                              // التحقق من الرصيد قبل الحذف
+                              if (balance != 0.0) {
+                                if (isCustomer) {
+                                  _showCannotDeleteDialog(
+                                      'زبون', item, balance);
+                                } else if (isSupplier) {
+                                  _showCannotDeleteDialog(
+                                      'مورد', item, balance);
+                                }
+                                return;
+                              }
+
                               if (service is CustomerIndexService)
                                 _confirmDeleteCustomer(item);
                               else if (service is SupplierIndexService)
@@ -694,7 +822,16 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
                           controller: _itemControllers[item] ??
                               TextEditingController(text: item),
                           focusNode: _itemFocusNodes[item] ?? FocusNode(),
-                          onSubmitted: (val) => _saveItemEdit(key, item),
+                          onSubmitted: (val) {
+                            // حفظ التعديل
+                            _saveItemEdit(key, item);
+                            // التنقل إلى حقل الرصيد إذا كان موجوداً
+                            if (hasExtraCols &&
+                                _balanceFocusNodes.containsKey(item)) {
+                              FocusScope.of(context)
+                                  .requestFocus(_balanceFocusNodes[item]!);
+                            }
+                          },
                         ),
                       ),
                       if (hasExtraCols) ...[
@@ -710,7 +847,15 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
                                           text: balance.toStringAsFixed(2)),
                                   focusNode:
                                       _balanceFocusNodes[item] ?? FocusNode(),
-                                  onSubmitted: (val) => _saveBalanceEdit(item),
+                                  onSubmitted: (val) {
+                                    // حفظ التعديل
+                                    _saveBalanceEdit(item);
+                                    // التنقل إلى حقل الموبايل
+                                    if (_mobileFocusNodes.containsKey(item)) {
+                                      FocusScope.of(context).requestFocus(
+                                          _mobileFocusNodes[item]!);
+                                    }
+                                  },
                                   isNumeric: true,
                                   isReadOnly: isLocked,
                                 ),
@@ -731,7 +876,29 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
                             controller: _mobileControllers[item] ??
                                 TextEditingController(text: mobile),
                             focusNode: _mobileFocusNodes[item] ?? FocusNode(),
-                            onSubmitted: (val) => _saveMobileEdit(item),
+                            onSubmitted: (val) {
+                              // حفظ التعديل
+                              _saveMobileEdit(item);
+                              // التنقل إلى الاسم في الصف التالي
+                              final currentIndex = sortedEntries
+                                  .indexWhere((entry) => entry.value == item);
+                              if (currentIndex != -1 &&
+                                  currentIndex < sortedEntries.length - 1) {
+                                final nextValue =
+                                    sortedEntries[currentIndex + 1].value;
+                                if (_itemFocusNodes.containsKey(nextValue)) {
+                                  FocusScope.of(context).requestFocus(
+                                      _itemFocusNodes[nextValue]!);
+                                }
+                              } else if (sortedEntries.isNotEmpty) {
+                                // العودة إلى الصف الأول
+                                final firstValue = sortedEntries.first.value;
+                                if (_itemFocusNodes.containsKey(firstValue)) {
+                                  FocusScope.of(context).requestFocus(
+                                      _itemFocusNodes[firstValue]!);
+                                }
+                              }
+                            },
                             isNumeric: true,
                           ),
                         ),
@@ -746,7 +913,7 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Text(
-                                balanceStatus,
+                                balanceText,
                                 style: const TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.bold,
@@ -797,6 +964,53 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
     );
   }
 
+  Widget _buildEditableTextField({
+    required TextEditingController controller,
+    required FocusNode focusNode,
+    required Function(String) onSubmitted,
+    bool isNumeric = false,
+    bool isReadOnly = false,
+  }) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      decoration: BoxDecoration(
+          color: isReadOnly
+              ? Colors.grey.withOpacity(0.2)
+              : Colors.white.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(4)),
+      child: TextField(
+        controller: controller,
+        focusNode: focusNode,
+        enabled: !isReadOnly,
+        textDirection: TextDirection.rtl,
+        keyboardType: isNumeric
+            ? const TextInputType.numberWithOptions(decimal: true, signed: true)
+            : TextInputType.text,
+        inputFormatters: isNumeric
+            ? [
+                FilteringTextInputFormatter.allow(RegExp(r'^-?\d*\.?\d*')),
+              ]
+            : null,
+        style: TextStyle(
+            fontSize: 14, color: isReadOnly ? Colors.white70 : Colors.white),
+        decoration: const InputDecoration(
+            border: InputBorder.none,
+            isDense: true,
+            contentPadding: EdgeInsets.symmetric(vertical: 8)),
+        onSubmitted: onSubmitted,
+        onEditingComplete: () {
+          // يتم التعامل مع onSubmitted بدلاً من ذلك
+        },
+        onTap: () {
+          if (!isReadOnly && isNumeric && controller.text == '0.00') {
+            controller.clear();
+          }
+        },
+      ),
+    );
+  }
+
 // دالة مساعدة لبناء خلية الرأس
   Widget _buildHeaderCell(String text, int flex) {
     return Expanded(
@@ -831,57 +1045,14 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
     );
   }
 
-// دالة مساعدة لبناء حقل نص قابل للتحرير
-  Widget _buildEditableTextField({
-    required TextEditingController controller,
-    required FocusNode focusNode,
-    required Function(String) onSubmitted,
-    bool isNumeric = false,
-    bool isReadOnly = false,
-  }) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 2),
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      decoration: BoxDecoration(
-          color: isReadOnly
-              ? Colors.grey.withOpacity(0.2)
-              : Colors.white.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(4)),
-      child: TextField(
-        controller: controller,
-        focusNode: focusNode,
-        enabled: !isReadOnly,
-        textDirection: TextDirection.rtl,
-        keyboardType: isNumeric
-            ? const TextInputType.numberWithOptions(decimal: true)
-            : TextInputType.text,
-        inputFormatters: isNumeric
-            ? [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))]
-            : null,
-        style: TextStyle(
-            fontSize: 14, color: isReadOnly ? Colors.white70 : Colors.white),
-        decoration: const InputDecoration(
-            border: InputBorder.none,
-            isDense: true,
-            contentPadding: EdgeInsets.symmetric(vertical: 8)),
-        onSubmitted: onSubmitted,
-        onTap: () {
-          if (!isReadOnly && isNumeric && controller.text == '0.00') {
-            controller.clear();
-          }
-        },
-      ),
-    );
-  }
-
 // دالة مساعدة للحصول على لون حالة الرصيد
   Color _getBalanceStatusColor(String status) {
     switch (status) {
-      case '✅':
+      case 'لنا': // للزبائن: موجب، للموردين: سالب
         return Colors.green;
-      case '🔒':
+      case 'علينا': // للزبائن: سالب، للموردين: موجب
         return Colors.orange;
-      case '✏️':
+      case 'صفر':
         return Colors.blue;
       case '⚠️':
         return Colors.red;
@@ -961,26 +1132,13 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
 
       if (service is SupplierIndexService) {
         final suppliers = await service.getAllSuppliersWithData();
-        int corrected = 0;
 
-        for (var entry in suppliers.entries) {
-          final supplier = entry.value;
-
-          // هنا يمكنك إضافة منطق التدقيق إذا كان متاحاً
-          // حالياً سنقوم فقط بإعادة تحميل البيانات
-
-          // مثال: إذا كان هناك دالة لحساب الرصيد من التاريخ
-          // double calculated = await service.calculateSupplierBalanceFromHistory(supplier.name);
-          // if (supplier.balance != calculated) {
-          //   corrected++;
-          //   await service.correctSupplierBalance(supplier.name, calculated);
-          // }
-        }
+       
 
         Navigator.pop(context);
 
         // إعادة تحميل البيانات
-        if (service is SupplierIndexService) {
+        if () {
           await _loadSupplierDataImmediately();
         } else if (service is CustomerIndexService) {
           await _loadCustomerDataImmediately();
@@ -1325,6 +1483,18 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
   }
 
   Future<void> _confirmDeleteCustomer(String customer) async {
+    // التحقق من وجود رصيد
+    final customerData = _customersWithData.values.firstWhere(
+      (data) => data.name == customer,
+      orElse: () => CustomerData(
+          name: customer, balance: 0.0, mobile: '', isBalanceLocked: false),
+    );
+
+    if (customerData.balance != 0.0) {
+      await _showCannotDeleteDialog('زبون', customer, customerData.balance);
+      return;
+    }
+
     if (await _showConfirmDialog(
         'تأكيد الحذف', 'هل أنت متأكد من حذف الزبون "$customer"؟')) {
       await _customerIndexService.removeCustomer(customer);
@@ -1333,11 +1503,43 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
   }
 
   Future<void> _confirmDeleteSupplier(String supplier) async {
+    // التحقق من وجود رصيد
+    final supplierData = _suppliersWithData.values.firstWhere(
+      (data) => data.name == supplier,
+      orElse: () => SupplierData(
+          name: supplier, balance: 0.0, mobile: '', isBalanceLocked: false),
+    );
+
+    if (supplierData.balance != 0.0) {
+      await _showCannotDeleteDialog('مورد', supplier, supplierData.balance);
+      return;
+    }
+
     if (await _showConfirmDialog(
         'تأكيد الحذف', 'هل أنت متأكد من حذف المورد "$supplier"؟')) {
       await _supplierIndexService.removeSupplier(supplier);
       await _loadAllIndexesWithNumbers();
     }
+  }
+
+  Future<void> _showCannotDeleteDialog(
+      String type, String name, double balance) async {
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('لا يمكن حذف $type'),
+        content: Text(
+          'لا يمكن حذف $type "$name" لأنه لديه رصيد ${balance.toStringAsFixed(2)}.\n\nيجب أن يكون الرصيد صفراً للحذف.',
+          textAlign: TextAlign.center,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('موافق'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _confirmDeleteMaterial(String material) async {

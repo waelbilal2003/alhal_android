@@ -140,30 +140,34 @@ class _YieldScreenState extends State<YieldScreen> {
     if (widget.selectedDate == null) return;
 
     final salesStorage = SalesStorageService();
-    final records =
-        await salesStorage.getAvailableRecords(widget.selectedDate!);
     double totalCashSales = 0;
 
-    // الحصول على اسم البائع الحالي من تسجيل الدخول
+    // الحصول على اسم البائع الحالي الذي يستخدم الشاشة
+    // تأكد من أن هذا المتحكم يحتوي على الاسم الصحيح
     final currentSellerName = _sellerNameController.text;
 
-    for (var recordNum in records) {
-      final doc =
-          await salesStorage.loadSalesDocument(widget.selectedDate!, recordNum);
-      if (doc != null) {
-        for (var sale in doc.sales) {
-          // إظهار فقط سجلات البائع الحالي
-          if (sale.sellerName == currentSellerName &&
-              sale.cashOrDebt == 'نقدي') {
-            totalCashSales += double.tryParse(sale.total) ?? 0;
-          }
+    // 1. لا حاجة للحصول على قائمة السجلات أو الدوران عليها
+    // لأن هناك ملف مبيعات واحد فقط لكل تاريخ.
+    // نقوم بتحميل هذا الملف مباشرة.
+    final doc = await salesStorage.loadSalesDocument(widget.selectedDate!);
+
+    if (doc != null) {
+      // 2. ندور على كل سجل (sale) داخل اليومية
+      for (var sale in doc.sales) {
+        // 3. هنا يتم التمييز بين البائعين باستخدام حقل "sellerName"
+        // نقوم بجمع المبيعات النقدية التي تخص البائع الحالي فقط
+        if (sale.sellerName == currentSellerName && sale.cashOrDebt == 'نقدي') {
+          totalCashSales += double.tryParse(sale.total) ?? 0;
         }
       }
     }
 
-    setState(() {
-      _cashSalesController.text = totalCashSales.toStringAsFixed(2);
-    });
+    // يتم التحديث في الواجهة فقط إذا كانت الشاشة لا تزال معروضة
+    if (mounted) {
+      setState(() {
+        _cashSalesController.text = totalCashSales.toStringAsFixed(2);
+      });
+    }
   }
 
   Future<void> _loadBoxData() async {

@@ -123,6 +123,7 @@ class _SalesScreenState extends State<SalesScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadOrCreateRecord();
       _loadAvailableDates();
+      _loadJournalNumber();
     });
   }
 
@@ -174,24 +175,15 @@ class _SalesScreenState extends State<SalesScreen> {
 
   // تحميل السجل إذا كان موجوداً، أو إنشاء جديد
   Future<void> _loadOrCreateRecord() async {
-    // الحصول على اليوميات المتاحة مع أرقامها
-    final availableDates = await _storageService.getAvailableDatesWithNumbers();
+    final document =
+        await _storageService.loadSalesDocument(widget.selectedDate);
 
-    // البحث عن يومية بنفس التاريخ المحدد
-    String? existingRecordNumber;
-    for (var dateInfo in availableDates) {
-      if (dateInfo['date'] == widget.selectedDate) {
-        existingRecordNumber = dateInfo['journalNumber'];
-        break;
-      }
-    }
-
-    if (existingRecordNumber != null) {
-      // تحميل اليومية الموجودة برقمها الصحيح
-      await _loadRecord(existingRecordNumber);
+    if (document != null && document.sales.isNotEmpty) {
+      // تحميل اليومية الموجودة
+      _loadDocument(document);
     } else {
-      // إنشاء سجل جديد
-      _createNewRecordAutomatically();
+      // إنشاء يومية جديدة
+      _createNewRecord();
     }
   }
 
@@ -202,17 +194,11 @@ class _SalesScreenState extends State<SalesScreen> {
     totalGrandController.text = '0.00';
   }
 
-  Future<void> _createNewRecordAutomatically() async {
-    final nextNumber =
-        await _storageService.getNextRecordNumber(widget.selectedDate);
-    if (mounted) {
-      _createNewRecord(nextNumber);
-    }
-  }
-
-  void _createNewRecord(String recordNumber) {
+  void _createNewRecord() {
     setState(() {
-      serialNumber = recordNumber;
+      // لا نحدد الرقم هنا، بل سيتم تعيينه عند الحفظ لأول مرة
+      // الدالة _loadJournalNumber ستهتم بعرض الرقم الصحيح في الواجهة
+      serialNumber = '1'; // عرض رقم افتراضي مؤقتاً
       _recordCreator = widget.sellerName;
       rowControllers.clear();
       rowFocusNodes.clear();
@@ -634,28 +620,6 @@ class _SalesScreenState extends State<SalesScreen> {
         });
       }
     });
-  }
-
-  // تحميل السجل الموجود
-  Future<void> _loadRecord(String recordNumber) async {
-    final document = await _storageService.loadSalesDocument(
-      widget.selectedDate,
-      recordNumber,
-    );
-
-    if (document == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('فشل تحميل السجل'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-      return;
-    }
-
-    _loadDocument(document);
   }
 
   void _loadDocument(SalesDocument document) {
@@ -1505,7 +1469,6 @@ class _SalesScreenState extends State<SalesScreen> {
   Future<void> _saveCurrentRecord({bool silent = false}) async {
     if (_isSaving) return;
 
-    // نظام الصلاحيات: التحقق من أن المستخدم الحالي هو منشئ السجل
     if (_recordCreator != null && _recordCreator != widget.sellerName) {
       if (!silent && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1518,13 +1481,10 @@ class _SalesScreenState extends State<SalesScreen> {
       return;
     }
 
-    // التحقق من وجود سجلات للحفظ (للبائع الحالي فقط)
     final currentSellerSales = <Sale>[];
     for (int i = 0; i < rowControllers.length; i++) {
       if (_isRowOwnedByCurrentSeller(i)) {
         final controllers = rowControllers[i];
-
-        // التحقق إذا كان السجل فارغاً
         if (controllers[1].text.isNotEmpty ||
             controllers[4].text.isNotEmpty ||
             controllers[8].text.isNotEmpty) {
@@ -1561,27 +1521,21 @@ class _SalesScreenState extends State<SalesScreen> {
       return;
     }
 
-    // التحقق من قاعدة القائم والصافي
     bool hasInvalidNetValue = false;
     for (int i = 0; i < rowControllers.length; i++) {
       if (_isRowOwnedByCurrentSeller(i)) {
         final controllers = rowControllers[i];
         double standing = double.tryParse(controllers[6].text) ?? 0;
         double net = double.tryParse(controllers[7].text) ?? 0;
-
-        if (standing < net) {
+        if (standing < net || (standing == 0 && net > 0)) {
           hasInvalidNetValue = true;
-          controllers[7].text = standing.toStringAsFixed(2);
-          _calculateRowValues(i);
-        } else if (standing == 0 && net > 0) {
-          hasInvalidNetValue = true;
-          controllers[7].text = '0.00';
+          controllers[7].text =
+              (standing < net) ? standing.toStringAsFixed(2) : '0.00';
           _calculateRowValues(i);
         }
       }
     }
 
-    // إذا كانت هناك قيم غير صحيحة، نطلب تأكيد
     if (hasInvalidNetValue && !silent && mounted) {
       bool confirmed = await _showNetValueWarning();
       if (!confirmed) {
@@ -1590,60 +1544,53 @@ class _SalesScreenState extends State<SalesScreen> {
       }
     }
 
-    // إعادة حساب المجاميع بعد التصحيح
     _calculateAllTotals();
-
     setState(() => _isSaving = true);
 
-    // تحميل المستند الحالي إذا كان موجوداً للحفاظ على سجلات البائعين الآخرين
-    SalesDocument? existingDocument;
+    SalesDocument? existingDocument =
+        await _storageService.loadSalesDocument(widget.selectedDate);
     List<Sale> allSales = [];
 
-    if (serialNumber.isNotEmpty) {
-      existingDocument = await _storageService.loadSalesDocument(
-        widget.selectedDate,
-        serialNumber,
-      );
-    }
-
     if (existingDocument != null) {
-      // إضافة سجلات البائعين الآخرين
-      for (var sale in existingDocument.sales) {
-        if (sale.sellerName != widget.sellerName) {
-          allSales.add(sale);
-        }
-      }
+      allSales.addAll(existingDocument.sales
+          .where((s) => s.sellerName != widget.sellerName));
     }
-
-    // إضافة سجلات البائع الحالي
     allSales.addAll(currentSellerSales);
-
-    // ترتيب السجلات حسب الرقم المسلسل
     allSales.sort((a, b) =>
         int.parse(a.serialNumber).compareTo(int.parse(b.serialNumber)));
 
-    // تحديث الأرقام المسلسلة
     for (int i = 0; i < allSales.length; i++) {
+      var oldSale = allSales[i];
       allSales[i] = Sale(
         serialNumber: (i + 1).toString(),
-        material: allSales[i].material,
-        affiliation: allSales[i].affiliation,
-        sValue: allSales[i].sValue,
-        count: allSales[i].count,
-        packaging: allSales[i].packaging,
-        standing: allSales[i].standing,
-        net: allSales[i].net,
-        price: allSales[i].price,
-        total: allSales[i].total,
-        cashOrDebt: allSales[i].cashOrDebt,
-        empties: allSales[i].empties,
-        customerName: allSales[i].customerName,
-        sellerName: allSales[i].sellerName,
+        material: oldSale.material,
+        affiliation: oldSale.affiliation,
+        sValue: oldSale.sValue,
+        count: oldSale.count,
+        packaging: oldSale.packaging,
+        standing: oldSale.standing,
+        net: oldSale.net,
+        price: oldSale.price,
+        total: oldSale.total,
+        cashOrDebt: oldSale.cashOrDebt,
+        empties: oldSale.empties,
+        customerName: oldSale.customerName,
+        sellerName: oldSale.sellerName,
       );
     }
 
+    // --- الجزء الأهم: تحديد رقم اليومية الصحيح قبل الحفظ ---
+    String journalNumberToSave = serialNumber;
+    if (existingDocument == null) {
+      // إذا كانت اليومية جديدة، احصل على الرقم التالي
+      journalNumberToSave = await _storageService.getNextJournalNumber();
+    } else {
+      // إذا كانت موجودة، استخدم رقمها الحالي لضمان الثبات
+      journalNumberToSave = existingDocument.recordNumber;
+    }
+
     final document = SalesDocument(
-      recordNumber: serialNumber,
+      recordNumber: journalNumberToSave, // استخدام الرقم الصحيح
       date: widget.selectedDate,
       sellerName: widget.sellerName,
       storeName: widget.storeName,
@@ -1657,10 +1604,7 @@ class _SalesScreenState extends State<SalesScreen> {
       },
     );
 
-    // حساب فروقات الرصيد قبل الحفظ لتحديث أرصدة الزبائن
     Map<String, double> balanceChanges = {};
-
-    // 1. طرح القيم القديمة (إذا كان السجل موجوداً)
     if (existingDocument != null) {
       for (var sale in existingDocument.sales) {
         if (sale.sellerName == widget.sellerName &&
@@ -1672,8 +1616,6 @@ class _SalesScreenState extends State<SalesScreen> {
         }
       }
     }
-
-    // 2. إضافة القيم الجديدة
     for (var sale in currentSellerSales) {
       if (sale.cashOrDebt == 'دين' && sale.customerName != null) {
         double amount = double.tryParse(sale.total) ?? 0;
@@ -1685,17 +1627,17 @@ class _SalesScreenState extends State<SalesScreen> {
     final success = await _storageService.saveSalesDocument(document);
 
     if (success) {
-      // تحديث أرصدة الزبائن في الفهرس
       for (var entry in balanceChanges.entries) {
         if (entry.value != 0) {
           await _customerIndexService.updateCustomerBalance(
               entry.key, entry.value);
         }
       }
-
       setState(() {
         _hasUnsavedChanges = false;
         _recordCreator = widget.sellerName;
+        serialNumber =
+            journalNumberToSave; // تحديث الواجهة بالرقم الصحيح بعد الحفظ
       });
     }
 
@@ -1951,6 +1893,24 @@ class _SalesScreenState extends State<SalesScreen> {
         return _customerSuggestions;
       default:
         return [];
+    }
+  }
+
+  Future<void> _loadJournalNumber() async {
+    try {
+      final journalNumber =
+          await _storageService.getJournalNumberForDate(widget.selectedDate);
+      if (mounted) {
+        setState(() {
+          serialNumber = journalNumber;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          serialNumber = '1'; // الرقم الافتراضي في حالة الخطأ
+        });
+      }
     }
   }
 }

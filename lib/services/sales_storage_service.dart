@@ -32,102 +32,52 @@ class SalesStorageService {
       final basePath = await _getBasePath();
       final folderPath = '$basePath/AlhalJournals';
 
-      // إنشاء مجلد اليوميات إذا لم يكن موجوداً
       final folder = Directory(folderPath);
       if (!await folder.exists()) {
         await folder.create(recursive: true);
       }
 
-      // اسم الملف: sales-YYYY-MM-DD.json
       final fileName = _createFileName(document.date);
       final filePath = '$folderPath/$fileName';
-
-      // قراءة الملف الحالي إذا كان موجوداً
       final file = File(filePath);
-      SalesDocument? existingDocument;
 
+      SalesDocument? existingDocument;
       if (await file.exists()) {
         final jsonString = await file.readAsString();
         final jsonMap = jsonDecode(jsonString) as Map<String, dynamic>;
         existingDocument = SalesDocument.fromJson(jsonMap);
       }
 
-      // دمج السجلات
-      List<Sale> mergedSales = [];
-      if (existingDocument != null) {
-        // الاحتفاظ بسجلات البائعين الآخرين
-        for (var existing in existingDocument.sales) {
-          bool found = false;
-          for (var newSale in document.sales) {
-            // إذا كان نفس السجل لنفس البائع، نستبدله
-            if (existing.serialNumber == newSale.serialNumber &&
-                existing.sellerName == newSale.sellerName) {
-              found = true;
-              break;
-            }
-          }
-          if (!found) {
-            mergedSales.add(existing);
-          }
-        }
-      }
-
-      // إضافة السجلات الجديدة/المعدلة
-      mergedSales.addAll(document.sales);
-
-      // ترتيب السجلات حسب الرقم المسلسل
-      mergedSales.sort((a, b) =>
-          int.parse(a.serialNumber).compareTo(int.parse(b.serialNumber)));
-
-      // تحديث الأرقام المسلسلة
-      for (int i = 0; i < mergedSales.length; i++) {
-        mergedSales[i] = Sale(
-          serialNumber: (i + 1).toString(),
-          material: mergedSales[i].material,
-          affiliation: mergedSales[i].affiliation,
-          sValue: mergedSales[i].sValue,
-          count: mergedSales[i].count,
-          packaging: mergedSales[i].packaging,
-          standing: mergedSales[i].standing,
-          net: mergedSales[i].net,
-          price: mergedSales[i].price,
-          total: mergedSales[i].total,
-          cashOrDebt: mergedSales[i].cashOrDebt,
-          empties: mergedSales[i].empties,
-          customerName: mergedSales[i].customerName,
-          sellerName: mergedSales[i].sellerName,
-        );
-      }
-
-      // الحصول على الرقم النهائي للسجل
+      // منطق تحديد رقم السجل الصحيح
       final String finalRecordNumber;
-      if (existingDocument != null &&
-          existingDocument.recordNumber.isNotEmpty) {
+      if (existingDocument != null) {
+        // إذا كانت اليومية موجودة بالفعل، نحافظ على رقمها
         finalRecordNumber = existingDocument.recordNumber;
       } else {
-        finalRecordNumber = await getNextRecordNumber(document.date);
+        // إذا كانت يومية جديدة تماماً، نطلب رقماً جديداً
+        finalRecordNumber = await getNextJournalNumber();
       }
 
-      // تحديث المجاميع
-      final totals = _calculateSalesTotals(mergedSales);
+      // يتم دمج السجلات في شاشة المبيعات، لذلك نستخدم القائمة النهائية مباشرة
+      final allSales = document.sales;
+      final totals = _calculateSalesTotals(allSales);
 
       final updatedDocument = SalesDocument(
-        recordNumber: finalRecordNumber,
+        recordNumber: finalRecordNumber, // استخدام الرقم الصحيح
         date: document.date,
         sellerName: document.sellerName,
         storeName: document.storeName,
         dayName: document.dayName,
-        sales: mergedSales,
+        sales: allSales,
         totals: totals,
       );
 
-      // حفظ المستند المحدث
       final updatedJsonString = jsonEncode(updatedDocument.toJson());
       await file.writeAsString(updatedJsonString);
 
       if (kDebugMode) {
         debugPrint('✅ تم حفظ سجل المبيعات رقم $finalRecordNumber: $filePath');
-        debugPrint('📊 عدد السجلات: ${mergedSales.length}');
+        debugPrint('📊 عدد السجلات: ${allSales.length}');
       }
 
       return true;
@@ -164,20 +114,13 @@ class SalesStorageService {
   }
 
   // قراءة مستند المبيعات
-  Future<SalesDocument?> loadSalesDocument(
-      String date, String recordNumber) async {
+  Future<SalesDocument?> loadSalesDocument(String date) async {
     try {
-      // الحصول على المسار الأساسي
       final basePath = await _getBasePath();
-
-      // إنشاء مسار المجلد
       final folderPath = '$basePath/AlhalJournals';
-
-      // إنشاء اسم الملف
       final fileName = _createFileName(date);
       final filePath = '$folderPath/$fileName';
 
-      // قراءة الملف
       final file = File(filePath);
       if (!await file.exists()) {
         if (kDebugMode) {
@@ -186,7 +129,6 @@ class SalesStorageService {
         return null;
       }
 
-      // قراءة المحتوى وتحويله إلى كائن
       final jsonString = await file.readAsString();
       final jsonMap = jsonDecode(jsonString) as Map<String, dynamic>;
       final document = SalesDocument.fromJson(jsonMap);
@@ -325,10 +267,10 @@ class SalesStorageService {
     double totalCashSales = 0;
 
     try {
-      final doc = await loadSalesDocument(date, '1'); // ملف واحد لكل تاريخ
+      // التصحيح: استدعاء الدالة بمعامل واحد فقط
+      final doc = await loadSalesDocument(date);
       if (doc != null) {
         for (var sale in doc.sales) {
-          // حساب فقط المبيعات النقدية (لا تشمل المبيعات بالدين)
           if (sale.cashOrDebt == 'نقدي') {
             totalCashSales += double.tryParse(sale.total) ?? 0;
           }
@@ -348,7 +290,8 @@ class SalesStorageService {
     double totalSales = 0;
 
     try {
-      final doc = await loadSalesDocument(date, '1'); // ملف واحد لكل تاريخ
+      // التصحيح: استدعاء الدالة بمعامل واحد فقط
+      final doc = await loadSalesDocument(date);
       if (doc != null) {
         for (var sale in doc.sales) {
           totalSales += double.tryParse(sale.total) ?? 0;
@@ -364,8 +307,6 @@ class SalesStorageService {
   }
 
   // الحصول على التواريخ المتاحة مع أرقام اليوميات - مثل المشتريات بالضبط
-  // sales_storage_service.dart - تصحيح دالة getAvailableDatesWithNumbers
-
   Future<List<Map<String, String>>> getAvailableDatesWithNumbers() async {
     try {
       final basePath = await _getBasePath();
@@ -439,5 +380,66 @@ class SalesStorageService {
       return DateTime(year, month, day);
     }
     return DateTime.now();
+  }
+
+  Future<String> getNextJournalNumber() async {
+    try {
+      final basePath = await _getBasePath();
+      final folderPath = '$basePath/AlhalJournals';
+      final folder = Directory(folderPath);
+
+      if (!await folder.exists()) {
+        return '1'; // أول يومية على الإطلاق
+      }
+
+      final files = await folder.list().toList();
+      int maxJournalNumber = 0;
+
+      for (var file in files) {
+        // البحث فقط في ملفات المبيعات لتجنب التضارب مع أرقام المشتريات
+        if (file is File &&
+            file.path.split('/').last.startsWith('sales-') &&
+            file.path.endsWith('.json')) {
+          try {
+            final jsonString = await file.readAsString();
+            final jsonMap = jsonDecode(jsonString) as Map<String, dynamic>;
+            final journalNumber =
+                int.tryParse(jsonMap['recordNumber'] ?? '0') ?? 0;
+
+            if (journalNumber > maxJournalNumber) {
+              maxJournalNumber = journalNumber;
+            }
+          } catch (e) {
+            // تجاهل الملفات التالفة
+          }
+        }
+      }
+
+      return (maxJournalNumber + 1).toString();
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ خطأ في الحصول على رقم يومية المبيعات التالي: $e');
+      }
+      return '1';
+    }
+  }
+
+// 2. أضف هذه الدالة الجديدة (للحصول على رقم اليومية لتاريخ معين إذا كانت موجودة)
+  Future<String> getJournalNumberForDate(String date) async {
+    try {
+      final file = await _getSalesFile(date);
+      if (await file.exists()) {
+        final jsonString = await file.readAsString();
+        final jsonMap = jsonDecode(jsonString) as Map<String, dynamic>;
+        return jsonMap['recordNumber'] ?? '1';
+      }
+      // إذا كان الملف غير موجود، سيعرض الرقم 1 مؤقتاً في الواجهة
+      return '1';
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ خطأ في الحصول على رقم اليومية للتاريخ $date: $e');
+      }
+      return '1';
+    }
   }
 }

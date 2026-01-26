@@ -81,9 +81,10 @@ class _YieldScreenState extends State<YieldScreen> {
     _collectedController.addListener(() => setState(_calculateYield));
 
     // بدء عملية التحقق من الدخول والتحميل التلقائي
-    _checkIfLoggedIn().then((_) {
+    _checkIfLoggedIn().then((_) async {
       if (_isLoggedIn) {
-        _refreshData();
+        await _refreshData(); // المرة الأولى
+        await _refreshData(); // المرة الثانية
       }
     });
 
@@ -274,8 +275,9 @@ class _YieldScreenState extends State<YieldScreen> {
             _isLoading = false;
           });
 
-          // استدعاء التحديث التلقائي فور الدخول
-          _refreshData();
+          // استدعاء التحديث التلقائي مرتين فور الدخول
+          await _refreshData();
+          await _refreshData();
         } else {
           setState(() {
             _errorMessage = 'اسم البائع أو كلمة المرور غير صحيحة';

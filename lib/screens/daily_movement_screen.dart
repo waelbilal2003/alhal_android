@@ -1,3 +1,5 @@
+// file: lib/screens/daily_movement_screen.dart
+
 import 'package:flutter/material.dart';
 import '../services/store_db_service.dart';
 import 'seller_management_screen.dart';
@@ -8,6 +10,7 @@ import 'daily_movement/receipt_screen.dart';
 import 'daily_movement/box_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'bait_screen.dart'; // <--- الخطوة 1: استيراد الشاشة الجديدة
 
 class DailyMovementScreen extends StatefulWidget {
   final String selectedDate;
@@ -169,6 +172,20 @@ class _DailyMovementScreenState extends State<DailyMovementScreen> {
                           ),
                         );
                       }),
+                      // <--- الخطوة 2: إضافة زر البايت هنا
+                      _buildMenuButton(context,
+                          icon: Icons.inventory_2, // أيقونة مناسبة
+                          label: 'البايت',
+                          color: Colors.teal[700]!, onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) => BaitScreen(
+                              selectedDate: widget.selectedDate,
+                            ),
+                          ),
+                        );
+                      }),
+                      // ---> نهاية الإضافة
                       _buildMenuButton(context,
                           icon: Icons.settings,
                           label: 'الخدمات',
@@ -188,7 +205,7 @@ class _DailyMovementScreenState extends State<DailyMovementScreen> {
                           );
                         } else {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
+                            const SnackBar(
                               content:
                                   Text('عفواً، هذه الخدمة متاحة فقط للإدارة'),
                               backgroundColor: Colors.red,
@@ -269,8 +286,8 @@ class _DailyMovementScreenState extends State<DailyMovementScreen> {
                   ),
                   // إضافة علامة الادمن إذا كان زر الخدمات والمسؤول هو الادمن
                   if (isServicesButton && isAdmin)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4.0),
+                    const Padding(
+                      padding: EdgeInsets.only(top: 4.0),
                       child: Icon(
                         Icons.star,
                         size: 12,

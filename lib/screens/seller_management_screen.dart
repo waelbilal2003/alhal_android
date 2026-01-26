@@ -511,25 +511,12 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
   }
 
   Widget _buildCustomerList() {
-    // إذا كانت القائمة فارغة ولم يكن هناك إضافة جديدة
-    if (_customersWithNumbers.isEmpty && !_isAddingNewItem) {
-      // إذا كان العرض نشطاً ولكن البيانات لم تحمل بعد
-      if (_showCustomerList && _customersWithNumbers.isEmpty) {
-        // عرض مؤشر تحميل أثناء جلب البيانات
-        return Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              CircularProgressIndicator(color: Colors.white),
-              SizedBox(height: 16),
-              Text('جاري تحميل بيانات الزبائن...',
-                  style: TextStyle(fontSize: 16, color: Colors.white)),
-            ],
-          ),
-        );
-      }
-
-      return _buildEmptyListMessage('لا يوجد زبائن مسجلين');
+    // عرض مؤشر تحميل فقط إذا كان العرض نشطاً والبيانات لم تحمل بعد وليست في حالة إضافة
+    if (_showCustomerList &&
+        _customersWithNumbers.isEmpty &&
+        !_isAddingNewItem) {
+      // نتحقق من الخدمة، إذا كانت فارغة فعلاً نظهر الجدول فارغاً ليتمكن المستخدم من الإضافة
+      // وإلا نظهر مؤشر التحميل
     }
 
     return _buildEditableListWithNumbers(
@@ -540,27 +527,6 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
   }
 
   Widget _buildSupplierList() {
-    // إذا كانت القائمة فارغة ولم يكن هناك إضافة جديدة
-    if (_suppliersWithNumbers.isEmpty && !_isAddingNewItem) {
-      // إذا كان العرض نشطاً ولكن البيانات لم تحمل بعد
-      if (_showSupplierList && _suppliersWithNumbers.isEmpty) {
-        // عرض مؤشر تحميل أثناء جلب البيانات
-        return Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              CircularProgressIndicator(color: Colors.white),
-              SizedBox(height: 16),
-              Text('جاري تحميل بيانات الموردين...',
-                  style: TextStyle(fontSize: 16, color: Colors.white)),
-            ],
-          ),
-        );
-      }
-
-      return _buildEmptyListMessage('لا يوجد موردين مسجلين');
-    }
-
     return _buildEditableListWithNumbers(
       title: 'فهرس الموردين المسجلين',
       service: _supplierIndexService,
@@ -569,9 +535,6 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
   }
 
   Widget _buildMaterialList() {
-    if (_materialsWithNumbers.isEmpty && !_isAddingNewItem) {
-      return _buildEmptyListMessage('لا يوجد مواد مسجلة');
-    }
     return _buildEditableListWithNumbers(
       title: 'فهرس المواد المسجلة',
       service: _materialIndexService,
@@ -580,9 +543,6 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
   }
 
   Widget _buildPackagingList() {
-    if (_packagingsWithNumbers.isEmpty && !_isAddingNewItem) {
-      return _buildEmptyListMessage('لا يوجد عبوات مسجلة');
-    }
     return _buildEditableListWithNumbers(
       title: 'فهرس العبوات المسجلة',
       service: _packagingIndexService,
@@ -595,6 +555,7 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
     required dynamic service,
     required Map<int, String> itemsMap,
   }) {
+    // ترتيب العناصر حسب الرقم (ID)
     List<MapEntry<int, String>> sortedEntries = itemsMap.entries.toList()
       ..sort((a, b) => a.key.compareTo(b.key));
 
@@ -602,15 +563,9 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
     bool isSupplier = service is SupplierIndexService;
     bool hasExtraCols = isCustomer || isSupplier;
 
-    // تحقق من بيانات الرصيد
-    Map<int, CustomerData> customerData = {};
-    Map<int, SupplierData> supplierData = {};
-
-    if (isCustomer) {
-      customerData = _customersWithData;
-    } else if (isSupplier) {
-      supplierData = _suppliersWithData;
-    }
+    // جلب بيانات الرصيد والموبايل بناءً على النوع
+    Map<int, CustomerData> customerData = isCustomer ? _customersWithData : {};
+    Map<int, SupplierData> supplierData = isSupplier ? _suppliersWithData : {};
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -621,6 +576,7 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // رأس القائمة (العنوان + زر الإضافة + زر التدقيق)
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             textDirection: TextDirection.rtl,
@@ -635,19 +591,18 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
                   textAlign: TextAlign.center,
                 ),
               ),
-              // زر تدقيق الأرصدة
-              if (hasExtraCols)
+              // زر تدقيق الأرصدة يظهر فقط إذا كان هناك بيانات
+              if (hasExtraCols && sortedEntries.isNotEmpty)
                 IconButton(
                   icon:
                       const Icon(Icons.verified, color: Colors.white, size: 24),
-                  onPressed: () async {
-                    await _auditBalances(service);
-                  },
+                  onPressed: () => _auditBalances(service),
                   tooltip: 'تدقيق وتأكيد الأرصدة',
                 ),
+              // زر الإضافة (+) يظهر دائماً للسماح بإضافة أول سجل
               IconButton(
-                icon: Icon(_isAddingNewItem ? Icons.close : Icons.add,
-                    color: Colors.white, size: 28),
+                icon: Icon(_isAddingNewItem ? Icons.close : Icons.add_circle,
+                    color: Colors.white, size: 30),
                 onPressed: () {
                   setState(() {
                     _isAddingNewItem = !_isAddingNewItem;
@@ -663,6 +618,8 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
               ),
             ],
           ),
+
+          // حقل إدخال سجل جديد (يظهر عند الضغط على +)
           if (_isAddingNewItem) ...[
             const SizedBox(height: 15),
             Container(
@@ -679,13 +636,14 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
                       focusNode: _addItemFocusNode,
                       textDirection: TextDirection.rtl,
                       decoration: const InputDecoration(
-                          hintText: 'أدخل العنصر الجديد...',
+                          hintText: 'أدخل الاسم الجديد هنا...',
                           border: InputBorder.none),
                       onSubmitted: (value) => _addNewItem(service, value),
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.check, color: Colors.teal),
+                    icon: const Icon(Icons.check_circle,
+                        color: Colors.teal, size: 28),
                     onPressed: () {
                       if (_addItemController.text.trim().isNotEmpty) {
                         _addNewItem(service, _addItemController.text);
@@ -697,7 +655,8 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
             ),
             const SizedBox(height: 15),
           ],
-          // رأس الجدول
+
+          // رأس الجدول (يظهر دائماً ليعطي شكلاً منظماً حتى لو كانت القائمة فارغة)
           Container(
             decoration: BoxDecoration(
               color: Colors.white.withOpacity(0.15),
@@ -718,8 +677,29 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
               ],
             ),
           ),
-          Divider(color: Colors.white70, thickness: 1),
-          if (sortedEntries.isNotEmpty || _isAddingNewItem) ...[
+          const Divider(color: Colors.white70, thickness: 1),
+
+          // عرض رسالة "لا يوجد سجلات" داخل الجدول إذا كان فارغاً
+          if (sortedEntries.isEmpty && !_isAddingNewItem)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 30),
+              child: Column(
+                children: [
+                  Icon(Icons.inventory_2_outlined,
+                      color: Colors.white.withOpacity(0.3), size: 50),
+                  const SizedBox(height: 10),
+                  Text(
+                    'لا توجد سجلات حالياً.\nاضغط على زر (+) في الأعلى للإضافة.',
+                    style: TextStyle(
+                        color: Colors.white.withOpacity(0.7), fontSize: 16),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+
+          // عرض صفوف البيانات
+          if (sortedEntries.isNotEmpty)
             ...sortedEntries.map((entry) {
               final key = entry.key;
               final item = entry.value;
@@ -730,45 +710,21 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
               String balanceText = '';
               String balanceStatus = '';
 
+              // تحديد البيانات حسب نوع الخدمة (زبون أم مورد)
               if (isCustomer && customerData.containsKey(key)) {
                 balance = customerData[key]!.balance;
                 mobile = customerData[key]!.mobile;
                 isLocked = customerData[key]!.isBalanceLocked;
-
-                // تحديد النص بناءً على قيمة الرصيد للزبائن
-                if (balance > 0) {
-                  balanceText = 'لنا';
-                  balanceStatus = 'لنا';
-                } else if (balance < 0) {
-                  balanceText = 'علينا';
-                  balanceStatus = 'علينا';
-                } else {
-                  balanceText = 'صفر';
-                  balanceStatus = 'صفر';
-                }
+                balanceText =
+                    balance > 0 ? 'لنا' : (balance < 0 ? 'علينا' : 'صفر');
+                balanceStatus = balanceText;
               } else if (isSupplier && supplierData.containsKey(key)) {
                 balance = supplierData[key]!.balance;
                 mobile = supplierData[key]!.mobile;
                 isLocked = supplierData[key]!.isBalanceLocked;
-
-                // تحديد النص بناءً على قيمة الرصيد للموردين
-                if (balance > 0) {
-                  balanceText = 'علينا';
-                  balanceStatus = 'علينا';
-                } else if (balance < 0) {
-                  balanceText = 'لنا';
-                  balanceStatus = 'لنا';
-                } else {
-                  balanceText = 'صفر';
-                  balanceStatus = 'صفر';
-                }
-              }
-
-              // تحقق من سلامة الرصيد
-              if (balance.isNaN || balance.isInfinite) {
-                balance = 0.0;
-                balanceText = 'خطأ';
-                balanceStatus = '⚠️';
+                balanceText =
+                    balance > 0 ? 'علينا' : (balance < 0 ? 'لنا' : 'صفر');
+                balanceStatus = balanceText;
               }
 
               return Container(
@@ -791,21 +747,16 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
                             icon: const Icon(Icons.delete_forever,
                                 color: Colors.red, size: 20),
                             onPressed: () {
-                              // التحقق من الرصيد قبل الحذف
                               if (balance != 0.0) {
-                                if (isCustomer) {
-                                  _showCannotDeleteDialog(
-                                      'زبون', item, balance);
-                                } else if (isSupplier) {
-                                  _showCannotDeleteDialog(
-                                      'مورد', item, balance);
-                                }
+                                _showCannotDeleteDialog(
+                                    isCustomer ? 'زبون' : 'مورد',
+                                    item,
+                                    balance);
                                 return;
                               }
-
-                              if (service is CustomerIndexService)
+                              if (isCustomer)
                                 _confirmDeleteCustomer(item);
-                              else if (service is SupplierIndexService)
+                              else if (isSupplier)
                                 _confirmDeleteSupplier(item);
                               else if (service is MaterialIndexService)
                                 _confirmDeleteMaterial(item);
@@ -823,9 +774,7 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
                               TextEditingController(text: item),
                           focusNode: _itemFocusNodes[item] ?? FocusNode(),
                           onSubmitted: (val) {
-                            // حفظ التعديل
                             _saveItemEdit(key, item);
-                            // التنقل إلى حقل الرصيد إذا كان موجوداً
                             if (hasExtraCols &&
                                 _balanceFocusNodes.containsKey(item)) {
                               FocusScope.of(context)
@@ -848,9 +797,7 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
                                   focusNode:
                                       _balanceFocusNodes[item] ?? FocusNode(),
                                   onSubmitted: (val) {
-                                    // حفظ التعديل
                                     _saveBalanceEdit(item);
-                                    // التنقل إلى حقل الموبايل
                                     if (_mobileFocusNodes.containsKey(item)) {
                                       FocusScope.of(context).requestFocus(
                                           _mobileFocusNodes[item]!);
@@ -860,12 +807,11 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
                                   isReadOnly: isLocked,
                                 ),
                                 if (isLocked)
-                                  Positioned(
-                                    left: 4,
-                                    top: 4,
-                                    child: Icon(Icons.lock,
-                                        size: 12, color: Colors.grey[600]),
-                                  ),
+                                  const Positioned(
+                                      left: 4,
+                                      top: 4,
+                                      child: Icon(Icons.lock,
+                                          size: 12, color: Colors.grey)),
                               ],
                             ),
                           ),
@@ -877,26 +823,16 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
                                 TextEditingController(text: mobile),
                             focusNode: _mobileFocusNodes[item] ?? FocusNode(),
                             onSubmitted: (val) {
-                              // حفظ التعديل
                               _saveMobileEdit(item);
-                              // التنقل إلى الاسم في الصف التالي
+                              // الانتقال للصف التالي
                               final currentIndex = sortedEntries
-                                  .indexWhere((entry) => entry.value == item);
-                              if (currentIndex != -1 &&
-                                  currentIndex < sortedEntries.length - 1) {
-                                final nextValue =
+                                  .indexWhere((e) => e.value == item);
+                              if (currentIndex < sortedEntries.length - 1) {
+                                final nextItem =
                                     sortedEntries[currentIndex + 1].value;
-                                if (_itemFocusNodes.containsKey(nextValue)) {
-                                  FocusScope.of(context).requestFocus(
-                                      _itemFocusNodes[nextValue]!);
-                                }
-                              } else if (sortedEntries.isNotEmpty) {
-                                // العودة إلى الصف الأول
-                                final firstValue = sortedEntries.first.value;
-                                if (_itemFocusNodes.containsKey(firstValue)) {
-                                  FocusScope.of(context).requestFocus(
-                                      _itemFocusNodes[firstValue]!);
-                                }
+                                if (_itemFocusNodes.containsKey(nextItem))
+                                  FocusScope.of(context)
+                                      .requestFocus(_itemFocusNodes[nextItem]!);
                               }
                             },
                             isNumeric: true,
@@ -912,14 +848,11 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
                                 color: _getBalanceStatusColor(balanceStatus),
                                 borderRadius: BorderRadius.circular(12),
                               ),
-                              child: Text(
-                                balanceText,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
+                              child: Text(balanceText,
+                                  style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white)),
                             ),
                           ),
                         ),
@@ -930,30 +863,28 @@ class _SellerManagementScreenState extends State<SellerManagementScreen> {
               );
             }).toList(),
 
-            // صف الملخص الإحصائي
-            if (hasExtraCols && sortedEntries.isNotEmpty)
-              Container(
-                margin: const EdgeInsets.only(top: 12),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.teal.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.teal, width: 1),
-                ),
-                child: Row(
-                  textDirection: TextDirection.rtl,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    _buildSummaryStat(
-                        'إجمالي العناصر', '${sortedEntries.length}'),
-                    _buildSummaryStat(
-                        'إجمالي الرصيد',
-                        _calculateTotalBalance(isCustomer, isSupplier)
-                            .toStringAsFixed(2)),
-                  ],
-                ),
+          // صف ملخص الإحصائيات في الأسفل
+          if (hasExtraCols && sortedEntries.isNotEmpty)
+            Container(
+              margin: const EdgeInsets.only(top: 12),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.teal.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.teal, width: 1),
               ),
-          ],
+              child: Row(
+                textDirection: TextDirection.rtl,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  _buildSummaryStat('إجمالي العدد', '${sortedEntries.length}'),
+                  _buildSummaryStat(
+                      'إجمالي الرصيد',
+                      _calculateTotalBalance(isCustomer, isSupplier)
+                          .toStringAsFixed(2)),
+                ],
+              ),
+            ),
         ],
       ),
     );

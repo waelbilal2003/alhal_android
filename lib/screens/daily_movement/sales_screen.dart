@@ -1393,29 +1393,33 @@ class _SalesScreenState extends State<SalesScreen> {
         ],
       ),
       body: _buildMainContent(),
-      floatingActionButton: Container(
-        margin: const EdgeInsets.only(bottom: 16, right: 16),
-        child: Material(
-          color: Colors.orange[700],
-          borderRadius: BorderRadius.circular(12),
-          elevation: 8,
-          child: InkWell(
-            onTap: _addNewRow,
-            borderRadius: BorderRadius.circular(12),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
-              child: const Text(
-                'إضافة',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
+      // التعديل هنا: إذا كان ارتفاع لوحة المفاتيح أكبر من 0، نعيد null لإخفاء الزر
+      floatingActionButton: MediaQuery.of(context).viewInsets.bottom > 0
+          ? null
+          : Container(
+              margin: const EdgeInsets.only(bottom: 16, right: 16),
+              child: Material(
+                color: Colors.orange[700],
+                borderRadius: BorderRadius.circular(12),
+                elevation: 8,
+                child: InkWell(
+                  onTap: _addNewRow,
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 28, vertical: 16),
+                    child: const Text(
+                      'إضافة',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
-        ),
-      ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startDocked,
       resizeToAvoidBottomInset: true,
     );

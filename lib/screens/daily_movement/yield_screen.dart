@@ -71,12 +71,8 @@ class _YieldScreenState extends State<YieldScreen> {
   @override
   void initState() {
     super.initState();
-    // تهيئة FocusNodes
     _loginSellerNameFocus = FocusNode();
     _loginPasswordFocus = FocusNode();
-
-    // تحقق إذا كان المستخدم مسجل دخول مسبقاً
-    _checkIfLoggedIn();
 
     _cashSalesController.addListener(() => setState(_calculateYield));
     _receiptsController.addListener(() => setState(_calculateYield));
@@ -84,25 +80,15 @@ class _YieldScreenState extends State<YieldScreen> {
     _paymentsController.addListener(() => setState(_calculateYield));
     _collectedController.addListener(() => setState(_calculateYield));
 
-    // تحميل القيمة المخزنة للمقبوض منه
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await Future.delayed(Duration(milliseconds: 100));
-      if (mounted) {
-        await _loadCollectedAmount();
+    // بدء عملية التحقق من الدخول والتحميل التلقائي
+    _checkIfLoggedIn().then((_) {
+      if (_isLoggedIn) {
+        _refreshData();
       }
     });
 
-    // تحميل البيانات تلقائياً إذا توفر التاريخ
-    if (widget.selectedDate != null) {
-      _loadCashPurchases();
-      _loadCashSales();
-      _loadBoxData();
-      _loadReceiptData();
-      // تحميل قائمة البائعين
-      WidgetsBinding.instance.addPostFrameCallback((_) async {
-        await _loadSellers();
-      });
-    }
+    // تحميل قائمة البائعين دائماً لشاشة الدخول
+    _loadSellers();
   }
 
   Future<void> _loadCashPurchases() async {
@@ -278,10 +264,8 @@ class _YieldScreenState extends State<YieldScreen> {
         final sellerName = _sellerNameController.text.trim();
         final password = _passwordController.text.trim();
 
-        // التحقق من بيانات الدخول
         if (accountsMap.containsKey(sellerName) &&
             accountsMap[sellerName] == password) {
-          // حفظ حالة تسجيل الدخول
           await prefs.setBool('isLoggedIn', true);
           await prefs.setString('currentSellerName', sellerName);
 
@@ -290,15 +274,8 @@ class _YieldScreenState extends State<YieldScreen> {
             _isLoading = false;
           });
 
-          // تحميل جميع البيانات بعد تسجيل الدخول
-          await _loadCollectedAmount();
-
-          if (widget.selectedDate != null) {
-            _loadCashPurchases();
-            _loadCashSales();
-            _loadBoxData();
-            _loadReceiptData();
-          }
+          // استدعاء التحديث التلقائي فور الدخول
+          _refreshData();
         } else {
           setState(() {
             _errorMessage = 'اسم البائع أو كلمة المرور غير صحيحة';
@@ -532,17 +509,11 @@ class _YieldScreenState extends State<YieldScreen> {
         centerTitle: true,
         backgroundColor: Colors.teal[600],
         foregroundColor: Colors.white,
+        // داخل AppBar في دالة _buildYieldScreen
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: () {
-              if (widget.selectedDate != null) {
-                _loadCashPurchases();
-                _loadCashSales();
-                _loadBoxData();
-                _loadReceiptData();
-              }
-            },
+            onPressed: _refreshData, // استخدام الدالة الموحدة
             tooltip: 'تحديث البيانات',
           ),
           IconButton(
@@ -1044,6 +1015,26 @@ class _YieldScreenState extends State<YieldScreen> {
         });
       } catch (e) {
         print('Error loading sellers: $e');
+      }
+    }
+  }
+
+  // دالة موحدة لتحديث كافة البيانات
+  Future<void> _refreshData() async {
+    if (widget.selectedDate != null && _isLoggedIn) {
+      // تشغيل جميع عمليات التحميل بالتوازي لسرعة الأداء
+      await Future.wait([
+        _loadCashPurchases(),
+        _loadCashSales(),
+        _loadBoxData(),
+        _loadReceiptData(),
+        _loadCollectedAmount(),
+        _loadSellers(),
+      ]);
+
+      if (mounted) {
+        _calculateYield();
+        setState(() {}); // تحديث الواجهة بعد جلب كل البيانات
       }
     }
   }

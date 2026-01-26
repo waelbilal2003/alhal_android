@@ -24,6 +24,37 @@ class _BaitScreenState extends State<BaitScreen> {
     _baitDataFuture = _baitService.getBaitDataForDate(widget.selectedDate);
   }
 
+  // دالة مساعدة لإنشاء خلية في رأس الجدول
+  Widget _buildHeaderCell(String text, int flex) {
+    return Expanded(
+      flex: flex,
+      child: Text(
+        text,
+        textAlign: TextAlign.center,
+        style: const TextStyle(
+          fontWeight: FontWeight.bold,
+          color: Colors.black87,
+        ),
+      ),
+    );
+  }
+
+  // دالة مساعدة لإنشاء خلية بيانات
+  Widget _buildDataCell(String text, int flex,
+      {Color color = Colors.black, FontWeight fontWeight = FontWeight.normal}) {
+    return Expanded(
+      flex: flex,
+      child: Text(
+        text,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          color: color,
+          fontWeight: fontWeight,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -57,56 +88,77 @@ class _BaitScreenState extends State<BaitScreen> {
 
             final baitList = snapshot.data!;
 
-            return SingleChildScrollView(
+            // --- التصميم الجديد للجدول ---
+            return Padding(
               padding: const EdgeInsets.all(8.0),
-              child: DataTable(
-                columnSpacing: 16.0,
-                headingRowColor: MaterialStateColor.resolveWith(
-                    (states) => Colors.teal.shade100),
-                columns: const [
-                  DataColumn(
-                      label: Text('المادة',
-                          style: TextStyle(fontWeight: FontWeight.bold))),
-                  DataColumn(
-                      label: Text('الاستلام',
-                          style: TextStyle(fontWeight: FontWeight.bold)),
-                      numeric: true),
-                  DataColumn(
-                      label: Text('المشتريات',
-                          style: TextStyle(fontWeight: FontWeight.bold)),
-                      numeric: true),
-                  DataColumn(
-                      label: Text('المبيعات',
-                          style: TextStyle(fontWeight: FontWeight.bold)),
-                      numeric: true),
-                  DataColumn(
-                      label: Text('البايت',
-                          style: TextStyle(fontWeight: FontWeight.bold)),
-                      numeric: true),
-                ],
-                rows: baitList.map((data) {
-                  return DataRow(
-                    cells: [
-                      DataCell(Text(data.materialName)),
-                      DataCell(Text(data.receiptsCount.toStringAsFixed(0))),
-                      DataCell(Text(data.purchasesCount.toStringAsFixed(0))),
-                      DataCell(Text(data.salesCount.toStringAsFixed(0))),
-                      DataCell(
-                        Text(
-                          data.baitValue.toStringAsFixed(0),
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: data.baitValue >= 0
-                                ? Colors.green.shade800
-                                : Colors.red.shade800,
-                          ),
+              child: Column(
+                children: [
+                  // 1. رأس الجدول
+                  Container(
+                    padding: const EdgeInsets.symmetric(vertical: 12.0),
+                    decoration: BoxDecoration(
+                        color: Colors.teal.shade100,
+                        borderRadius: const BorderRadius.only(
+                          topLeft: Radius.circular(8),
+                          topRight: Radius.circular(8),
                         ),
-                      ),
-                    ],
-                  );
-                }).toList(),
+                        border: Border.all(color: Colors.teal.shade200)),
+                    child: Row(
+                      children: [
+                        _buildHeaderCell('المادة', 3), // مساحة أكبر للمادة
+                        _buildHeaderCell('الاستلام', 2),
+                        _buildHeaderCell('المشتريات', 2),
+                        _buildHeaderCell('المبيعات', 2),
+                        _buildHeaderCell('البايت', 2),
+                      ],
+                    ),
+                  ),
+
+                  // 2. قائمة البيانات القابلة للتمرير
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: baitList.length,
+                      itemBuilder: (context, index) {
+                        final data = baitList[index];
+                        return Container(
+                          padding: const EdgeInsets.symmetric(vertical: 10.0),
+                          decoration: BoxDecoration(
+                            color: index.isEven
+                                ? Colors.white
+                                : Colors.grey.shade100,
+                            border: Border(
+                              bottom: BorderSide(color: Colors.grey.shade300),
+                              left: BorderSide(color: Colors.grey.shade300),
+                              right: BorderSide(color: Colors.grey.shade300),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              _buildDataCell(data.materialName, 3),
+                              _buildDataCell(
+                                  data.receiptsCount.toStringAsFixed(0), 2),
+                              _buildDataCell(
+                                  data.purchasesCount.toStringAsFixed(0), 2),
+                              _buildDataCell(
+                                  data.salesCount.toStringAsFixed(0), 2),
+                              _buildDataCell(
+                                data.baitValue.toStringAsFixed(0),
+                                2,
+                                color: data.baitValue >= 0
+                                    ? Colors.green.shade800
+                                    : Colors.red.shade800,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
               ),
             );
+            // --- نهاية التصميم الجديد ---
           },
         ),
       ),

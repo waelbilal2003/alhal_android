@@ -1052,37 +1052,40 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
         ],
       ),
       body: _buildMainContent(),
-      floatingActionButton: Container(
-        margin: const EdgeInsets.only(bottom: 16, right: 16),
-        child: Material(
-          color: Colors.blue[700],
-          borderRadius: BorderRadius.circular(12),
-          elevation: 8,
-          child: InkWell(
-            onTap: _addNewRow,
-            borderRadius: BorderRadius.circular(12),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
-              child: const Text(
-                'إضافة',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
+      // إخفاء زر الإضافة عند ظهور لوحة المفاتيح
+      floatingActionButton: MediaQuery.of(context).viewInsets.bottom > 0
+          ? null
+          : Container(
+              margin: const EdgeInsets.only(bottom: 16, right: 16),
+              child: Material(
+                color: Colors.blue[700],
+                borderRadius: BorderRadius.circular(12),
+                elevation: 8,
+                child: InkWell(
+                  onTap: _addNewRow,
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 28, vertical: 16),
+                    child: const Text(
+                      'إضافة',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
-        ),
-      ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startDocked,
-      resizeToAvoidBottomInset: false,
+      resizeToAvoidBottomInset: true, // تغيير من false إلى true
     );
   }
 
   Widget _buildMainContent() {
-    return _buildTableWithStickyHeader(); // فقط الجدول بدون Stack
-    // لأن الاقتراحات الآن تظهر في AppBar
+    return _buildTableWithStickyHeader();
   }
 
   Widget _buildTableWithStickyHeader() {

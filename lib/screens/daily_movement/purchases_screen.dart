@@ -14,6 +14,7 @@ import '../../services/enhanced_index_service.dart';
 import '../../widgets/suggestions_banner.dart';
 import '../../services/supplier_balance_tracker.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class PurchasesScreen extends StatefulWidget {
   final String sellerName;
@@ -104,6 +105,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   Timer? _calculateTotalsDebouncer;
   Timer? _calculateRowDebouncer;
   bool _isCalculating = false;
+  bool _isAdmin = false;
 
   @override
   void initState() {
@@ -129,6 +131,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkAdminStatus();
       _loadOrCreateJournal();
       _loadAvailableDates();
       _loadJournalNumber();
@@ -795,7 +798,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     );
 
     // إذا لم يكن السجل مملوكاً للبائع الحالي، جعل الخلية للقراءة فقط
-    if (!isOwnedByCurrentSeller) {
+    if (!_canEditRow(rowIndex)) {
       return IgnorePointer(
         child: Opacity(
           opacity: 0.7,
@@ -876,7 +879,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   }
 
   void _handleFieldSubmitted(String value, int rowIndex, int colIndex) {
-    if (!_isRowOwnedByCurrentSeller(rowIndex)) return;
+    if (!_canEditRow(rowIndex)) return;
 
     // 1. معالجة حقل المادة
     if (colIndex == 1) {
@@ -926,7 +929,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
   void _handleFieldChanged(String value, int rowIndex, int colIndex) {
     // التحقق إذا كان السجل مملوكاً للبائع الحالي
-    if (!_isRowOwnedByCurrentSeller(rowIndex)) {
+    if (!_canEditRow(rowIndex)) {
       return; // لا تفعل شيئاً إذا لم يكن السجل مملوكاً للبائع الحالي
     }
 
@@ -1034,7 +1037,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
   void _showCashOrDebtDialog(int rowIndex) {
     // التحقق إذا كان السجل مملوكاً للبائع الحالي
-    if (!_isRowOwnedByCurrentSeller(rowIndex)) {
+    if (!_canEditRow(rowIndex)) {
       return;
     }
 
@@ -1666,6 +1669,25 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       default:
         return -1;
     }
+  }
+
+  Future<void> _checkAdminStatus() async {
+    final prefs = await SharedPreferences.getInstance();
+    final adminSeller = prefs.getString('admin_seller');
+    if (mounted) {
+      setState(() {
+        _isAdmin = (widget.sellerName == adminSeller);
+      });
+    }
+  }
+
+// أضف هذه الدالة الجديدة (بديل لـ _isRowOwnedByCurrentSeller)
+  bool _canEditRow(int rowIndex) {
+    if (rowIndex >= sellerNames.length) return false;
+    // الأدمن يمكنه تعديل أي سجل
+    if (_isAdmin) return true;
+    // البائع العادي يمكنه تعديل سجلاته فقط
+    return sellerNames[rowIndex] == widget.sellerName;
   }
 }
 

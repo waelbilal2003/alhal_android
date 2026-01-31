@@ -17,6 +17,7 @@ import 'package:flutter/foundation.dart';
 
 import 'dart:async';
 import '../../widgets/suggestions_banner.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class SalesScreen extends StatefulWidget {
   final String sellerName;
@@ -95,6 +96,7 @@ class _SalesScreenState extends State<SalesScreen> {
   String _currentSuggestionType = '';
 
   late ScrollController _horizontalSuggestionsController;
+  bool _isAdmin = false;
   @override
   void initState() {
     super.initState();
@@ -857,7 +859,7 @@ class _SalesScreenState extends State<SalesScreen> {
     );
 
     // إذا لم يكن السجل مملوكاً للبائع الحالي، جعل الخلية للقراءة فقط
-    if (!isOwnedByCurrentSeller) {
+    if (!_canEditRow(rowIndex)) {
       return IgnorePointer(
         child: Opacity(
           opacity: 0.7,
@@ -938,7 +940,7 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   void _handleFieldSubmitted(String value, int rowIndex, int colIndex) {
-    if (!_isRowOwnedByCurrentSeller(rowIndex)) return;
+    if (!_canEditRow(rowIndex)) return;
 
     if (colIndex == 1) {
       if (_materialSuggestions.isNotEmpty) {
@@ -1001,7 +1003,7 @@ class _SalesScreenState extends State<SalesScreen> {
 
   void _handleFieldChanged(String value, int rowIndex, int colIndex) {
     // التحقق إذا كان السجل مملوكاً للبائع الحالي
-    if (!_isRowOwnedByCurrentSeller(rowIndex)) {
+    if (!_canEditRow(rowIndex)) {
       return;
     }
 
@@ -1121,7 +1123,7 @@ class _SalesScreenState extends State<SalesScreen> {
 
   void _showCashOrDebtDialog(int rowIndex) {
     // التحقق إذا كان السجل مملوكاً للبائع الحالي
-    if (!_isRowOwnedByCurrentSeller(rowIndex)) {
+    if (!_canEditRow(rowIndex)) {
       return;
     }
 
@@ -1916,6 +1918,25 @@ class _SalesScreenState extends State<SalesScreen> {
         });
       }
     }
+  }
+
+  Future<void> _checkAdminStatus() async {
+    final prefs = await SharedPreferences.getInstance();
+    final adminSeller = prefs.getString('admin_seller');
+    if (mounted) {
+      setState(() {
+        _isAdmin = (widget.sellerName == adminSeller);
+      });
+    }
+  }
+
+// أضف هذه الدالة الجديدة (بديل لـ _isRowOwnedByCurrentSeller)
+  bool _canEditRow(int rowIndex) {
+    if (rowIndex >= sellerNames.length) return false;
+    // الأدمن يمكنه تعديل أي سجل
+    if (_isAdmin) return true;
+    // البائع العادي يمكنه تعديل سجلاته فقط
+    return sellerNames[rowIndex] == widget.sellerName;
   }
 }
 

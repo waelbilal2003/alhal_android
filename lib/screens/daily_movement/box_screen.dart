@@ -11,6 +11,7 @@ import '../../services/supplier_index_service.dart';
 import '../../services/enhanced_index_service.dart';
 import '../../widgets/suggestions_banner.dart';
 import '../../services/supplier_balance_tracker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class BoxScreen extends StatefulWidget {
   final String sellerName;
@@ -91,6 +92,7 @@ class _BoxScreenState extends State<BoxScreen> {
   // متغير لتأخير حساب المجاميع (debouncing)
   Timer? _calculateTotalsDebouncer;
   bool _isCalculating = false;
+  bool _isAdmin = false;
   @override
   void initState() {
     super.initState();
@@ -112,6 +114,7 @@ class _BoxScreenState extends State<BoxScreen> {
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkAdminStatus();
       _loadOrCreateJournal();
       _loadAvailableDates();
       _loadJournalNumber();
@@ -553,7 +556,7 @@ class _BoxScreenState extends State<BoxScreen> {
       inputFormatters: null,
     );
 
-    if (!isOwnedByCurrentSeller) {
+    if (!_canEditRow(rowIndex)) {
       return IgnorePointer(
         child: Opacity(
           opacity: 0.7,
@@ -899,7 +902,7 @@ class _BoxScreenState extends State<BoxScreen> {
   }
 
   void _handleFieldSubmitted(String value, int rowIndex, int colIndex) {
-    if (!_isRowOwnedByCurrentSeller(rowIndex)) {
+    if (!_canEditRow(rowIndex)) {
       return;
     }
 
@@ -947,7 +950,7 @@ class _BoxScreenState extends State<BoxScreen> {
   }
 
   void _handleFieldChanged(String value, int rowIndex, int colIndex) {
-    if (!_isRowOwnedByCurrentSeller(rowIndex)) {
+    if (!_canEditRow(rowIndex)) {
       return;
     }
 
@@ -1663,6 +1666,25 @@ class _BoxScreenState extends State<BoxScreen> {
       default:
         return -1;
     }
+  }
+
+  Future<void> _checkAdminStatus() async {
+    final prefs = await SharedPreferences.getInstance();
+    final adminSeller = prefs.getString('admin_seller');
+    if (mounted) {
+      setState(() {
+        _isAdmin = (widget.sellerName == adminSeller);
+      });
+    }
+  }
+
+// أضف هذه الدالة الجديدة (بديل لـ _isRowOwnedByCurrentSeller)
+  bool _canEditRow(int rowIndex) {
+    if (rowIndex >= sellerNames.length) return false;
+    // الأدمن يمكنه تعديل أي سجل
+    if (_isAdmin) return true;
+    // البائع العادي يمكنه تعديل سجلاته فقط
+    return sellerNames[rowIndex] == widget.sellerName;
   }
 }
 

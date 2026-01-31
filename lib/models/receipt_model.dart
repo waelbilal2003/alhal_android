@@ -5,9 +5,9 @@ class Receipt {
   final String count;
   final String packaging;
   final String standing;
-  final String payment; // حقل الدفعة
-  final String load; // حقل الحمولة
-  final String sellerName; // إضافة اسم البائع لكل سجل (صف)
+  final String payment;
+  final String load;
+  final String sellerName;
 
   Receipt({
     required this.serialNumber,
@@ -21,7 +21,31 @@ class Receipt {
     required this.sellerName,
   });
 
-  // تحويل من JSON إلى كائن
+  // *** إضافة دالة copyWith هنا ***
+  Receipt copyWith({
+    String? serialNumber,
+    String? material,
+    String? affiliation,
+    String? count,
+    String? packaging,
+    String? standing,
+    String? payment,
+    String? load,
+    String? sellerName,
+  }) {
+    return Receipt(
+      serialNumber: serialNumber ?? this.serialNumber,
+      material: material ?? this.material,
+      affiliation: affiliation ?? this.affiliation,
+      count: count ?? this.count,
+      packaging: packaging ?? this.packaging,
+      standing: standing ?? this.standing,
+      payment: payment ?? this.payment,
+      load: load ?? this.load,
+      sellerName: sellerName ?? this.sellerName,
+    );
+  }
+
   factory Receipt.fromJson(Map<String, dynamic> json) {
     return Receipt(
       serialNumber: json['serialNumber'] ?? '',
@@ -36,7 +60,6 @@ class Receipt {
     );
   }
 
-  // تحويل من كائن إلى JSON
   Map<String, dynamic> toJson() {
     return {
       'serialNumber': serialNumber,
@@ -71,7 +94,6 @@ class ReceiptDocument {
     required this.totals,
   });
 
-  // تحويل من JSON إلى كائن
   factory ReceiptDocument.fromJson(Map<String, dynamic> json) {
     return ReceiptDocument(
       recordNumber: json['recordNumber'] ?? '',
@@ -87,7 +109,6 @@ class ReceiptDocument {
     );
   }
 
-  // تحويل من كائن إلى JSON
   Map<String, dynamic> toJson() {
     return {
       'recordNumber': recordNumber,

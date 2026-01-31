@@ -26,11 +26,11 @@ class SalesStorageService {
     return 'sales-$formattedDate.json'; // فقط sales بدلاً من purchases
   }
 
-  // حفظ مستند المبيعات (ملف واحد لكل تاريخ) - مثل المشتريات
   Future<bool> saveSalesDocument(SalesDocument document) async {
     try {
       final basePath = await _getBasePath();
-      final folderPath = '$basePath/AlhalJournals';
+      //  التعديل: تغيير اسم المجلد إلى SalesJournals
+      final folderPath = '$basePath/SalesJournals';
 
       final folder = Directory(folderPath);
       if (!await folder.exists()) {
@@ -89,35 +89,12 @@ class SalesStorageService {
     }
   }
 
-  // دالة مساعدة لحساب مجاميع المبيعات
-  Map<String, String> _calculateSalesTotals(List<Sale> sales) {
-    double totalCount = 0;
-    double totalBase = 0;
-    double totalNet = 0;
-    double totalGrand = 0;
-
-    for (var sale in sales) {
-      try {
-        totalCount += double.tryParse(sale.count) ?? 0;
-        totalBase += double.tryParse(sale.standing) ?? 0;
-        totalNet += double.tryParse(sale.net) ?? 0;
-        totalGrand += double.tryParse(sale.total) ?? 0;
-      } catch (e) {}
-    }
-
-    return {
-      'totalCount': totalCount.toStringAsFixed(0),
-      'totalBase': totalBase.toStringAsFixed(2),
-      'totalNet': totalNet.toStringAsFixed(2),
-      'totalGrand': totalGrand.toStringAsFixed(2),
-    };
-  }
-
   // قراءة مستند المبيعات
   Future<SalesDocument?> loadSalesDocument(String date) async {
     try {
       final basePath = await _getBasePath();
-      final folderPath = '$basePath/AlhalJournals';
+      //  التعديل: تغيير اسم المجلد إلى SalesJournals
+      final folderPath = '$basePath/SalesJournals';
       final fileName = _createFileName(date);
       final filePath = '$folderPath/$fileName';
 
@@ -144,6 +121,134 @@ class SalesStorageService {
       }
       return null;
     }
+  }
+
+  // الحصول على التواريخ المتاحة مع أرقام اليوميات
+  Future<List<Map<String, String>>> getAvailableDatesWithNumbers() async {
+    try {
+      final basePath = await _getBasePath();
+      //  التعديل: تغيير اسم المجلد إلى SalesJournals
+      final folderPath = '$basePath/SalesJournals';
+
+      final folder = Directory(folderPath);
+      if (!await folder.exists()) {
+        return [];
+      }
+
+      final files = await folder.list().toList();
+      final datesWithNumbers = <Map<String, String>>[];
+
+      for (var file in files) {
+        if (file is File && file.path.endsWith('.json')) {
+          try {
+            final fileName = file.path.split('/').last;
+
+            // التأكد من أن الملف هو لـ SALES فقط
+            if (fileName.startsWith('sales-')) {
+              final jsonString = await file.readAsString();
+              final jsonMap = jsonDecode(jsonString) as Map<String, dynamic>;
+              final date = jsonMap['date']?.toString() ?? '';
+              final journalNumber = jsonMap['recordNumber']?.toString() ?? '1';
+
+              if (date.isNotEmpty) {
+                datesWithNumbers.add({
+                  'date': date,
+                  'journalNumber': journalNumber,
+                  'fileName': fileName,
+                });
+              }
+            }
+          } catch (e) {
+            if (kDebugMode) {
+              debugPrint('❌ خطأ في قراءة ملف: ${file.path}, $e');
+            }
+          }
+        }
+      }
+
+      datesWithNumbers.sort((a, b) {
+        try {
+          final dateA = _parseDate(a['date'] ?? '');
+          final dateB = _parseDate(b['date'] ?? '');
+          return dateB.compareTo(dateA);
+        } catch (e) {
+          return 0;
+        }
+      });
+
+      return datesWithNumbers;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ خطأ في قراءة التواريخ: $e');
+      }
+      return [];
+    }
+  }
+
+  Future<String> getNextJournalNumber() async {
+    try {
+      final basePath = await _getBasePath();
+      //  التعديل: تغيير اسم المجلد إلى SalesJournals
+      final folderPath = '$basePath/SalesJournals';
+      final folder = Directory(folderPath);
+
+      if (!await folder.exists()) {
+        return '1'; // أول يومية على الإطلاق
+      }
+
+      final files = await folder.list().toList();
+      int maxJournalNumber = 0;
+
+      for (var file in files) {
+        if (file is File &&
+            file.path.split('/').last.startsWith('sales-') &&
+            file.path.endsWith('.json')) {
+          try {
+            final jsonString = await file.readAsString();
+            final jsonMap = jsonDecode(jsonString) as Map<String, dynamic>;
+            final journalNumber =
+                int.tryParse(jsonMap['recordNumber'] ?? '0') ?? 0;
+
+            if (journalNumber > maxJournalNumber) {
+              maxJournalNumber = journalNumber;
+            }
+          } catch (e) {
+            // تجاهل الملفات التالفة
+          }
+        }
+      }
+
+      return (maxJournalNumber + 1).toString();
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ خطأ في الحصول على رقم يومية المبيعات التالي: $e');
+      }
+      return '1';
+    }
+  }
+
+  // دالة مساعدة لحساب مجاميع المبيعات
+  Map<String, String> _calculateSalesTotals(List<Sale> sales) {
+    double totalCount = 0;
+    double totalBase = 0;
+    double totalNet = 0;
+    double totalGrand = 0;
+
+    for (var sale in sales) {
+      try {
+        totalCount += double.tryParse(sale.count) ?? 0;
+        totalBase += double.tryParse(sale.standing) ?? 0;
+        totalNet += double.tryParse(sale.net) ?? 0;
+        totalGrand += double.tryParse(sale.total) ?? 0;
+      } catch (e) {}
+    }
+
+    return {
+      'totalCount': totalCount.toStringAsFixed(0),
+      'totalBase': totalBase.toStringAsFixed(2),
+      'totalNet': totalNet.toStringAsFixed(2),
+      'totalGrand': totalGrand.toStringAsFixed(2),
+    };
   }
 
   // الحصول على قائمة أرقام السجلات المتاحة لتاريخ معين
@@ -306,70 +411,6 @@ class SalesStorageService {
     return totalSales;
   }
 
-  // الحصول على التواريخ المتاحة مع أرقام اليوميات - مثل المشتريات بالضبط
-  Future<List<Map<String, String>>> getAvailableDatesWithNumbers() async {
-    try {
-      final basePath = await _getBasePath();
-      final folderPath = '$basePath/AlhalJournals'; // نفس مجلد المشتريات
-
-      final folder = Directory(folderPath);
-      if (!await folder.exists()) {
-        return [];
-      }
-
-      final files = await folder.list().toList();
-      final datesWithNumbers = <Map<String, String>>[];
-
-      for (var file in files) {
-        if (file is File && file.path.endsWith('.json')) {
-          try {
-            final fileName = file.path.split('/').last;
-
-            // التعديل الهام: التأكد من أن الملف هو لـ SALES فقط
-            if (fileName.startsWith('sales-')) {
-              // فقط ملفات المبيعات
-              final jsonString = await file.readAsString();
-              final jsonMap = jsonDecode(jsonString) as Map<String, dynamic>;
-              final date = jsonMap['date']?.toString() ?? '';
-              final journalNumber = jsonMap['recordNumber']?.toString() ?? '1';
-
-              if (date.isNotEmpty) {
-                datesWithNumbers.add({
-                  'date': date,
-                  'journalNumber': journalNumber,
-                  'fileName': fileName,
-                });
-              }
-            }
-          } catch (e) {
-            if (kDebugMode) {
-              debugPrint('❌ خطأ في قراءة ملف: ${file.path}, $e');
-            }
-          }
-        }
-      }
-
-      // ترتيب حسب التاريخ (من الأحدث إلى الأقدم)
-      datesWithNumbers.sort((a, b) {
-        // تحويل التواريخ من صيغة dd/MM/yyyy إلى DateTime للمقارنة
-        try {
-          final dateA = _parseDate(a['date'] ?? '');
-          final dateB = _parseDate(b['date'] ?? '');
-          return dateB.compareTo(dateA); // ترتيب تنازلي (من الأحدث)
-        } catch (e) {
-          return 0;
-        }
-      });
-
-      return datesWithNumbers;
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ خطأ في قراءة التواريخ: $e');
-      }
-      return [];
-    }
-  }
-
 // دالة مساعدة لتحويل التاريخ من صيغة dd/MM/yyyy إلى DateTime
   DateTime _parseDate(String dateString) {
     final parts = dateString.split('/');
@@ -380,48 +421,6 @@ class SalesStorageService {
       return DateTime(year, month, day);
     }
     return DateTime.now();
-  }
-
-  Future<String> getNextJournalNumber() async {
-    try {
-      final basePath = await _getBasePath();
-      final folderPath = '$basePath/AlhalJournals';
-      final folder = Directory(folderPath);
-
-      if (!await folder.exists()) {
-        return '1'; // أول يومية على الإطلاق
-      }
-
-      final files = await folder.list().toList();
-      int maxJournalNumber = 0;
-
-      for (var file in files) {
-        // البحث فقط في ملفات المبيعات لتجنب التضارب مع أرقام المشتريات
-        if (file is File &&
-            file.path.split('/').last.startsWith('sales-') &&
-            file.path.endsWith('.json')) {
-          try {
-            final jsonString = await file.readAsString();
-            final jsonMap = jsonDecode(jsonString) as Map<String, dynamic>;
-            final journalNumber =
-                int.tryParse(jsonMap['recordNumber'] ?? '0') ?? 0;
-
-            if (journalNumber > maxJournalNumber) {
-              maxJournalNumber = journalNumber;
-            }
-          } catch (e) {
-            // تجاهل الملفات التالفة
-          }
-        }
-      }
-
-      return (maxJournalNumber + 1).toString();
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ خطأ في الحصول على رقم يومية المبيعات التالي: $e');
-      }
-      return '1';
-    }
   }
 
 // 2. أضف هذه الدالة الجديدة (للحصول على رقم اليومية لتاريخ معين إذا كانت موجودة)

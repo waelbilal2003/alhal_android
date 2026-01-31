@@ -5,7 +5,7 @@ class BoxTransaction {
   final String accountType;
   final String accountName;
   final String notes;
-  final String sellerName; // إضافة اسم البائع لكل سجل (صف)
+  final String sellerName;
 
   BoxTransaction({
     required this.serialNumber,
@@ -17,7 +17,27 @@ class BoxTransaction {
     required this.sellerName,
   });
 
-  // تحويل من JSON إلى كائن
+  // *** إضافة دالة copyWith هنا ***
+  BoxTransaction copyWith({
+    String? serialNumber,
+    String? received,
+    String? paid,
+    String? accountType,
+    String? accountName,
+    String? notes,
+    String? sellerName,
+  }) {
+    return BoxTransaction(
+      serialNumber: serialNumber ?? this.serialNumber,
+      received: received ?? this.received,
+      paid: paid ?? this.paid,
+      accountType: accountType ?? this.accountType,
+      accountName: accountName ?? this.accountName,
+      notes: notes ?? this.notes,
+      sellerName: sellerName ?? this.sellerName,
+    );
+  }
+
   factory BoxTransaction.fromJson(Map<String, dynamic> json) {
     return BoxTransaction(
       serialNumber: json['serialNumber'] ?? '',
@@ -30,7 +50,6 @@ class BoxTransaction {
     );
   }
 
-  // تحويل من كائن إلى JSON
   Map<String, dynamic> toJson() {
     return {
       'serialNumber': serialNumber,
@@ -63,7 +82,6 @@ class BoxDocument {
     required this.totals,
   });
 
-  // تحويل من JSON إلى كائن
   factory BoxDocument.fromJson(Map<String, dynamic> json) {
     return BoxDocument(
       recordNumber: json['recordNumber'] ?? '',
@@ -80,7 +98,6 @@ class BoxDocument {
     );
   }
 
-  // تحويل من كائن إلى JSON
   Map<String, dynamic> toJson() {
     return {
       'recordNumber': recordNumber,

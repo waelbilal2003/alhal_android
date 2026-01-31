@@ -15,6 +15,7 @@ import '../../widgets/common_dialogs.dart' as CommonDialogs;
 import '../../widgets/suggestions_banner.dart';
 import '../../services/supplier_balance_tracker.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ReceiptScreen extends StatefulWidget {
   final String sellerName;
@@ -98,6 +99,8 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
   // متغير لتأخير حساب المجاميع (debouncing)
   Timer? _calculateTotalsDebouncer;
   bool _isCalculating = false;
+  bool _isAdmin = false;
+
   @override
   void initState() {
     super.initState();
@@ -122,6 +125,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkAdminStatus();
       _loadOrCreateJournal();
       _loadAvailableDates();
       _loadJournalNumber();
@@ -706,7 +710,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     );
 
     // إذا لم يكن السجل مملوكاً للبائع الحالي، جعل الخلية للقراءة فقط
-    if (!isOwnedByCurrentSeller) {
+    if (!_canEditRow(rowIndex)) {
       return IgnorePointer(
         child: Opacity(
           opacity: 0.7,
@@ -787,7 +791,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
   }
 
   void _handleFieldSubmitted(String value, int rowIndex, int colIndex) {
-    if (!_isRowOwnedByCurrentSeller(rowIndex)) return;
+    if (!_canEditRow(rowIndex)) return;
 
     if (colIndex == 1) {
       if (_materialSuggestions.isNotEmpty) {
@@ -828,7 +832,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
 
   void _handleFieldChanged(String value, int rowIndex, int colIndex) {
     // التحقق إذا كان السجل مملوكاً للبائع الحالي
-    if (!_isRowOwnedByCurrentSeller(rowIndex)) {
+    if (!_canEditRow(rowIndex)) {
       return;
     }
 
@@ -871,12 +875,6 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
         ),
       ),
     );
-  }
-
-  // التحقق إذا كان السجل مملوكاً للبائع الحالي
-  bool _isRowOwnedByCurrentSeller(int rowIndex) {
-    if (rowIndex >= sellerNames.length) return false;
-    return sellerNames[rowIndex] == widget.sellerName;
   }
 
   @override
@@ -1129,6 +1127,8 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     );
   }
 
+  // In receipt_screen.dart -> _ReceiptScreenState
+
   Future<void> _saveCurrentRecord({bool silent = false}) async {
     if (_isSaving) return;
 
@@ -1141,28 +1141,32 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
       return;
     }
 
+    // 1. تجميع سجلات البائع الحالي فقط
     final currentSellerReceipts = <Receipt>[];
     for (int i = 0; i < rowControllers.length; i++) {
-      final controllers = rowControllers[i];
-      if (controllers[1].text.isNotEmpty || controllers[3].text.isNotEmpty) {
-        currentSellerReceipts.add(Receipt(
-          serialNumber: controllers[0].text,
-          material: controllers[1].text,
-          affiliation: controllers[2].text,
-          count: controllers[3].text,
-          packaging: controllers[4].text,
-          standing: controllers[5].text,
-          payment: controllers[6].text,
-          load: controllers[7].text,
-          sellerName: sellerNames[i],
-        ));
+      // فقط السجلات التي يملكها البائع الحالي
+      if (sellerNames[i] == widget.sellerName) {
+        final controllers = rowControllers[i];
+        if (controllers[1].text.isNotEmpty || controllers[3].text.isNotEmpty) {
+          currentSellerReceipts.add(Receipt(
+            serialNumber: controllers[0].text,
+            material: controllers[1].text,
+            affiliation: controllers[2].text,
+            count: controllers[3].text,
+            packaging: controllers[4].text,
+            standing: controllers[5].text,
+            payment: controllers[6].text,
+            load: controllers[7].text,
+            sellerName: sellerNames[i], // استخدام اسم البائع المحفوظ
+          ));
+        }
       }
     }
 
     if (currentSellerReceipts.isEmpty && !silent) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            content: Text('لا توجد سجلات مضافة للحفظ'),
+            content: Text('لا توجد سجلات جديدة أو معدلة للحفظ'),
             backgroundColor: Colors.orange),
       );
       return;
@@ -1170,75 +1174,54 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
 
     setState(() => _isSaving = true);
 
-    // ============ منطق حساب الفرق للموردين (الجزء الجديد والمهم) ============
+    // 2. حساب صافي التغير في أرصدة الموردين (منطق صحيح)
     Map<String, double> supplierBalanceChanges = {};
-
-    // 1. تحميل السجل القديم للحصول على القيم السابقة
     final existingDocument =
         await _storageService.loadReceiptDocumentForDate(widget.selectedDate);
 
-    // 2. طرح القيم القديمة (عن طريق إضافتها مرة أخرى للرصيد لإلغاء تأثيرها)
+    // طرح القيم القديمة للبائع الحالي فقط
     if (existingDocument != null) {
       for (var receipt in existingDocument.receipts) {
         if (receipt.sellerName == widget.sellerName &&
             receipt.affiliation.isNotEmpty) {
-          double oldPayment = double.tryParse(receipt.payment) ?? 0;
-          double oldLoad = double.tryParse(receipt.load) ?? 0;
-          double oldDeduction = oldPayment + oldLoad;
-
-          // نطرح القيمة السالبة (مما يعني إضافة) لإلغاء الخصم القديم
+          double oldDeduction = (double.tryParse(receipt.payment) ?? 0) +
+              (double.tryParse(receipt.load) ?? 0);
+          // لإلغاء الخصم، نعيد إضافة القيمة
           supplierBalanceChanges[receipt.affiliation] =
               (supplierBalanceChanges[receipt.affiliation] ?? 0) + oldDeduction;
         }
       }
     }
 
-    // 3. إضافة القيم الجديدة (عن طريق طرحها من الرصيد)
+    // إضافة تأثير القيم الجديدة للبائع الحالي
     for (var receipt in currentSellerReceipts) {
       if (receipt.affiliation.isNotEmpty) {
-        double newPayment = double.tryParse(receipt.payment) ?? 0;
-        double newLoad = double.tryParse(receipt.load) ?? 0;
-        double newDeduction = newPayment + newLoad;
-
+        double newDeduction = (double.tryParse(receipt.payment) ?? 0) +
+            (double.tryParse(receipt.load) ?? 0);
+        // نطبق الخصم الجديد بالطرح
         supplierBalanceChanges[receipt.affiliation] =
             (supplierBalanceChanges[receipt.affiliation] ?? 0) - newDeduction;
       }
     }
-    // =======================================================================
 
-    String journalNumber = serialNumber;
-    if (journalNumber.isEmpty || journalNumber == '1') {
-      final doc =
-          await _storageService.loadReceiptDocumentForDate(widget.selectedDate);
-      if (doc == null) {
-        journalNumber = await _storageService.getNextJournalNumber();
-      } else {
-        journalNumber = doc.recordNumber;
-      }
-    }
-
-    final document = ReceiptDocument(
-      recordNumber: journalNumber,
+    // 3. إنشاء المستند الذي سيتم تمريره لدالة الحفظ
+    // هذه الدالة ستقوم بالدمج بنفسها
+    final documentToSave = ReceiptDocument(
+      recordNumber: serialNumber, // سيتم تحديثه داخل دالة الحفظ
       date: widget.selectedDate,
-      sellerName: widget.sellerName,
+      sellerName: widget.sellerName, // اسم آخر من قام بالتعديل
       storeName: widget.storeName,
       dayName: dayName,
-      receipts: currentSellerReceipts,
-      totals: {
-        'totalCount': totalCountController.text,
-        'totalStanding': totalStandingController.text,
-        'totalPayment': totalPaymentController.text,
-        'totalLoad': totalLoadController.text,
-      },
+      receipts: currentSellerReceipts, // نمرر سجلات البائع الحالي فقط
+      totals: {}, // المجاميع الكلية سيتم حسابها داخل دالة الحفظ
     );
 
-    final success = await _storageService.saveReceiptDocument(document);
+    final success = await _storageService.saveReceiptDocument(documentToSave);
 
     if (success) {
-      // 4. تطبيق الفرق الصافي على أرصدة الموردين
+      // تطبيق التغييرات على أرصدة الموردين
       for (var entry in supplierBalanceChanges.entries) {
         if (entry.value != 0) {
-          // نستخدم entry.value مباشرة لأنها تحتوي على الإشارة الصحيحة (سالبة أو موجبة)
           await _supplierIndexService.updateSupplierBalance(
               entry.key, entry.value);
           if (kDebugMode) {
@@ -1248,9 +1231,10 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
         }
       }
 
+      // إعادة تحميل البيانات المدمجة بعد الحفظ لعرضها بشكل صحيح
+      await _loadOrCreateJournal();
       setState(() {
         _hasUnsavedChanges = false;
-        serialNumber = journalNumber;
       });
     }
 
@@ -1382,6 +1366,25 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
         filePath: filePath,
       );
     }
+  }
+
+  Future<void> _checkAdminStatus() async {
+    final prefs = await SharedPreferences.getInstance();
+    final adminSeller = prefs.getString('admin_seller');
+    if (mounted) {
+      setState(() {
+        _isAdmin = (widget.sellerName == adminSeller);
+      });
+    }
+  }
+
+// أضف هذه الدالة الجديدة (بديل لـ _isRowOwnedByCurrentSeller)
+  bool _canEditRow(int rowIndex) {
+    if (rowIndex >= sellerNames.length) return false;
+    // الأدمن يمكنه تعديل أي سجل
+    if (_isAdmin) return true;
+    // البائع العادي يمكنه تعديل سجلاته فقط
+    return sellerNames[rowIndex] == widget.sellerName;
   }
 }
 

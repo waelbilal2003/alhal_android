@@ -36,46 +36,43 @@ class ReceiptStorageService {
       final filePath = '$folderPath/$fileName';
       final file = File(filePath);
 
-      ReceiptDocument? existingDocument;
-      if (await file.exists()) {
-        final jsonString = await file.readAsString();
-        final jsonMap = jsonDecode(jsonString) as Map<String, dynamic>;
-        existingDocument = ReceiptDocument.fromJson(jsonMap);
+      // منطق جديد: لا ندمج، بل نكتب فوق الملف مباشرة بالبيانات الجديدة
+      // شاشة الإدخال مسؤولة عن إرسال القائمة الكاملة والمحدثة للسجلات
+
+      final String finalRecordNumber;
+      // إذا كان المستند المُرسَل له رقم سجل، نستخدمه. وإلا، نتحقق من الملف أو ننشئ رقماً جديداً.
+      if (document.recordNumber.isNotEmpty && document.recordNumber != '1') {
+        finalRecordNumber = document.recordNumber;
+      } else {
+        if (await file.exists()) {
+          final jsonString = await file.readAsString();
+          final jsonMap = jsonDecode(jsonString) as Map<String, dynamic>;
+          final existingDoc = ReceiptDocument.fromJson(jsonMap);
+          finalRecordNumber = existingDoc.recordNumber;
+        } else {
+          finalRecordNumber = await getNextJournalNumber();
+        }
       }
 
-      List<Receipt> mergedReceipts = [];
-      if (existingDocument != null) {
-        mergedReceipts.addAll(existingDocument.receipts
-            .where((r) => r.sellerName != document.sellerName));
-      }
-      mergedReceipts.addAll(document.receipts);
-
-      for (int i = 0; i < mergedReceipts.length; i++) {
-        mergedReceipts[i] =
-            mergedReceipts[i].copyWith(serialNumber: (i + 1).toString());
-      }
-
+      // إعادة حساب المجاميع النهائية قبل الحفظ
       double totalCount = 0;
       double totalStanding = 0;
       double totalPayment = 0;
       double totalLoad = 0;
-      for (var receipt in mergedReceipts) {
+      for (var receipt in document.receipts) {
         totalCount += double.tryParse(receipt.count) ?? 0;
         totalStanding += double.tryParse(receipt.standing) ?? 0;
         totalPayment += double.tryParse(receipt.payment) ?? 0;
         totalLoad += double.tryParse(receipt.load) ?? 0;
       }
 
-      final String finalRecordNumber =
-          existingDocument?.recordNumber ?? await getNextJournalNumber();
-
-      final updatedDocument = ReceiptDocument(
+      final documentToSave = ReceiptDocument(
         recordNumber: finalRecordNumber,
         date: document.date,
-        sellerName: document.sellerName,
+        sellerName: document.sellerName, // اسم آخر بائع قام بالحفظ
         storeName: document.storeName,
         dayName: document.dayName,
-        receipts: mergedReceipts,
+        receipts: document.receipts, // القائمة الكاملة من شاشة الإدخال
         totals: {
           'totalCount': totalCount.toStringAsFixed(0),
           'totalStanding': totalStanding.toStringAsFixed(2),
@@ -84,11 +81,11 @@ class ReceiptStorageService {
         },
       );
 
-      final jsonString = jsonEncode(updatedDocument.toJson());
+      final jsonString = jsonEncode(documentToSave.toJson());
       await file.writeAsString(jsonString);
 
       if (kDebugMode) {
-        debugPrint('✅ تم حفظ ملف الاستلام المدمج: $filePath');
+        debugPrint('✅ تم استبدال ملف الاستلام بنجاح: $filePath');
       }
       return true;
     } catch (e) {

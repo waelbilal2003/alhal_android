@@ -1127,54 +1127,53 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     );
   }
 
-  // In receipt_screen.dart -> _ReceiptScreenState
-
   Future<void> _saveCurrentRecord({bool silent = false}) async {
     if (_isSaving) return;
 
-    if (rowControllers.isEmpty && !silent) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('لا توجد بيانات للحفظ'),
-            backgroundColor: Colors.orange),
-      );
-      return;
-    }
+    // التأكد من عدم وجود تغييرات غير محفوظة إذا لم يكن هناك شيء للحفظ
+    final hasActualContent = rowControllers.any((controllers) =>
+        controllers[1].text.isNotEmpty || controllers[3].text.isNotEmpty);
 
-    // 1. تجميع سجلات البائع الحالي فقط
-    final currentSellerReceipts = <Receipt>[];
-    for (int i = 0; i < rowControllers.length; i++) {
-      // فقط السجلات التي يملكها البائع الحالي
-      if (sellerNames[i] == widget.sellerName) {
-        final controllers = rowControllers[i];
-        if (controllers[1].text.isNotEmpty || controllers[3].text.isNotEmpty) {
-          currentSellerReceipts.add(Receipt(
-            serialNumber: controllers[0].text,
-            material: controllers[1].text,
-            affiliation: controllers[2].text,
-            count: controllers[3].text,
-            packaging: controllers[4].text,
-            standing: controllers[5].text,
-            payment: controllers[6].text,
-            load: controllers[7].text,
-            sellerName: sellerNames[i], // استخدام اسم البائع المحفوظ
-          ));
-        }
+    if (!hasActualContent) {
+      if (!silent) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('لا توجد بيانات للحفظ'),
+              backgroundColor: Colors.orange),
+        );
       }
-    }
-
-    if (currentSellerReceipts.isEmpty && !silent) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('لا توجد سجلات جديدة أو معدلة للحفظ'),
-            backgroundColor: Colors.orange),
-      );
       return;
     }
 
     setState(() => _isSaving = true);
 
-    // 2. حساب صافي التغير في أرصدة الموردين (منطق صحيح)
+    // =========================================================================
+    // الخطوة 1: بناء القائمة الكاملة والحالية من السجلات من واجهة المستخدم
+    // هذا هو "مصدر الحقيقة" الجديد الذي سنحفظه.
+    // =========================================================================
+    final List<Receipt> allReceiptsFromUI = [];
+    for (int i = 0; i < rowControllers.length; i++) {
+      final controllers = rowControllers[i];
+      // نضيف السجل فقط إذا كان يحتوي على بيانات (مادة أو عدد)
+      if (controllers[1].text.isNotEmpty || controllers[3].text.isNotEmpty) {
+        allReceiptsFromUI.add(Receipt(
+          serialNumber: (i + 1).toString(), // إعادة ترقيم لضمان التسلسل
+          material: controllers[1].text,
+          affiliation: controllers[2].text,
+          count: controllers[3].text,
+          packaging: controllers[4].text,
+          standing: controllers[5].text,
+          payment: controllers[6].text,
+          load: controllers[7].text,
+          sellerName: sellerNames[i], // الأهم: الحفاظ على المالك الأصلي للسجل
+        ));
+      }
+    }
+
+    // =========================================================================
+    // الخطوة 2: حساب التغير في الأرصدة (هذا المنطق لم يتغير وهو صحيح)
+    // يحسب الفرق فقط للسجلات التي يملكها البائع الحالي.
+    // =========================================================================
     Map<String, double> supplierBalanceChanges = {};
     final existingDocument =
         await _storageService.loadReceiptDocumentForDate(widget.selectedDate);
@@ -1186,7 +1185,6 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
             receipt.affiliation.isNotEmpty) {
           double oldDeduction = (double.tryParse(receipt.payment) ?? 0) +
               (double.tryParse(receipt.load) ?? 0);
-          // لإلغاء الخصم، نعيد إضافة القيمة
           supplierBalanceChanges[receipt.affiliation] =
               (supplierBalanceChanges[receipt.affiliation] ?? 0) + oldDeduction;
         }
@@ -1194,26 +1192,27 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     }
 
     // إضافة تأثير القيم الجديدة للبائع الحالي
-    for (var receipt in currentSellerReceipts) {
-      if (receipt.affiliation.isNotEmpty) {
+    for (var receipt in allReceiptsFromUI) {
+      if (receipt.sellerName == widget.sellerName &&
+          receipt.affiliation.isNotEmpty) {
         double newDeduction = (double.tryParse(receipt.payment) ?? 0) +
             (double.tryParse(receipt.load) ?? 0);
-        // نطبق الخصم الجديد بالطرح
         supplierBalanceChanges[receipt.affiliation] =
             (supplierBalanceChanges[receipt.affiliation] ?? 0) - newDeduction;
       }
     }
 
-    // 3. إنشاء المستند الذي سيتم تمريره لدالة الحفظ
-    // هذه الدالة ستقوم بالدمج بنفسها
+    // =========================================================================
+    // الخطوة 3: إنشاء المستند النهائي وإرساله للحفظ
+    // =========================================================================
     final documentToSave = ReceiptDocument(
-      recordNumber: serialNumber, // سيتم تحديثه داخل دالة الحفظ
+      recordNumber: serialNumber,
       date: widget.selectedDate,
-      sellerName: widget.sellerName, // اسم آخر من قام بالتعديل
+      sellerName: widget.sellerName, // اسم آخر بائع قام بالحفظ
       storeName: widget.storeName,
       dayName: dayName,
-      receipts: currentSellerReceipts, // نمرر سجلات البائع الحالي فقط
-      totals: {}, // المجاميع الكلية سيتم حسابها داخل دالة الحفظ
+      receipts: allReceiptsFromUI, // نمرر القائمة الكاملة والمحدثة
+      totals: {}, // ستقوم خدمة التخزين بحسابها
     );
 
     final success = await _storageService.saveReceiptDocument(documentToSave);
@@ -1224,14 +1223,10 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
         if (entry.value != 0) {
           await _supplierIndexService.updateSupplierBalance(
               entry.key, entry.value);
-          if (kDebugMode) {
-            print(
-                '🔄 تم تحديث رصيد المورد ${entry.key} بمقدار: ${entry.value.toStringAsFixed(2)}');
-          }
         }
       }
 
-      // إعادة تحميل البيانات المدمجة بعد الحفظ لعرضها بشكل صحيح
+      // بعد الحفظ الناجح، أعد تحميل البيانات من الملف لضمان التزامن
       await _loadOrCreateJournal();
       setState(() {
         _hasUnsavedChanges = false;
@@ -1368,6 +1363,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     }
   }
 
+  // *** دالة جديدة للتحقق من صلاحيات الأدمن ***
   Future<void> _checkAdminStatus() async {
     final prefs = await SharedPreferences.getInstance();
     final adminSeller = prefs.getString('admin_seller');
@@ -1378,9 +1374,12 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     }
   }
 
-// أضف هذه الدالة الجديدة (بديل لـ _isRowOwnedByCurrentSeller)
+  // *** دالة جديدة ومحورية لتحديد إمكانية التعديل ***
   bool _canEditRow(int rowIndex) {
-    if (rowIndex >= sellerNames.length) return false;
+    if (rowIndex >= sellerNames.length) {
+      // إذا كان الصف جديداً ولم يحفظ بعد، فمالكه هو البائع الحالي
+      return true;
+    }
     // الأدمن يمكنه تعديل أي سجل
     if (_isAdmin) return true;
     // البائع العادي يمكنه تعديل سجلاته فقط

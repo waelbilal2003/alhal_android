@@ -12,46 +12,48 @@ Widget buildTableCell({
   required Function(int, int) scrollToField,
   required Function(String, int, int) onFieldSubmitted,
   required Function(String, int, int) onFieldChanged,
-  bool isSField = false,
   List<TextInputFormatter>? inputFormatters,
-  int maxLines = 1,
-  double fontSize = 13,
+  bool isSField = false, // From sales_screen logic
+  double fontSize = 13.0,
   TextAlign textAlign = TextAlign.right,
   TextDirection textDirection = TextDirection.rtl,
+  bool enabled = true, // *** أضف هذا السطر ***
 }) {
   return Container(
     padding: const EdgeInsets.all(1),
     constraints: const BoxConstraints(minHeight: 25),
-    child: TextField(
-      controller: controller,
-      focusNode: focusNode,
-      enabled: !isSerialField,
-      readOnly: isSerialField,
-      decoration: const InputDecoration(
-        contentPadding: EdgeInsets.symmetric(horizontal: 2, vertical: 1),
-        border: InputBorder.none,
-        hintText: '.',
-        hintStyle: TextStyle(fontSize: 13),
-      ),
-      style: TextStyle(
-        fontSize: fontSize,
-        color: isSerialField ? Colors.grey[700] : Colors.black,
-      ),
-      maxLines: maxLines,
-      keyboardType: isSField
-          ? TextInputType.number
-          : (isNumericField
-              ? TextInputType.numberWithOptions(decimal: true)
-              : TextInputType.text),
-      textInputAction: TextInputAction.next,
-      textAlign: textAlign,
-      textDirection: textDirection,
-      inputFormatters: inputFormatters,
-      onTap: () {
-        scrollToField(rowIndex, colIndex);
+    child: Focus(
+      onFocusChange: (hasFocus) {
+        if (hasFocus) {
+          scrollToField(rowIndex, colIndex);
+        }
       },
-      onSubmitted: (value) => onFieldSubmitted(value, rowIndex, colIndex),
-      onChanged: (value) => onFieldChanged(value, rowIndex, colIndex),
+      child: TextFormField(
+        controller: controller,
+        focusNode: focusNode,
+        enabled: enabled, // *** استخدم المتغير هنا ***
+        readOnly: isSerialField,
+        keyboardType: isNumericField
+            ? const TextInputType.numberWithOptions(decimal: true)
+            : TextInputType.text,
+        inputFormatters: inputFormatters,
+        style: TextStyle(
+          fontSize: fontSize,
+          color: enabled
+              ? Colors.black
+              : Colors.grey[700], // لون مختلف للنص المعطل
+        ),
+        textAlign: textAlign,
+        textDirection: textDirection,
+        decoration: const InputDecoration(
+          contentPadding: EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+          border: InputBorder.none,
+          isDense: true,
+        ),
+        onChanged: (value) => onFieldChanged(value, rowIndex, colIndex),
+        onFieldSubmitted: (value) =>
+            onFieldSubmitted(value, rowIndex, colIndex),
+      ),
     ),
   );
 }

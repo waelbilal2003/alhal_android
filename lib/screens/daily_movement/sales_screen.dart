@@ -78,7 +78,6 @@ class _SalesScreenState extends State<SalesScreen> {
   bool _isLoadingRecords = false;
 
   String serialNumber = '';
-  String? _recordCreator;
 
   // متغيرات للاقتراحات
   List<String> _materialSuggestions = [];
@@ -123,6 +122,7 @@ class _SalesScreenState extends State<SalesScreen> {
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkAdminStatus();
       _loadOrCreateRecord();
       _loadAvailableDates();
       _loadJournalNumber();
@@ -201,7 +201,7 @@ class _SalesScreenState extends State<SalesScreen> {
       // لا نحدد الرقم هنا، بل سيتم تعيينه عند الحفظ لأول مرة
       // الدالة _loadJournalNumber ستهتم بعرض الرقم الصحيح في الواجهة
       serialNumber = '1'; // عرض رقم افتراضي مؤقتاً
-      _recordCreator = widget.sellerName;
+
       rowControllers.clear();
       rowFocusNodes.clear();
       cashOrDebtValues.clear();
@@ -647,7 +647,6 @@ class _SalesScreenState extends State<SalesScreen> {
       sellerNames.clear();
 
       serialNumber = document.recordNumber;
-      _recordCreator = document.sellerName;
 
       // تحميل السجلات من الوثيقة
       for (int i = 0; i < document.sales.length; i++) {
@@ -1475,187 +1474,114 @@ class _SalesScreenState extends State<SalesScreen> {
   Future<void> _saveCurrentRecord({bool silent = false}) async {
     if (_isSaving) return;
 
-    if (_recordCreator != null && _recordCreator != widget.sellerName) {
-      if (!silent && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('هذا السجل ليس سجلك، لا يمكنك التعديل عليه'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
-      return;
-    }
+    final List<Sale> allSalesFromUI = [];
+    double tCount = 0, tStanding = 0, tNet = 0, tGrand = 0;
 
-    final currentSellerSales = <Sale>[];
     for (int i = 0; i < rowControllers.length; i++) {
-      if (_isRowOwnedByCurrentSeller(i)) {
-        final controllers = rowControllers[i];
-        if (controllers[1].text.isNotEmpty ||
-            controllers[4].text.isNotEmpty ||
-            controllers[8].text.isNotEmpty) {
-          currentSellerSales.add(Sale(
-            serialNumber: controllers[0].text,
-            material: controllers[1].text,
-            affiliation: controllers[2].text,
-            sValue: controllers[3].text,
-            count: controllers[4].text,
-            packaging: controllers[5].text,
-            standing: controllers[6].text,
-            net: controllers[7].text,
-            price: controllers[8].text,
-            total: controllers[9].text,
-            cashOrDebt: cashOrDebtValues[i],
-            empties: emptiesValues[i],
-            customerName:
-                cashOrDebtValues[i] == 'دين' ? customerNames[i] : null,
-            sellerName: sellerNames[i],
-          ));
+      final controllers = rowControllers[i];
+      if (controllers[1].text.isNotEmpty || controllers[4].text.isNotEmpty) {
+        // تصحيح صامت للصافي والقائم
+        if (_canEditRow(i)) {
+          double s = double.tryParse(controllers[6].text) ?? 0;
+          double n = double.tryParse(controllers[7].text) ?? 0;
+          if (s < n) {
+            controllers[7].text = s.toStringAsFixed(2);
+            _calculateRowValues(i);
+          }
         }
-      }
-    }
 
-    if (currentSellerSales.isEmpty) {
-      if (!silent && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('لا توجد سجلات مضافة للحفظ'),
-            backgroundColor: Colors.orange,
-          ),
+        final s = Sale(
+          serialNumber: (allSalesFromUI.length + 1).toString(),
+          material: controllers[1].text,
+          affiliation: controllers[2].text,
+          sValue: controllers[3].text,
+          count: controllers[4].text,
+          packaging: controllers[5].text,
+          standing: controllers[6].text,
+          net: controllers[7].text,
+          price: controllers[8].text,
+          total: controllers[9].text,
+          cashOrDebt: cashOrDebtValues[i],
+          empties: emptiesValues[i],
+          customerName: cashOrDebtValues[i] == 'دين' ? customerNames[i] : null,
+          sellerName: sellerNames[i],
         );
-      }
-      return;
-    }
 
-    bool hasInvalidNetValue = false;
-    for (int i = 0; i < rowControllers.length; i++) {
-      if (_isRowOwnedByCurrentSeller(i)) {
-        final controllers = rowControllers[i];
-        double standing = double.tryParse(controllers[6].text) ?? 0;
-        double net = double.tryParse(controllers[7].text) ?? 0;
-        if (standing < net || (standing == 0 && net > 0)) {
-          hasInvalidNetValue = true;
-          controllers[7].text =
-              (standing < net) ? standing.toStringAsFixed(2) : '0.00';
-          _calculateRowValues(i);
-        }
+        allSalesFromUI.add(s);
+        tCount += double.tryParse(s.count) ?? 0;
+        tStanding += double.tryParse(s.standing) ?? 0;
+        tNet += double.tryParse(s.net) ?? 0;
+        tGrand += double.tryParse(s.total) ?? 0;
       }
     }
 
-    if (hasInvalidNetValue && !silent && mounted) {
-      bool confirmed = await _showNetValueWarning();
-      if (!confirmed) {
-        setState(() => _isSaving = false);
-        return;
-      }
-    }
+    if (allSalesFromUI.isEmpty) return;
 
-    _calculateAllTotals();
     setState(() => _isSaving = true);
 
-    SalesDocument? existingDocument =
+    // حساب فروقات أرصدة الزبائن (للبائع الحالي فقط)
+    Map<String, double> customerChanges = {};
+    final existingDoc =
         await _storageService.loadSalesDocument(widget.selectedDate);
-    List<Sale> allSales = [];
 
-    if (existingDocument != null) {
-      allSales.addAll(existingDocument.sales
-          .where((s) => s.sellerName != widget.sellerName));
-    }
-    allSales.addAll(currentSellerSales);
-    allSales.sort((a, b) =>
-        int.parse(a.serialNumber).compareTo(int.parse(b.serialNumber)));
-
-    for (int i = 0; i < allSales.length; i++) {
-      var oldSale = allSales[i];
-      allSales[i] = Sale(
-        serialNumber: (i + 1).toString(),
-        material: oldSale.material,
-        affiliation: oldSale.affiliation,
-        sValue: oldSale.sValue,
-        count: oldSale.count,
-        packaging: oldSale.packaging,
-        standing: oldSale.standing,
-        net: oldSale.net,
-        price: oldSale.price,
-        total: oldSale.total,
-        cashOrDebt: oldSale.cashOrDebt,
-        empties: oldSale.empties,
-        customerName: oldSale.customerName,
-        sellerName: oldSale.sellerName,
-      );
+    Map<String, Sale> oldOwnedSales = {};
+    if (existingDoc != null) {
+      for (var s in existingDoc.sales) {
+        if (s.sellerName == widget.sellerName && s.cashOrDebt == 'دين') {
+          oldOwnedSales["${s.serialNumber}-${s.material}"] = s;
+        }
+      }
     }
 
-    // --- الجزء الأهم: تحديد رقم اليومية الصحيح قبل الحفظ ---
-    String journalNumberToSave = serialNumber;
-    if (existingDocument == null) {
-      // إذا كانت اليومية جديدة، احصل على الرقم التالي
-      journalNumberToSave = await _storageService.getNextJournalNumber();
-    } else {
-      // إذا كانت موجودة، استخدم رقمها الحالي لضمان الثبات
-      journalNumberToSave = existingDocument.recordNumber;
+    for (var newS in allSalesFromUI) {
+      if (newS.sellerName == widget.sellerName &&
+          newS.cashOrDebt == 'دين' &&
+          newS.customerName != null) {
+        double oldAmt = 0;
+        final oldS = oldOwnedSales["${newS.serialNumber}-${newS.material}"];
+        if (oldS != null) oldAmt = double.tryParse(oldS.total) ?? 0;
+
+        double newAmt = double.tryParse(newS.total) ?? 0;
+        double diff = newAmt - oldAmt;
+
+        if (diff != 0) {
+          customerChanges[newS.customerName!] =
+              (customerChanges[newS.customerName!] ?? 0) + diff;
+        }
+      }
     }
 
-    final document = SalesDocument(
-      recordNumber: journalNumberToSave, // استخدام الرقم الصحيح
+    final documentToSave = SalesDocument(
+      recordNumber: serialNumber,
       date: widget.selectedDate,
       sellerName: widget.sellerName,
       storeName: widget.storeName,
       dayName: dayName,
-      sales: allSales,
+      sales: allSalesFromUI,
       totals: {
-        'totalCount': totalCountController.text,
-        'totalBase': totalBaseController.text,
-        'totalNet': totalNetController.text,
-        'totalGrand': totalGrandController.text,
+        'totalCount': tCount.toStringAsFixed(0),
+        'totalBase': tStanding.toStringAsFixed(2),
+        'totalNet': tNet.toStringAsFixed(2),
+        'totalGrand': tGrand.toStringAsFixed(2),
       },
     );
 
-    Map<String, double> balanceChanges = {};
-    if (existingDocument != null) {
-      for (var sale in existingDocument.sales) {
-        if (sale.sellerName == widget.sellerName &&
-            sale.cashOrDebt == 'دين' &&
-            sale.customerName != null) {
-          double amount = double.tryParse(sale.total) ?? 0;
-          balanceChanges[sale.customerName!] =
-              (balanceChanges[sale.customerName!] ?? 0) - amount;
-        }
-      }
-    }
-    for (var sale in currentSellerSales) {
-      if (sale.cashOrDebt == 'دين' && sale.customerName != null) {
-        double amount = double.tryParse(sale.total) ?? 0;
-        balanceChanges[sale.customerName!] =
-            (balanceChanges[sale.customerName!] ?? 0) + amount;
-      }
-    }
-
-    final success = await _storageService.saveSalesDocument(document);
+    final success = await _storageService.saveSalesDocument(documentToSave);
 
     if (success) {
-      for (var entry in balanceChanges.entries) {
-        if (entry.value != 0) {
-          await _customerIndexService.updateCustomerBalance(
-              entry.key, entry.value);
-        }
+      for (var entry in customerChanges.entries) {
+        await _customerIndexService.updateCustomerBalance(
+            entry.key, entry.value);
       }
-      setState(() {
-        _hasUnsavedChanges = false;
-        _recordCreator = widget.sellerName;
-        serialNumber =
-            journalNumberToSave; // تحديث الواجهة بالرقم الصحيح بعد الحفظ
-      });
+      setState(() => _hasUnsavedChanges = false);
+      await _loadOrCreateRecord();
     }
 
     setState(() => _isSaving = false);
-
     if (!silent && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(success ? 'تم حفظ يومية المبيعات بنجاح' : 'فشل الحفظ'),
-          backgroundColor: success ? Colors.green : Colors.red,
-        ),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(success ? 'تم الحفظ بنجاح' : 'فشل الحفظ'),
+          backgroundColor: success ? Colors.green : Colors.red));
     }
   }
 
@@ -1683,27 +1609,6 @@ class _SalesScreenState extends State<SalesScreen> {
         filePath: filePath,
       );
     }
-  }
-
-  Future<bool> _showNetValueWarning() async {
-    return await showDialog<bool>(
-          context: context,
-          barrierDismissible: false,
-          builder: (context) => AlertDialog(
-            title: const Text('تنبيه'),
-            content: const Text(
-              'تم تصحيح بعض القيم في حقل الصافي لأنها كانت أكبر من القائم.\n\nتذكر: يجب أن يكون القائم دائماً أكبر من أو يساوي الصافي.',
-              textAlign: TextAlign.center,
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('موافق'),
-              ),
-            ],
-          ),
-        ) ??
-        false;
   }
 
   Future<bool> _showUnsavedChangesDialog() async {
@@ -1930,12 +1835,10 @@ class _SalesScreenState extends State<SalesScreen> {
     }
   }
 
-// أضف هذه الدالة الجديدة (بديل لـ _isRowOwnedByCurrentSeller)
+// 2. تطبيق الحماية في الخلايا
   bool _canEditRow(int rowIndex) {
-    if (rowIndex >= sellerNames.length) return false;
-    // الأدمن يمكنه تعديل أي سجل
+    if (rowIndex >= sellerNames.length) return true;
     if (_isAdmin) return true;
-    // البائع العادي يمكنه تعديل سجلاته فقط
     return sellerNames[rowIndex] == widget.sellerName;
   }
 }

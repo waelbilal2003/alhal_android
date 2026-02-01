@@ -11,6 +11,7 @@ import '../../services/supplier_index_service.dart';
 import '../../services/enhanced_index_service.dart';
 import '../../widgets/suggestions_banner.dart';
 import '../../services/supplier_balance_tracker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class BoxScreen extends StatefulWidget {
   final String sellerName;
@@ -91,6 +92,8 @@ class _BoxScreenState extends State<BoxScreen> {
   // متغير لتأخير حساب المجاميع (debouncing)
   Timer? _calculateTotalsDebouncer;
   bool _isCalculating = false;
+  bool _isAdmin = false;
+
   @override
   void initState() {
     super.initState();
@@ -112,7 +115,9 @@ class _BoxScreenState extends State<BoxScreen> {
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadOrCreateJournal();
+      _checkAdminStatus().then((_) {
+        _loadOrCreateJournal();
+      });
       _loadAvailableDates();
       _loadJournalNumber();
     });
@@ -699,71 +704,91 @@ class _BoxScreenState extends State<BoxScreen> {
   // تحديث خلية الحساب لدعم كلا النوعين
   Widget _buildAccountCell(
       int rowIndex, int colIndex, bool isOwnedByCurrentSeller) {
+    // 1. استخدام دالة التحقق المركزية
+    final bool canEdit = _canEditRow(rowIndex);
+
     final String accountType = accountTypeValues[rowIndex];
     final TextEditingController accountNameController =
         rowControllers[rowIndex][3];
     final FocusNode accountNameFocusNode = rowFocusNodes[rowIndex][3];
 
+    Widget cellContent;
+
+    // إذا كان نوع الحساب تم اختياره (زبون، مورد، أو مصروف)
     if (accountType.isNotEmpty) {
-      Widget cell = Container(
+      cellContent = Container(
         padding: const EdgeInsets.all(1),
         constraints: const BoxConstraints(minHeight: 25),
         child: Row(
           children: [
+            // جزء عرض نوع الحساب وقابلية تغييره
             Expanded(
               flex: 2,
               child: InkWell(
-                onTap: isOwnedByCurrentSeller
-                    ? () => _showAccountTypeDialog(rowIndex)
-                    : null,
+                // لا يسمح بفتح الديالوج إلا إذا كان يملك الصلاحية
+                onTap: canEdit ? () => _showAccountTypeDialog(rowIndex) : null,
                 child: Container(
                   decoration: BoxDecoration(
-                      border: Border.all(
-                          color: _getAccountTypeColor(accountType), width: 0.5),
-                      borderRadius: BorderRadius.circular(2)),
+                    border: Border.all(
+                      color: _getAccountTypeColor(accountType),
+                      width: 0.5,
+                    ),
+                    borderRadius: BorderRadius.circular(2),
+                    // تمييز خلفية النوع المختار
+                    color: _getAccountTypeColor(accountType).withOpacity(0.1),
+                  ),
                   padding:
                       const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                   child: Center(
-                      child: Text(accountType,
-                          style: TextStyle(
-                              fontSize: 10,
-                              color: _getAccountTypeColor(accountType),
-                              fontWeight: FontWeight.bold),
-                          textAlign: TextAlign.center,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis)),
+                    child: Text(
+                      accountType,
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: _getAccountTypeColor(accountType),
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ),
               ),
             ),
             const SizedBox(width: 4),
+            // جزء إدخال اسم الحساب (مع دعم الاقتراحات)
             Expanded(
               flex: 5,
               child: TextField(
                 controller: accountNameController,
                 focusNode: accountNameFocusNode,
                 textAlign: TextAlign.right,
-                enabled: isOwnedByCurrentSeller,
+                // قفل أو فتح الحقل بناءً على الصلاحية
+                enabled: canEdit,
                 style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.black),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black,
+                ),
                 decoration: InputDecoration(
                   contentPadding:
                       const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
                   border: const OutlineInputBorder(
-                      borderSide: BorderSide(color: Colors.grey, width: 0.5)),
+                    borderSide: BorderSide(color: Colors.grey, width: 0.5),
+                  ),
                   hintText: _getAccountHintText(accountType),
                   hintStyle: const TextStyle(fontSize: 10, color: Colors.grey),
+                  isDense: true,
                 ),
                 onSubmitted: (value) =>
                     _handleFieldSubmitted(value, rowIndex, colIndex),
                 onChanged: (value) {
-                  if (isOwnedByCurrentSeller) {
-                    _hasUnsavedChanges = true;
-                    if (accountType == 'زبون')
-                      _updateCustomerSuggestions(rowIndex);
-                    else if (accountType == 'مورد')
-                      _updateSupplierSuggestions(rowIndex);
+                  _hasUnsavedChanges = true;
+                  // تفعيل الاقتراحات حسب النوع
+                  if (accountType == 'زبون') {
+                    _updateCustomerSuggestions(rowIndex);
+                  } else if (accountType == 'مورد') {
+                    _updateSupplierSuggestions(rowIndex);
                   }
                 },
               ),
@@ -771,33 +796,44 @@ class _BoxScreenState extends State<BoxScreen> {
           ],
         ),
       );
-      return isOwnedByCurrentSeller
-          ? cell
-          : IgnorePointer(
-              child: Opacity(
-                  opacity: 0.7,
-                  child: Container(
-                      decoration: BoxDecoration(color: Colors.grey[100]),
-                      child: cell)));
+    } else {
+      // عرض زر "اختر" في حال كان السجل جديداً ولم يحدد نوعه بعد
+      cellContent = InkWell(
+        onTap: canEdit ? () => _showAccountTypeDialog(rowIndex) : null,
+        child: Container(
+          margin: const EdgeInsets.all(2),
+          height: 25,
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey[300]!),
+            borderRadius: BorderRadius.circular(3),
+            color: Colors.grey[50],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: const [
+              Text('اختر النوع',
+                  style: TextStyle(fontSize: 10, color: Colors.blueGrey)),
+              Icon(Icons.arrow_drop_down, size: 14, color: Colors.blueGrey),
+            ],
+          ),
+        ),
+      );
     }
 
-    // زر "اختر" في حال كان النوع فارغاً
-    return InkWell(
-      onTap: isOwnedByCurrentSeller
-          ? () => _showAccountTypeDialog(rowIndex)
-          : null,
-      child: Container(
-        margin: const EdgeInsets.all(2),
-        decoration: BoxDecoration(
-            border: Border.all(color: Colors.grey[300]!),
-            borderRadius: BorderRadius.circular(3)),
-        child:
-            const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Text('اختر', style: TextStyle(fontSize: 11)),
-          Icon(Icons.arrow_drop_down, size: 16)
-        ]),
-      ),
-    );
+    // 2. تطبيق الحماية البصرية والمنطقية النهائية (مثل شاشة الاستلام)
+    if (!canEdit) {
+      return IgnorePointer(
+        child: Opacity(
+          opacity: 0.6, // جعل السجل باهتاً للدلالة على أنه للقراءة فقط
+          child: Container(
+            color: Colors.grey[100], // خلفية رمادية خفيفة
+            child: cellContent,
+          ),
+        ),
+      );
+    }
+
+    return cellContent;
   }
 
   Widget _buildEmptyCell() {
@@ -899,7 +935,7 @@ class _BoxScreenState extends State<BoxScreen> {
   }
 
   void _handleFieldSubmitted(String value, int rowIndex, int colIndex) {
-    if (!_isRowOwnedByCurrentSeller(rowIndex)) {
+    if (!_canEditRow(rowIndex)) {
       return;
     }
 
@@ -947,7 +983,7 @@ class _BoxScreenState extends State<BoxScreen> {
   }
 
   void _handleFieldChanged(String value, int rowIndex, int colIndex) {
-    if (!_isRowOwnedByCurrentSeller(rowIndex)) {
+    if (!_canEditRow(rowIndex)) {
       return;
     }
 
@@ -971,7 +1007,7 @@ class _BoxScreenState extends State<BoxScreen> {
   }
 
   void _showAccountTypeDialog(int rowIndex) {
-    if (!_isRowOwnedByCurrentSeller(rowIndex)) {
+    if (!_canEditRow(rowIndex)) {
       return;
     }
 
@@ -1049,12 +1085,6 @@ class _BoxScreenState extends State<BoxScreen> {
     } else if (rowControllers[rowIndex][2].text.isNotEmpty) {
       FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][2]);
     }
-  }
-
-  // التحقق إذا كان السجل مملوكاً للبائع الحالي
-  bool _isRowOwnedByCurrentSeller(int rowIndex) {
-    if (rowIndex >= sellerNames.length) return false;
-    return sellerNames[rowIndex] == widget.sellerName;
   }
 
   @override
@@ -1308,158 +1338,96 @@ class _BoxScreenState extends State<BoxScreen> {
   Future<void> _saveCurrentRecord({bool silent = false}) async {
     if (_isSaving) return;
 
-    if (rowControllers.isEmpty) {
-      if (!silent && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('لا توجد بيانات للحفظ'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
-      return;
-    }
+    final List<BoxTransaction> allTransFromUI = [];
+    double tReceived = 0, tPaid = 0;
 
-    final currentSellerTransactions = <BoxTransaction>[];
     for (int i = 0; i < rowControllers.length; i++) {
       final controllers = rowControllers[i];
-
       if (controllers[1].text.isNotEmpty ||
           controllers[2].text.isNotEmpty ||
-          (controllers[3].text.isNotEmpty && accountTypeValues[i].isNotEmpty)) {
-        currentSellerTransactions.add(BoxTransaction(
-          serialNumber: controllers[0].text,
+          controllers[3].text.isNotEmpty) {
+        final t = BoxTransaction(
+          serialNumber: (allTransFromUI.length + 1).toString(),
           received: controllers[1].text,
           paid: controllers[2].text,
           accountType: accountTypeValues[i],
           accountName: controllers[3].text,
           notes: controllers[4].text,
           sellerName: sellerNames[i],
-        ));
+        );
+        allTransFromUI.add(t);
+        tReceived += double.tryParse(t.received) ?? 0;
+        tPaid += double.tryParse(t.paid) ?? 0;
       }
     }
 
-    if (currentSellerTransactions.isEmpty) {
-      if (!silent && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('لا توجد سجلات مضافة للحفظ'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
-      return;
-    }
+    if (allTransFromUI.isEmpty) return;
 
     setState(() => _isSaving = true);
 
-    String journalNumber = serialNumber;
-    if (journalNumber.isEmpty || journalNumber == '1') {
-      final document =
-          await _storageService.loadBoxDocumentForDate(widget.selectedDate);
-      if (document == null) {
-        journalNumber = await _storageService.getNextJournalNumber();
-      } else {
-        journalNumber = document.recordNumber;
+    // حساب الفروقات (للبائع الحالي فقط)
+    Map<String, double> custDiffs = {};
+    Map<String, double> suppDiffs = {};
+    final existingDoc =
+        await _storageService.loadBoxDocumentForDate(widget.selectedDate);
+
+    Map<String, BoxTransaction> oldOwned = {};
+    if (existingDoc != null) {
+      for (var t in existingDoc.transactions) {
+        if (t.sellerName == widget.sellerName) oldOwned[t.serialNumber] = t;
       }
     }
 
-    final document = BoxDocument(
-      recordNumber: journalNumber,
+    for (var nT in allTransFromUI) {
+      if (nT.sellerName == widget.sellerName) {
+        double oRec = 0, oPaid = 0;
+        final oT = oldOwned[nT.serialNumber];
+        if (oT != null) {
+          oRec = double.tryParse(oT.received) ?? 0;
+          oPaid = double.tryParse(oT.paid) ?? 0;
+        }
+        double nRec = double.tryParse(nT.received) ?? 0;
+        double nPaid = double.tryParse(nT.paid) ?? 0;
+
+        if (nT.accountType == 'زبون' && nT.accountName.isNotEmpty) {
+          double diff = (nPaid - nRec) - (oPaid - oRec);
+          custDiffs[nT.accountName] = (custDiffs[nT.accountName] ?? 0) + diff;
+        } else if (nT.accountType == 'مورد' && nT.accountName.isNotEmpty) {
+          double diff = (nRec - nPaid) - (oRec - oPaid);
+          suppDiffs[nT.accountName] = (suppDiffs[nT.accountName] ?? 0) + diff;
+        }
+      }
+    }
+
+    final documentToSave = BoxDocument(
+      recordNumber: serialNumber,
       date: widget.selectedDate,
       sellerName: widget.sellerName,
       storeName: widget.storeName,
       dayName: dayName,
-      transactions: currentSellerTransactions,
+      transactions: allTransFromUI,
       totals: {
-        'totalReceived': totalReceivedController.text,
-        'totalPaid': totalPaidController.text,
+        'totalReceived': tReceived.toStringAsFixed(2),
+        'totalPaid': tPaid.toStringAsFixed(2),
       },
     );
 
-    // ============ تحديث أرصدة الموردين والزبائن ============
-    Map<String, double> customerBalanceChanges = {};
-    Map<String, double> supplierBalanceChanges = {};
-
-    // 1. طرح القيم القديمة (إذا كان السجل موجوداً)
-    final existingDocument =
-        await _storageService.loadBoxDocumentForDate(widget.selectedDate);
-    if (existingDocument != null) {
-      for (var trans in existingDocument.transactions) {
-        if (trans.sellerName == widget.sellerName) {
-          double receivedAmount = double.tryParse(trans.received) ?? 0;
-          double paidAmount = double.tryParse(trans.paid) ?? 0;
-
-          if (trans.accountType == 'زبون' && trans.accountName.isNotEmpty) {
-            // للزبون: المدفوع يزيد رصيده والمقبوض ينقص رصيده
-            double netChange = paidAmount - receivedAmount;
-            customerBalanceChanges[trans.accountName] =
-                (customerBalanceChanges[trans.accountName] ?? 0) - netChange;
-          } else if (trans.accountType == 'مورد' &&
-              trans.accountName.isNotEmpty) {
-            // للمورد: المقبوض يزيد رصيده والمدفوع ينقص رصيده
-            double netChange = receivedAmount - paidAmount;
-            supplierBalanceChanges[trans.accountName] =
-                (supplierBalanceChanges[trans.accountName] ?? 0) - netChange;
-          }
-        }
-      }
-    }
-
-    // 2. إضافة القيم الجديدة
-    for (var trans in currentSellerTransactions) {
-      double receivedAmount = double.tryParse(trans.received) ?? 0;
-      double paidAmount = double.tryParse(trans.paid) ?? 0;
-
-      if (trans.accountType == 'زبون' && trans.accountName.isNotEmpty) {
-        // للزبون: المدفوع يزيد رصيده والمقبوض ينقص رصيده
-        double netChange = paidAmount - receivedAmount;
-        customerBalanceChanges[trans.accountName] =
-            (customerBalanceChanges[trans.accountName] ?? 0) + netChange;
-      } else if (trans.accountType == 'مورد' && trans.accountName.isNotEmpty) {
-        // للمورد: المقبوض يزيد رصيده والمدفوع ينقص رصيده
-        double netChange = receivedAmount - paidAmount;
-        supplierBalanceChanges[trans.accountName] =
-            (supplierBalanceChanges[trans.accountName] ?? 0) + netChange;
-      }
-    }
-
-    final success = await _storageService.saveBoxDocument(document);
+    final success = await _storageService.saveBoxDocument(documentToSave);
 
     if (success) {
-      // تحديث أرصدة الزبائن في الفهرس
-      for (var entry in customerBalanceChanges.entries) {
-        if (entry.value != 0) {
-          await _customerIndexService.updateCustomerBalance(
-              entry.key, entry.value);
-          print('👤 تحديث زبون ${entry.key}: ${entry.value}');
-        }
-      }
-
-      // تحديث أرصدة الموردين في الفهرس
-      for (var entry in supplierBalanceChanges.entries) {
-        if (entry.value != 0) {
-          await _supplierIndexService.updateSupplierBalance(
-              entry.key, entry.value);
-          print('🏭 تحديث مورد ${entry.key}: ${entry.value}');
-        }
-      }
-
-      setState(() {
-        _hasUnsavedChanges = false;
-        serialNumber = journalNumber;
-      });
+      for (var e in custDiffs.entries)
+        await _customerIndexService.updateCustomerBalance(e.key, e.value);
+      for (var e in suppDiffs.entries)
+        await _supplierIndexService.updateSupplierBalance(e.key, e.value);
+      setState(() => _hasUnsavedChanges = false);
+      await _loadOrCreateJournal();
     }
 
     setState(() => _isSaving = false);
-
     if (!silent && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(success ? 'تم الحفظ بنجاح' : 'فشل الحفظ'),
-          backgroundColor: success ? Colors.green : Colors.red,
-        ),
-      );
+          backgroundColor: success ? Colors.green : Colors.red));
     }
   }
 
@@ -1663,6 +1631,23 @@ class _BoxScreenState extends State<BoxScreen> {
       default:
         return -1;
     }
+  }
+
+// 1. دالة التحقق من حالة الأدمن (تُستدعى في initState)
+  Future<void> _checkAdminStatus() async {
+    final prefs = await SharedPreferences.getInstance();
+    final adminSeller = prefs.getString('admin_seller');
+    if (mounted) {
+      setState(() {
+        _isAdmin = (widget.sellerName == adminSeller);
+      });
+    }
+  }
+
+  bool _canEditRow(int rowIndex) {
+    if (rowIndex >= sellerNames.length) return true;
+    if (_isAdmin) return true;
+    return sellerNames[rowIndex] == widget.sellerName;
   }
 }
 

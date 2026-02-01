@@ -773,14 +773,14 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
   Widget _buildTableCell(TextEditingController controller, FocusNode focusNode,
       int rowIndex, int colIndex, bool isOwnedByCurrentSeller) {
-    bool isSerialField = colIndex == 0;
     bool isNumericField =
         colIndex == 3 || colIndex == 5 || colIndex == 6 || colIndex == 7;
 
-    Widget cell = TableBuilder.buildTableCell(
+    return TableBuilder.buildTableCell(
       controller: controller,
       focusNode: focusNode,
-      isSerialField: isSerialField,
+      enabled: _canEditRow(rowIndex), // تم تفعيل التحكم هنا
+      isSerialField: colIndex == 0,
       isNumericField: isNumericField,
       rowIndex: rowIndex,
       colIndex: colIndex,
@@ -789,30 +789,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           _handleFieldSubmitted(value, rIndex, cIndex),
       onFieldChanged: (value, rIndex, cIndex) =>
           _handleFieldChanged(value, rIndex, cIndex),
-      inputFormatters: isNumericField
-          ? [
-              TableComponents.PositiveDecimalInputFormatter(),
-              FilteringTextInputFormatter.deny(RegExp(r'\.\d{3,}')),
-            ]
-          : null,
     );
-
-    // إذا لم يكن السجل مملوكاً للبائع الحالي، جعل الخلية للقراءة فقط
-    if (!_canEditRow(rowIndex)) {
-      return IgnorePointer(
-        child: Opacity(
-          opacity: 0.7,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.grey[100],
-            ),
-            child: cell,
-          ),
-        ),
-      );
-    }
-
-    return cell;
   }
 
   Widget _buildMaterialCell(
@@ -1359,23 +1336,26 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   Future<void> _saveCurrentRecord({bool silent = false}) async {
     if (_isSaving) return;
 
-    if (rowControllers.isEmpty) {
-      if (!silent && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('لا توجد بيانات للحفظ'),
-              backgroundColor: Colors.orange),
-        );
-      }
-      return;
-    }
+    // 1. تجميع السجلات المكتملة فقط من الواجهة
+    final List<Purchase> allPurchasesFromUI = [];
+    double tCount = 0, tStanding = 0, tNet = 0, tGrand = 0;
 
-    final currentSellerPurchases = <Purchase>[];
     for (int i = 0; i < rowControllers.length; i++) {
       final controllers = rowControllers[i];
+      // نعتبر السجل موجوداً إذا كان هناك مادة أو عدد
       if (controllers[1].text.isNotEmpty || controllers[3].text.isNotEmpty) {
-        currentSellerPurchases.add(Purchase(
-          serialNumber: controllers[0].text,
+        // تصحيح تلقائي صامت للقيم (القائم والصافي) للسجلات التي يملكها البائع الحالي فقط
+        if (_canEditRow(i)) {
+          double s = double.tryParse(controllers[5].text) ?? 0;
+          double n = double.tryParse(controllers[6].text) ?? 0;
+          if (s < n) {
+            controllers[6].text = s.toStringAsFixed(2);
+            _calculateRowValues(i);
+          }
+        }
+
+        final p = Purchase(
+          serialNumber: (allPurchasesFromUI.length + 1).toString(),
           material: controllers[1].text,
           affiliation: controllers[2].text,
           count: controllers[3].text,
@@ -1387,136 +1367,89 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           cashOrDebt: cashOrDebtValues[i],
           empties: emptiesValues[i],
           sellerName: sellerNames[i],
-        ));
+        );
+
+        allPurchasesFromUI.add(p);
+
+        // حساب المجاميع للوثيقة
+        tCount += double.tryParse(p.count) ?? 0;
+        tStanding += double.tryParse(p.standing) ?? 0;
+        tNet += double.tryParse(p.net) ?? 0;
+        tGrand += double.tryParse(p.total) ?? 0;
       }
     }
 
-    if (currentSellerPurchases.isEmpty) {
-      if (!silent && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('لا توجد سجلات مضافة للحفظ'),
-              backgroundColor: Colors.orange),
-        );
-      }
+    if (allPurchasesFromUI.isEmpty) {
+      if (!silent) _showInlineWarning(-1, "لا توجد بيانات للحفظ");
       return;
     }
 
-    // التحقق من قاعدة القائم والصافي (تمت إعادته من الكود الأصلي)
-    bool hasInvalidNetValue = false;
-    for (int i = 0; i < rowControllers.length; i++) {
-      final controllers = rowControllers[i];
-      double standing = double.tryParse(controllers[5].text) ?? 0;
-      double net = double.tryParse(controllers[6].text) ?? 0;
-
-      if (standing < net) {
-        hasInvalidNetValue = true;
-        controllers[6].text = standing.toStringAsFixed(2);
-        _calculateRowValues(i);
-      } else if (standing == 0 && net > 0) {
-        hasInvalidNetValue = true;
-        controllers[6].text = '0.00';
-        _calculateRowValues(i);
-      }
-    }
-
-    if (hasInvalidNetValue && !silent && mounted) {
-      bool confirmed = await _showNetValueWarning();
-      if (!confirmed) {
-        setState(() => _isSaving = false);
-        return;
-      }
-    }
-
-    _calculateAllTotals();
     setState(() => _isSaving = true);
 
-    // ============ منطق حساب الفرق للموردين (الجزء الجديد والمهم) ============
+    // 2. حساب فروقات أرصدة الموردين (للبائع الحالي فقط)
     Map<String, double> supplierBalanceChanges = {};
-
-    // 1. تحميل السجل القديم للحصول على القيم السابقة
     final existingDocument =
         await _storageService.loadPurchaseDocument(widget.selectedDate);
 
-    // 2. طرح القيم القديمة (إن وجدت)
+    Map<String, Purchase> oldOwnedPurchases = {};
     if (existingDocument != null) {
-      for (var purchase in existingDocument.purchases) {
-        if (purchase.sellerName == widget.sellerName &&
-            purchase.cashOrDebt == 'دين' &&
-            purchase.affiliation.isNotEmpty) {
-          double oldAmount = double.tryParse(purchase.total) ?? 0;
-          supplierBalanceChanges[purchase.affiliation] =
-              (supplierBalanceChanges[purchase.affiliation] ?? 0) - oldAmount;
+      for (var p in existingDocument.purchases) {
+        if (p.sellerName == widget.sellerName && p.cashOrDebt == 'دين') {
+          oldOwnedPurchases["${p.serialNumber}-${p.material}"] = p;
         }
       }
     }
 
-    // 3. إضافة القيم الجديدة
-    for (var purchase in currentSellerPurchases) {
-      if (purchase.cashOrDebt == 'دين' && purchase.affiliation.isNotEmpty) {
-        double newAmount = double.tryParse(purchase.total) ?? 0;
-        supplierBalanceChanges[purchase.affiliation] =
-            (supplierBalanceChanges[purchase.affiliation] ?? 0) + newAmount;
-      }
-    }
-    // =======================================================================
+    for (var newP in allPurchasesFromUI) {
+      if (newP.sellerName == widget.sellerName &&
+          newP.cashOrDebt == 'دين' &&
+          newP.affiliation.isNotEmpty) {
+        double oldAmount = 0;
+        final oldP = oldOwnedPurchases["${newP.serialNumber}-${newP.material}"];
+        if (oldP != null) oldAmount = double.tryParse(oldP.total) ?? 0;
 
-    String journalNumber = serialNumber;
-    if (journalNumber.isEmpty || journalNumber == '1') {
-      final doc =
-          await _storageService.loadPurchaseDocument(widget.selectedDate);
-      if (doc == null) {
-        journalNumber = await _storageService.getNextJournalNumber();
-      } else {
-        journalNumber = doc.recordNumber;
+        double newAmount = double.tryParse(newP.total) ?? 0;
+        double diff = newAmount - oldAmount;
+
+        if (diff != 0) {
+          supplierBalanceChanges[newP.affiliation] =
+              (supplierBalanceChanges[newP.affiliation] ?? 0) + diff;
+        }
       }
     }
 
-    final document = PurchaseDocument(
-      recordNumber: journalNumber,
+    // 3. الحفظ النهائي (إرسال القائمة المدمجة)
+    final documentToSave = PurchaseDocument(
+      recordNumber: serialNumber,
       date: widget.selectedDate,
       sellerName: widget.sellerName,
       storeName: widget.storeName,
       dayName: dayName,
-      purchases: currentSellerPurchases,
+      purchases: allPurchasesFromUI,
       totals: {
-        'totalCount': totalCountController.text,
-        'totalBase': totalBaseController.text,
-        'totalNet': totalNetController.text,
-        'totalGrand': totalGrandController.text,
+        'totalCount': tCount.toStringAsFixed(0),
+        'totalBase': tStanding.toStringAsFixed(2),
+        'totalNet': tNet.toStringAsFixed(2),
+        'totalGrand': tGrand.toStringAsFixed(2),
       },
     );
 
-    final success = await _storageService.savePurchaseDocument(document);
+    final success = await _storageService.savePurchaseDocument(documentToSave);
 
     if (success) {
-      // 4. تطبيق الفرق الصافي على أرصدة الموردين
       for (var entry in supplierBalanceChanges.entries) {
-        if (entry.value != 0) {
-          await _supplierIndexService.updateSupplierBalance(
-              entry.key, entry.value);
-          if (kDebugMode) {
-            print(
-                '🔄 تم تحديث رصيد المورد ${entry.key} بمقدار: ${entry.value.toStringAsFixed(2)}');
-          }
-        }
+        await _supplierIndexService.updateSupplierBalance(
+            entry.key, entry.value);
       }
-
-      setState(() {
-        _hasUnsavedChanges = false;
-        serialNumber = journalNumber;
-      });
+      setState(() => _hasUnsavedChanges = false);
+      await _loadOrCreateJournal(); // تحديث الواجهة والـ sellerNames
     }
 
     setState(() => _isSaving = false);
-
     if (!silent && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(success ? 'تم الحفظ بنجاح' : 'فشل الحفظ'),
-          backgroundColor: success ? Colors.green : Colors.red,
-        ),
-      );
+          backgroundColor: success ? Colors.green : Colors.red));
     }
   }
 
@@ -1541,27 +1474,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
         filePath: filePath,
       );
     }
-  }
-
-  Future<bool> _showNetValueWarning() async {
-    return await showDialog<bool>(
-          context: context,
-          barrierDismissible: false,
-          builder: (context) => AlertDialog(
-            title: const Text('تنبيه'),
-            content: const Text(
-              'تم تصحيح بعض القيم في حقل الصافي لأنها كانت أكبر من القائم.\n\nتذكر: يجب أن يكون القائم دائماً أكبر من أو يساوي الصافي.',
-              textAlign: TextAlign.center,
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('موافق'),
-              ),
-            ],
-          ),
-        ) ??
-        false;
   }
 
   Future<bool> _showUnsavedChangesDialog() async {
@@ -1681,13 +1593,11 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     }
   }
 
-// أضف هذه الدالة الجديدة (بديل لـ _isRowOwnedByCurrentSeller)
+// 1. إضافة دالة التحقق من الصلاحية
   bool _canEditRow(int rowIndex) {
-    if (rowIndex >= sellerNames.length) return false;
-    // الأدمن يمكنه تعديل أي سجل
-    if (_isAdmin) return true;
-    // البائع العادي يمكنه تعديل سجلاته فقط
-    return sellerNames[rowIndex] == widget.sellerName;
+    if (rowIndex >= sellerNames.length) return true; // صف جديد
+    if (_isAdmin) return true; // الأدمن يعدل كل شيء
+    return sellerNames[rowIndex] == widget.sellerName; // البائع يعدل سجلاته فقط
   }
 }
 

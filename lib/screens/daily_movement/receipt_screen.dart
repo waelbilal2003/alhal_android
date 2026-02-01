@@ -112,21 +112,15 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     totalLoadController = TextEditingController();
 
     _resetTotalValues();
-
-    // تهيئة المتحكم
     _horizontalSuggestionsController = ScrollController();
 
-    _verticalScrollController.addListener(() {
-      _hideAllSuggestionsImmediately();
-    });
-
-    _horizontalScrollController.addListener(() {
-      _hideAllSuggestionsImmediately();
-    });
+    _verticalScrollController.addListener(_hideAllSuggestionsImmediately);
+    _horizontalScrollController.addListener(_hideAllSuggestionsImmediately);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkAdminStatus();
-      _loadOrCreateJournal();
+      _checkAdminStatus().then((_) {
+        _loadOrCreateJournal();
+      });
       _loadAvailableDates();
       _loadJournalNumber();
     });
@@ -689,18 +683,17 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     bool isNumericField =
         colIndex == 3 || colIndex == 5 || colIndex == 6 || colIndex == 7;
 
-    Widget cell = TableBuilder.buildTableCell(
+    return TableBuilder.buildTableCell(
       controller: controller,
       focusNode: focusNode,
+      enabled: _canEditRow(rowIndex), // <-- التمرير الصحيح للصلاحية
       isSerialField: isSerialField,
       isNumericField: isNumericField,
       rowIndex: rowIndex,
       colIndex: colIndex,
       scrollToField: _scrollToField,
-      onFieldSubmitted: (value, rIndex, cIndex) =>
-          _handleFieldSubmitted(value, rIndex, cIndex),
-      onFieldChanged: (value, rIndex, cIndex) =>
-          _handleFieldChanged(value, rIndex, cIndex),
+      onFieldSubmitted: _handleFieldSubmitted,
+      onFieldChanged: _handleFieldChanged,
       inputFormatters: isNumericField
           ? [
               TableComponents.PositiveDecimalInputFormatter(),
@@ -708,23 +701,6 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
             ]
           : null,
     );
-
-    // إذا لم يكن السجل مملوكاً للبائع الحالي، جعل الخلية للقراءة فقط
-    if (!_canEditRow(rowIndex)) {
-      return IgnorePointer(
-        child: Opacity(
-          opacity: 0.7,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.grey[100],
-            ),
-            child: cell,
-          ),
-        ),
-      );
-    }
-
-    return cell;
   }
 
   Widget _buildMaterialCell(
@@ -736,15 +712,14 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     return TableBuilder.buildTableCell(
       controller: controller,
       focusNode: focusNode,
+      enabled: _canEditRow(rowIndex),
       isSerialField: false,
       isNumericField: false,
       rowIndex: rowIndex,
       colIndex: colIndex,
       scrollToField: _scrollToField,
-      onFieldSubmitted: (value, rIndex, cIndex) =>
-          _handleFieldSubmitted(value, rIndex, cIndex),
-      onFieldChanged: (value, rIndex, cIndex) =>
-          _handleFieldChanged(value, rIndex, cIndex),
+      onFieldSubmitted: _handleFieldSubmitted,
+      onFieldChanged: _handleFieldChanged,
     );
   }
 
@@ -757,15 +732,14 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     return TableBuilder.buildTableCell(
       controller: controller,
       focusNode: focusNode,
+      enabled: _canEditRow(rowIndex),
       isSerialField: false,
       isNumericField: false,
       rowIndex: rowIndex,
       colIndex: colIndex,
       scrollToField: _scrollToField,
-      onFieldSubmitted: (value, rIndex, cIndex) =>
-          _handleFieldSubmitted(value, rIndex, cIndex),
-      onFieldChanged: (value, rIndex, cIndex) =>
-          _handleFieldChanged(value, rIndex, cIndex),
+      onFieldSubmitted: _handleFieldSubmitted,
+      onFieldChanged: _handleFieldChanged,
     );
   }
 
@@ -778,15 +752,14 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     return TableBuilder.buildTableCell(
       controller: controller,
       focusNode: focusNode,
+      enabled: _canEditRow(rowIndex),
       isSerialField: false,
       isNumericField: false,
       rowIndex: rowIndex,
       colIndex: colIndex,
       scrollToField: _scrollToField,
-      onFieldSubmitted: (value, rIndex, cIndex) =>
-          _handleFieldSubmitted(value, rIndex, cIndex),
-      onFieldChanged: (value, rIndex, cIndex) =>
-          _handleFieldChanged(value, rIndex, cIndex),
+      onFieldSubmitted: _handleFieldSubmitted,
+      onFieldChanged: _handleFieldChanged,
     );
   }
 
@@ -1130,17 +1103,14 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
   Future<void> _saveCurrentRecord({bool silent = false}) async {
     if (_isSaving) return;
 
-    // التأكد من عدم وجود تغييرات غير محفوظة إذا لم يكن هناك شيء للحفظ
     final hasActualContent = rowControllers.any((controllers) =>
         controllers[1].text.isNotEmpty || controllers[3].text.isNotEmpty);
 
     if (!hasActualContent) {
       if (!silent) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('لا توجد بيانات للحفظ'),
-              backgroundColor: Colors.orange),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('لا توجد بيانات للحفظ'),
+            backgroundColor: Colors.orange));
       }
       return;
     }
@@ -1148,13 +1118,12 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     setState(() => _isSaving = true);
 
     // =========================================================================
-    // الخطوة 1: بناء القائمة الكاملة والحالية من السجلات من واجهة المستخدم
-    // هذا هو "مصدر الحقيقة" الجديد الذي سنحفظه.
+    // الخطوة 1: بناء القائمة الكاملة للسجلات من واجهة المستخدم (مصدر الحقيقة)
+    // *** بدون فلترة أو فرز ***
     // =========================================================================
     final List<Receipt> allReceiptsFromUI = [];
     for (int i = 0; i < rowControllers.length; i++) {
       final controllers = rowControllers[i];
-      // نضيف السجل فقط إذا كان يحتوي على بيانات (مادة أو عدد)
       if (controllers[1].text.isNotEmpty || controllers[3].text.isNotEmpty) {
         allReceiptsFromUI.add(Receipt(
           serialNumber: (i + 1).toString(), // إعادة ترقيم لضمان التسلسل
@@ -1171,77 +1140,83 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     }
 
     // =========================================================================
-    // الخطوة 2: حساب التغير في الأرصدة (هذا المنطق لم يتغير وهو صحيح)
-    // يحسب الفرق فقط للسجلات التي يملكها البائع الحالي.
+    // الخطوة 2: حساب التغير في الأرصدة (فقط للسجلات التي عدلها البائع الحالي)
     // =========================================================================
     Map<String, double> supplierBalanceChanges = {};
     final existingDocument =
         await _storageService.loadReceiptDocumentForDate(widget.selectedDate);
 
-    // طرح القيم القديمة للبائع الحالي فقط
+    // إنشاء خريطة للقيم القديمة التي يملكها البائع الحالي لتسهيل المقارنة
+    Map<String, Receipt> oldOwnedReceipts = {};
     if (existingDocument != null) {
       for (var receipt in existingDocument.receipts) {
-        if (receipt.sellerName == widget.sellerName &&
-            receipt.affiliation.isNotEmpty) {
-          double oldDeduction = (double.tryParse(receipt.payment) ?? 0) +
-              (double.tryParse(receipt.load) ?? 0);
-          supplierBalanceChanges[receipt.affiliation] =
-              (supplierBalanceChanges[receipt.affiliation] ?? 0) + oldDeduction;
+        if (receipt.sellerName == widget.sellerName) {
+          // نستخدم مزيج المسلسل والمادة كمانع تكرار مؤقت
+          oldOwnedReceipts["${receipt.serialNumber}-${receipt.material}"] =
+              receipt;
         }
       }
     }
 
-    // إضافة تأثير القيم الجديدة للبائع الحالي
-    for (var receipt in allReceiptsFromUI) {
-      if (receipt.sellerName == widget.sellerName &&
-          receipt.affiliation.isNotEmpty) {
-        double newDeduction = (double.tryParse(receipt.payment) ?? 0) +
-            (double.tryParse(receipt.load) ?? 0);
-        supplierBalanceChanges[receipt.affiliation] =
-            (supplierBalanceChanges[receipt.affiliation] ?? 0) - newDeduction;
+    // مقارنة القيم الجديدة بالقديمة للبائع الحالي فقط
+    for (var newReceipt in allReceiptsFromUI) {
+      if (newReceipt.sellerName == widget.sellerName) {
+        double oldDeduction = 0;
+        // البحث عن السجل المطابق في القائمة القديمة
+        final oldReceipt = oldOwnedReceipts[
+            "${newReceipt.serialNumber}-${newReceipt.material}"];
+        if (oldReceipt != null) {
+          oldDeduction = (double.tryParse(oldReceipt.payment) ?? 0) +
+              (double.tryParse(oldReceipt.load) ?? 0);
+        }
+
+        double newDeduction = (double.tryParse(newReceipt.payment) ?? 0) +
+            (double.tryParse(newReceipt.load) ?? 0);
+
+        // حساب الفرق الصافي
+        double change = newDeduction - oldDeduction;
+
+        if (newReceipt.affiliation.isNotEmpty && change != 0) {
+          supplierBalanceChanges[newReceipt.affiliation] =
+              (supplierBalanceChanges[newReceipt.affiliation] ?? 0) + change;
+        }
       }
     }
 
     // =========================================================================
-    // الخطوة 3: إنشاء المستند النهائي وإرساله للحفظ
+    // الخطوة 3: إنشاء المستند النهائي وإرساله للحفظ (بالقائمة الكاملة)
     // =========================================================================
     final documentToSave = ReceiptDocument(
       recordNumber: serialNumber,
       date: widget.selectedDate,
-      sellerName: widget.sellerName, // اسم آخر بائع قام بالحفظ
+      sellerName: widget.sellerName,
       storeName: widget.storeName,
       dayName: dayName,
-      receipts: allReceiptsFromUI, // نمرر القائمة الكاملة والمحدثة
-      totals: {}, // ستقوم خدمة التخزين بحسابها
+      receipts: allReceiptsFromUI,
+      totals: {},
     );
 
     final success = await _storageService.saveReceiptDocument(documentToSave);
 
     if (success) {
-      // تطبيق التغييرات على أرصدة الموردين
       for (var entry in supplierBalanceChanges.entries) {
         if (entry.value != 0) {
+          // نرسل الفرق الصافي للتحديث
           await _supplierIndexService.updateSupplierBalance(
-              entry.key, entry.value);
+              entry.key, -entry.value);
         }
       }
 
-      // بعد الحفظ الناجح، أعد تحميل البيانات من الملف لضمان التزامن
       await _loadOrCreateJournal();
-      setState(() {
-        _hasUnsavedChanges = false;
-      });
+      setState(() => _hasUnsavedChanges = false);
     }
 
     setState(() => _isSaving = false);
 
     if (!silent && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(success ? 'تم الحفظ بنجاح' : 'فشل الحفظ'),
-          backgroundColor: success ? Colors.green : Colors.red,
-        ),
-      );
+          backgroundColor: success ? Colors.green : Colors.red));
     }
   }
 
@@ -1374,15 +1349,14 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     }
   }
 
-  // *** دالة جديدة ومحورية لتحديد إمكانية التعديل ***
   bool _canEditRow(int rowIndex) {
     if (rowIndex >= sellerNames.length) {
-      // إذا كان الصف جديداً ولم يحفظ بعد، فمالكه هو البائع الحالي
-      return true;
+      return true; // صف جديد لم يحفظ بعد
     }
-    // الأدمن يمكنه تعديل أي سجل
-    if (_isAdmin) return true;
-    // البائع العادي يمكنه تعديل سجلاته فقط
+    if (_isAdmin) {
+      return true; // الأدمن يمكنه تعديل أي شيء
+    }
+    // البائع العادي يعدل سجلاته فقط
     return sellerNames[rowIndex] == widget.sellerName;
   }
 }

@@ -13,11 +13,11 @@ Widget buildTableCell({
   required Function(String, int, int) onFieldSubmitted,
   required Function(String, int, int) onFieldChanged,
   List<TextInputFormatter>? inputFormatters,
-  bool isSField = false, // From sales_screen logic
+  bool isSField = false,
   double fontSize = 13.0,
   TextAlign textAlign = TextAlign.right,
   TextDirection textDirection = TextDirection.rtl,
-  bool enabled = true, // *** أضف هذا السطر ***
+  bool enabled = true, // *** هذا هو المتغير الهام للتحكم بالصلاحيات ***
 }) {
   return Container(
     padding: const EdgeInsets.all(1),
@@ -31,7 +31,10 @@ Widget buildTableCell({
       child: TextFormField(
         controller: controller,
         focusNode: focusNode,
-        enabled: enabled, // *** استخدم المتغير هنا ***
+        // *** التعديل الرئيسي: استخدام المتغير 'enabled' الذي يتم تمريره ***
+        // إذا كان enabled=false، فسيتم تعطيل الحقل بالكامل.
+        enabled: enabled,
+        // حقل المسلسل للقراءة فقط دائماً، لكن يمكن التركيز عليه
         readOnly: isSerialField,
         keyboardType: isNumericField
             ? const TextInputType.numberWithOptions(decimal: true)
@@ -39,14 +42,16 @@ Widget buildTableCell({
         inputFormatters: inputFormatters,
         style: TextStyle(
           fontSize: fontSize,
-          color: enabled
-              ? Colors.black
-              : Colors.grey[700], // لون مختلف للنص المعطل
+          // تغيير لون النص إذا كان الحقل معطلاً لتمييزه بصرياً
+          color: enabled ? Colors.black : Colors.grey[700],
         ),
         textAlign: textAlign,
         textDirection: textDirection,
-        decoration: const InputDecoration(
-          contentPadding: EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+        decoration: InputDecoration(
+          filled: !enabled, // تلوين الخلفية إذا كان الحقل معطلاً
+          fillColor: Colors.grey[100],
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
           border: InputBorder.none,
           isDense: true,
         ),

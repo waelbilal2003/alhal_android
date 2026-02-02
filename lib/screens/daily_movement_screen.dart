@@ -9,6 +9,8 @@ import 'daily_movement/box_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'bait_screen.dart';
+// استيراد الشاشة الجديدة
+import 'daily_movement/customer_selection_screen.dart';
 
 class DailyMovementScreen extends StatefulWidget {
   final String selectedDate;
@@ -96,11 +98,10 @@ class _DailyMovementScreenState extends State<DailyMovementScreen> {
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
                       horizontal: 20.0, vertical: 15.0),
-                  // <--- التعديل: استبدال GridView بـ Column
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.start,
                     children: [
-                      // --- السطر الأول (3 أزرار) ---
+                      // --- السطر الأول (4 أزرار) ---
                       Row(
                         children: [
                           Expanded(
@@ -146,6 +147,23 @@ class _DailyMovementScreenState extends State<DailyMovementScreen> {
                                       sellerName: widget.sellerName,
                                       selectedDate: widget.selectedDate,
                                       storeName: _storeName),
+                                ),
+                              );
+                            }),
+                          ),
+                          // --- الزر الجديد: الفواتير ---
+                          const SizedBox(width: 12.0),
+                          Expanded(
+                            child: _buildMenuButton(context,
+                                icon: Icons.receipt_long, // أيقونة مناسبة
+                                label: 'الفواتير',
+                                color: Colors.indigo[700]!, onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (context) => CustomerSelectionScreen(
+                                    selectedDate: widget.selectedDate,
+                                    storeName: _storeName,
+                                  ),
                                 ),
                               );
                             }),
@@ -256,8 +274,8 @@ class _DailyMovementScreenState extends State<DailyMovementScreen> {
       required Color color,
       VoidCallback? onTap}) {
     final isServicesButton = label == 'الخدمات';
-    final buttonHeight = (MediaQuery.of(context).size.width / 3) /
-        2.25; // الحفاظ على نسبة العرض للارتفاع
+    // تعديل ارتفاع الزر ليتناسب مع وجود 4 أزرار
+    final buttonHeight = (MediaQuery.of(context).size.width / 4) / 1.5;
 
     return FutureBuilder<bool>(
         future: isServicesButton

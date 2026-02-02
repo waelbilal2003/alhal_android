@@ -92,6 +92,92 @@ class _YieldScreenState extends State<YieldScreen> {
     _loadSellers();
   }
 
+  // الدالة الوحيدة والموحدة لجلب كافة البيانات وتحديث الشاشة تلقائياً
+  Future<void> _refreshData() async {
+    // 1. التحقق من وجود التاريخ واسم البائع
+    final String currentSeller = _sellerNameController.text.trim();
+    if (widget.selectedDate == null || currentSeller.isEmpty || !_isLoggedIn)
+      return;
+
+    if (mounted) setState(() => _isLoading = true);
+
+    try {
+      // متغيرات لتجميع القيم محلياً
+      double totalSales = 0;
+      double totalPurchases = 0;
+      double totalBoxReceived = 0;
+      double totalBoxPaid = 0;
+      double totalReceiptPayments = 0; // (دفعة + حمولة)
+
+      // --- أولاً: جلب المبيعات النقدية ---
+      final salesDoc =
+          await SalesStorageService().loadSalesDocument(widget.selectedDate!);
+      if (salesDoc != null) {
+        for (var sale in salesDoc.sales) {
+          if (sale.sellerName == currentSeller && sale.cashOrDebt == 'نقدي') {
+            totalSales += double.tryParse(sale.total) ?? 0;
+          }
+        }
+      }
+
+      // --- ثانياً: جلب المشتريات النقدية ---
+      final purchaseDoc = await PurchaseStorageService()
+          .loadPurchaseDocument(widget.selectedDate!);
+      if (purchaseDoc != null) {
+        for (var p in purchaseDoc.purchases) {
+          if (p.sellerName == currentSeller && p.cashOrDebt == 'نقدي') {
+            totalPurchases += double.tryParse(p.total) ?? 0;
+          }
+        }
+      }
+
+      // --- ثالثاً: جلب بيانات الصندوق (مقبوضات ومدفوعات) ---
+      final boxDoc = await BoxStorageService()
+          .loadBoxDocumentForDate(widget.selectedDate!);
+      if (boxDoc != null) {
+        for (var trans in boxDoc.transactions) {
+          if (trans.sellerName == currentSeller) {
+            totalBoxReceived += double.tryParse(trans.received) ?? 0;
+            totalBoxPaid += double.tryParse(trans.paid) ?? 0;
+          }
+        }
+      }
+
+      // --- رابعاً: جلب بيانات الاستلام (دفعة وحمولة البائع حصراً) ---
+      final receiptDoc = await ReceiptStorageService()
+          .loadReceiptDocumentForDate(widget.selectedDate!);
+      if (receiptDoc != null) {
+        // فحص كل سجل استلام داخل الملف للتحقق من صاحبه
+        for (var r in receiptDoc.receipts) {
+          // ملاحظة: التحقق من اسم البائع داخل كل سجل (Record)
+          if (r.sellerName == currentSeller) {
+            totalReceiptPayments += (double.tryParse(r.payment) ?? 0) +
+                (double.tryParse(r.load) ?? 0);
+          }
+        }
+      }
+
+      // --- خامساً: تحديث واجهة المستخدم مرة واحدة بكل القيم ---
+      if (mounted) {
+        setState(() {
+          _cashSalesController.text = totalSales.toStringAsFixed(2);
+          _cashPurchasesController.text = totalPurchases.toStringAsFixed(2);
+          _receiptsController.text = totalBoxReceived.toStringAsFixed(2);
+
+          // المدفوعات = مدفوع الصندوق + (دفعة وحمولة الاستلام)
+          double finalPayments = totalBoxPaid + totalReceiptPayments;
+          _paymentsController.text = finalPayments.toStringAsFixed(2);
+
+          _calculateYield(); // حساب الغلة النهائية
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoading = false);
+      debugPrint('Error in Yield Refresh: $e');
+    }
+  }
+
   Future<void> _checkIfLoggedIn() async {
     final prefs = await SharedPreferences.getInstance();
     final loggedIn = prefs.getBool('isLoggedIn') ?? false;
@@ -103,10 +189,9 @@ class _YieldScreenState extends State<YieldScreen> {
         _sellerNameController.text = savedSellerName;
       });
 
-      // تحميل المقبوض منه المحفوظ أولاً
       await _loadCollectedAmount();
 
-      // التحديث التلقائي الفوري لكافة الحقول (المبيعات، المشتريات، الصندوق، الاستلام)
+      // التحديث التلقائي فور الدخول
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _refreshData();
       });
@@ -883,119 +968,6 @@ class _YieldScreenState extends State<YieldScreen> {
       } catch (e) {
         print('Error loading sellers: $e');
       }
-    }
-  }
-
-  // 2. جلب مبيعات نقدية (من شاشة المبيعات - فلترة حسب البائع ونوع الدفع)
-  Future<double> _getFilteredCashSales() async {
-    if (widget.selectedDate == null) return 0;
-    final salesStorage = SalesStorageService();
-    final currentSeller = _sellerNameController.text;
-    double total = 0;
-
-    final doc = await salesStorage.loadSalesDocument(widget.selectedDate!);
-    if (doc != null) {
-      for (var sale in doc.sales) {
-        if (sale.sellerName == currentSeller && sale.cashOrDebt == 'نقدي') {
-          total += double.tryParse(sale.total) ?? 0;
-        }
-      }
-    }
-    return total;
-  }
-
-  // 3. جلب مشتريات نقدية (من شاشة المشتريات - فلترة حسب البائع ونوع الدفع)
-  Future<double> _getFilteredCashPurchases() async {
-    if (widget.selectedDate == null) return 0;
-    final purchaseStorage = PurchaseStorageService();
-    return await purchaseStorage.getCashPurchasesForSeller(
-      widget.selectedDate!,
-      _sellerNameController.text,
-    );
-  }
-
-  // 4. جلب بيانات الصندوق (مقبوضات ومدفوعات - فلترة حسب البائع)
-  Future<Map<String, double>> _getBoxData() async {
-    if (widget.selectedDate == null) return {'received': 0, 'paid': 0};
-    final boxStorage = BoxStorageService();
-    final currentSeller = _sellerNameController.text;
-    double received = 0;
-    double paid = 0;
-
-    final doc = await boxStorage.loadBoxDocumentForDate(widget.selectedDate!);
-    if (doc != null) {
-      for (var trans in doc.transactions) {
-        if (trans.sellerName == currentSeller) {
-          received += double.tryParse(trans.received) ?? 0;
-          paid += double.tryParse(trans.paid) ?? 0;
-        }
-      }
-    }
-    return {'received': received, 'paid': paid};
-  }
-
-// 5. جلب مدفوعات الاستلام (دفعة + حمولة - فلترة حسب البائع)
-  Future<double> _getReceiptPayments() async {
-    if (widget.selectedDate == null) return 0;
-    final receiptStorage = ReceiptStorageService();
-    final currentSeller = _sellerNameController.text.trim();
-    double total = 0;
-
-    // تحميل المستند لليوم المحدد
-    final doc =
-        await receiptStorage.loadReceiptDocumentForDate(widget.selectedDate!);
-
-    if (doc != null) {
-      // الحل: الدوران على كل سجل استلام داخل الملف والتحقق من اسم البائع لكل سطر
-      for (var receipt in doc.receipts) {
-        if (receipt.sellerName == currentSeller) {
-          double payment = double.tryParse(receipt.payment) ?? 0;
-          double load = double.tryParse(receipt.load) ?? 0;
-          total += (payment + load);
-        }
-      }
-    }
-    return total;
-  }
-
-  // 6. الدالة الموحدة لتحديث كافة البيانات وعرضها في الشاشة
-  Future<void> _refreshData() async {
-    // التأكد من وجود تاريخ واسم بائع قبل البدء
-    if (widget.selectedDate == null || _sellerNameController.text.isEmpty)
-      return;
-
-    if (mounted) setState(() => _isLoading = true);
-
-    try {
-      // جلب البيانات من المصادر الأربعة بالتوازي لسرعة التحديث
-      final results = await Future.wait([
-        _getFilteredCashSales(),
-        _getFilteredCashPurchases(),
-        _getBoxData(),
-        _getReceiptPayments(),
-      ]);
-
-      if (mounted) {
-        setState(() {
-          // تحديث الحقول في الواجهة
-          _cashSalesController.text = (results[0] as double).toStringAsFixed(2);
-          _cashPurchasesController.text =
-              (results[1] as double).toStringAsFixed(2);
-
-          final boxData = results[2] as Map<String, double>;
-          _receiptsController.text = boxData['received']!.toStringAsFixed(2);
-
-          // إجمالي المدفوعات = (مدفوع الصندوق) + (دفعة وحمولة الاستلام المفلترة)
-          double totalPayments = boxData['paid']! + (results[3] as double);
-          _paymentsController.text = totalPayments.toStringAsFixed(2);
-
-          // إعادة حساب الناتج النهائي (الغلة)
-          _calculateYield();
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) setState(() => _isLoading = false);
     }
   }
 }

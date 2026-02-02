@@ -886,6 +886,7 @@ class _SalesScreenState extends State<SalesScreen> {
     return TableBuilder.buildTableCell(
       controller: controller,
       focusNode: focusNode,
+      enabled: _canEditRow(rowIndex),
       isSerialField: false,
       isNumericField: false,
       rowIndex: rowIndex,
@@ -907,6 +908,7 @@ class _SalesScreenState extends State<SalesScreen> {
     return TableBuilder.buildTableCell(
       controller: controller,
       focusNode: focusNode,
+      enabled: _canEditRow(rowIndex),
       isSerialField: false,
       isNumericField: false,
       rowIndex: rowIndex,
@@ -928,6 +930,7 @@ class _SalesScreenState extends State<SalesScreen> {
     return TableBuilder.buildTableCell(
       controller: controller,
       focusNode: focusNode,
+      enabled: _canEditRow(rowIndex),
       isSerialField: false,
       isNumericField: false,
       rowIndex: rowIndex,

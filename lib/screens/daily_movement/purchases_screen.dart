@@ -802,6 +802,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     return TableBuilder.buildTableCell(
       controller: controller,
       focusNode: focusNode,
+      enabled: _canEditRow(rowIndex),
       isSerialField: false,
       isNumericField: false,
       rowIndex: rowIndex,
@@ -823,6 +824,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     return TableBuilder.buildTableCell(
       controller: controller,
       focusNode: focusNode,
+      enabled: _canEditRow(rowIndex),
       isSerialField: false,
       isNumericField: false,
       rowIndex: rowIndex,
@@ -844,6 +846,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     return TableBuilder.buildTableCell(
       controller: controller,
       focusNode: focusNode,
+      enabled: _canEditRow(rowIndex),
       isSerialField: false,
       isNumericField: false,
       rowIndex: rowIndex,

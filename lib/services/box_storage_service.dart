@@ -26,69 +26,17 @@ class BoxStorageService {
     try {
       final basePath = await _getBasePath();
       final folderPath = '$basePath/BoxJournals';
-
       final folder = Directory(folderPath);
-      if (!await folder.exists()) {
-        await folder.create(recursive: true);
-      }
+      if (!await folder.exists()) await folder.create(recursive: true);
 
       final fileName = _createFileName(document.date);
       final filePath = '$folderPath/$fileName';
       final file = File(filePath);
-
-      BoxDocument? existingDocument;
-      if (await file.exists()) {
-        final jsonString = await file.readAsString();
-        final jsonMap = jsonDecode(jsonString) as Map<String, dynamic>;
-        existingDocument = BoxDocument.fromJson(jsonMap);
-      }
-
-      List<BoxTransaction> mergedTransactions = [];
-      if (existingDocument != null) {
-        mergedTransactions.addAll(existingDocument.transactions
-            .where((t) => t.sellerName != document.sellerName));
-      }
-      mergedTransactions.addAll(document.transactions);
-
-      for (int i = 0; i < mergedTransactions.length; i++) {
-        mergedTransactions[i] =
-            mergedTransactions[i].copyWith(serialNumber: (i + 1).toString());
-      }
-
-      double totalReceived = 0;
-      double totalPaid = 0;
-      for (var trans in mergedTransactions) {
-        totalReceived += double.tryParse(trans.received) ?? 0;
-        totalPaid += double.tryParse(trans.paid) ?? 0;
-      }
-
-      final String finalRecordNumber =
-          existingDocument?.recordNumber ?? await getNextJournalNumber();
-
-      final updatedDocument = BoxDocument(
-        recordNumber: finalRecordNumber,
-        date: document.date,
-        sellerName: document.sellerName,
-        storeName: document.storeName,
-        dayName: document.dayName,
-        transactions: mergedTransactions,
-        totals: {
-          'totalReceived': totalReceived.toStringAsFixed(2),
-          'totalPaid': totalPaid.toStringAsFixed(2),
-        },
-      );
-
-      final jsonString = jsonEncode(updatedDocument.toJson());
+      final jsonString = jsonEncode(document.toJson());
       await file.writeAsString(jsonString);
 
-      if (kDebugMode) {
-        debugPrint('✅ تم حفظ ملف الصندوق المدمج: $filePath');
-      }
       return true;
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ خطأ في حفظ ملف الصندوق: $e');
-      }
       return false;
     }
   }

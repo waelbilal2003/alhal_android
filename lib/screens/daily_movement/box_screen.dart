@@ -1645,8 +1645,13 @@ class _BoxScreenState extends State<BoxScreen> {
   }
 
   bool _canEditRow(int rowIndex) {
-    if (rowIndex >= sellerNames.length) return true;
-    if (_isAdmin) return true;
+    if (rowIndex >= sellerNames.length) {
+      return true; // صف جديد لم يحفظ بعد
+    }
+    if (_isAdmin) {
+      return true; // الأدمن يمكنه تعديل أي شيء
+    }
+    // البائع العادي يعدل سجلاته فقط
     return sellerNames[rowIndex] == widget.sellerName;
   }
 }

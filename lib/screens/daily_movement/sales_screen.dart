@@ -824,6 +824,7 @@ class _SalesScreenState extends State<SalesScreen> {
   Widget _buildTableCell(TextEditingController controller, FocusNode focusNode,
       int rowIndex, int colIndex, bool isOwnedByCurrentSeller,
       {bool isSField = false}) {
+    final bool enabled = _canEditRow(rowIndex);
     bool isSerialField = colIndex == 0;
     bool isNumericField =
         colIndex == 4 || colIndex == 6 || colIndex == 7 || colIndex == 8;
@@ -831,6 +832,7 @@ class _SalesScreenState extends State<SalesScreen> {
     Widget cell = TableBuilder.buildTableCell(
       controller: controller,
       focusNode: focusNode,
+      enabled: enabled, // <--- تمرير القيمة هنا لتعطيل الـ TextField
       isSerialField: isSerialField,
       isNumericField: isNumericField,
       rowIndex: rowIndex,
@@ -1122,9 +1124,7 @@ class _SalesScreenState extends State<SalesScreen> {
 
   void _showCashOrDebtDialog(int rowIndex) {
     // التحقق إذا كان السجل مملوكاً للبائع الحالي
-    if (!_canEditRow(rowIndex)) {
-      return;
-    }
+    if (!_canEditRow(rowIndex)) return; // منع الظهور تماماً
 
     CommonDialogs.showCashOrDebtDialog(
       context: context,
@@ -1170,10 +1170,7 @@ class _SalesScreenState extends State<SalesScreen> {
 
   void _showEmptiesDialog(int rowIndex) {
     // التحقق إذا كان السجل مملوكاً للبائع الحالي
-    if (!_isRowOwnedByCurrentSeller(rowIndex)) {
-      return;
-    }
-
+    if (!_canEditRow(rowIndex)) return; // منع الظهور تماماً
     CommonDialogs.showEmptiesDialog(
       context: context,
       currentValue: emptiesValues[rowIndex],
@@ -1211,12 +1208,6 @@ class _SalesScreenState extends State<SalesScreen> {
         }
       });
     }
-  }
-
-  // التحقق إذا كان السجل مملوكاً للبائع الحالي
-  bool _isRowOwnedByCurrentSeller(int rowIndex) {
-    if (rowIndex >= sellerNames.length) return false;
-    return sellerNames[rowIndex] == widget.sellerName;
   }
 
   @override
@@ -1837,8 +1828,13 @@ class _SalesScreenState extends State<SalesScreen> {
 
 // 2. تطبيق الحماية في الخلايا
   bool _canEditRow(int rowIndex) {
-    if (rowIndex >= sellerNames.length) return true;
-    if (_isAdmin) return true;
+    if (rowIndex >= sellerNames.length) {
+      return true; // صف جديد لم يحفظ بعد
+    }
+    if (_isAdmin) {
+      return true; // الأدمن يمكنه تعديل أي شيء
+    }
+    // البائع العادي يعدل سجلاته فقط
     return sellerNames[rowIndex] == widget.sellerName;
   }
 }

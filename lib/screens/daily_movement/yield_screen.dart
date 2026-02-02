@@ -92,138 +92,6 @@ class _YieldScreenState extends State<YieldScreen> {
     _loadSellers();
   }
 
-  Future<void> _loadCashPurchases() async {
-    if (widget.selectedDate == null) return;
-
-    final purchaseStorage = PurchaseStorageService();
-    final currentSellerName = _sellerNameController.text;
-
-    if (currentSellerName.isEmpty) return;
-
-    try {
-      // الحصول على إجمالي المشتريات النقدية للبائع الحالي
-      final totalCashPurchases =
-          await purchaseStorage.getCashPurchasesForSeller(
-        widget.selectedDate!,
-        currentSellerName,
-      );
-
-      setState(() {
-        _cashPurchasesController.text = totalCashPurchases.toStringAsFixed(2);
-      });
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('خطأ في تحميل المشتريات: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _loadCashSales() async {
-    if (widget.selectedDate == null) return;
-
-    final salesStorage = SalesStorageService();
-    double totalCashSales = 0;
-
-    // الحصول على اسم البائع الحالي الذي يستخدم الشاشة
-    // تأكد من أن هذا المتحكم يحتوي على الاسم الصحيح
-    final currentSellerName = _sellerNameController.text;
-
-    // 1. لا حاجة للحصول على قائمة السجلات أو الدوران عليها
-    // لأن هناك ملف مبيعات واحد فقط لكل تاريخ.
-    // نقوم بتحميل هذا الملف مباشرة.
-    final doc = await salesStorage.loadSalesDocument(widget.selectedDate!);
-
-    if (doc != null) {
-      // 2. ندور على كل سجل (sale) داخل اليومية
-      for (var sale in doc.sales) {
-        // 3. هنا يتم التمييز بين البائعين باستخدام حقل "sellerName"
-        // نقوم بجمع المبيعات النقدية التي تخص البائع الحالي فقط
-        if (sale.sellerName == currentSellerName && sale.cashOrDebt == 'نقدي') {
-          totalCashSales += double.tryParse(sale.total) ?? 0;
-        }
-      }
-    }
-
-    // يتم التحديث في الواجهة فقط إذا كانت الشاشة لا تزال معروضة
-    if (mounted) {
-      setState(() {
-        _cashSalesController.text = totalCashSales.toStringAsFixed(2);
-      });
-    }
-  }
-
-  Future<void> _loadBoxData() async {
-    if (widget.selectedDate == null) return;
-
-    final boxStorage = BoxStorageService();
-    final records = await boxStorage.getAvailableRecords(widget.selectedDate!);
-
-    double totalReceived = 0;
-    double totalPaid = 0;
-
-    // الحصول على اسم البائع الحالي
-    final currentSellerName = _sellerNameController.text;
-
-    for (var recordNum in records) {
-      final doc =
-          await boxStorage.loadBoxDocument(widget.selectedDate!, recordNum);
-      if (doc != null) {
-        for (var transaction in doc.transactions) {
-          // إظهار فقط سجلات البائع الحالي
-          if (transaction.sellerName == currentSellerName) {
-            totalReceived += double.tryParse(transaction.received) ?? 0;
-            totalPaid += double.tryParse(transaction.paid) ?? 0;
-          }
-        }
-      }
-    }
-
-    setState(() {
-      _receiptsController.text = totalReceived.toStringAsFixed(2);
-      _paymentsController.text = totalPaid.toStringAsFixed(2);
-    });
-  }
-
-  Future<void> _loadReceiptData() async {
-    if (widget.selectedDate == null) return;
-
-    final receiptStorage = ReceiptStorageService();
-    final currentSellerName = _sellerNameController.text;
-
-    // طريقة أفضل: اجمع فقط سجلات البائع الحالي
-    double totalPaymentFromReceipt = 0;
-    double totalLoadFromReceipt = 0;
-
-    final records =
-        await receiptStorage.getAvailableRecords(widget.selectedDate!);
-
-    for (var recordNum in records) {
-      final doc = await receiptStorage.loadReceiptDocument(
-          widget.selectedDate!, recordNum);
-
-      if (doc != null && doc.sellerName == currentSellerName) {
-        totalPaymentFromReceipt +=
-            double.tryParse(doc.totals['totalPayment'] ?? '0') ?? 0;
-        totalLoadFromReceipt +=
-            double.tryParse(doc.totals['totalLoad'] ?? '0') ?? 0;
-      }
-    }
-
-    final double currentPaymentsFromBox =
-        double.tryParse(_paymentsController.text) ?? 0;
-    final double totalPayments =
-        currentPaymentsFromBox + totalPaymentFromReceipt + totalLoadFromReceipt;
-
-    setState(() {
-      _paymentsController.text = totalPayments.toStringAsFixed(2);
-    });
-  }
-
   Future<void> _checkIfLoggedIn() async {
     final prefs = await SharedPreferences.getInstance();
     final loggedIn = prefs.getBool('isLoggedIn') ?? false;
@@ -235,16 +103,13 @@ class _YieldScreenState extends State<YieldScreen> {
         _sellerNameController.text = savedSellerName;
       });
 
-      // تحميل قيمة المقبوض منه المحفوظة
+      // تحميل المقبوض منه المحفوظ أولاً
       await _loadCollectedAmount();
 
-      // إذا تم تسجيل الدخول، تحميل البيانات
-      if (widget.selectedDate != null) {
-        _loadCashPurchases();
-        _loadCashSales();
-        _loadBoxData();
-        _loadReceiptData();
-      }
+      // التحديث التلقائي الفوري لكافة الحقول (المبيعات، المشتريات، الصندوق، الاستلام)
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _refreshData();
+      });
     }
   }
 
@@ -1073,15 +938,21 @@ class _YieldScreenState extends State<YieldScreen> {
   Future<double> _getReceiptPayments() async {
     if (widget.selectedDate == null) return 0;
     final receiptStorage = ReceiptStorageService();
-    final currentSeller = _sellerNameController.text;
+    final currentSeller = _sellerNameController.text.trim();
     double total = 0;
 
+    // تحميل المستند لليوم المحدد
     final doc =
         await receiptStorage.loadReceiptDocumentForDate(widget.selectedDate!);
-    if (doc != null && doc.sellerName == currentSeller) {
+
+    if (doc != null) {
+      // الحل: الدوران على كل سجل استلام داخل الملف والتحقق من اسم البائع لكل سطر
       for (var receipt in doc.receipts) {
-        total += (double.tryParse(receipt.payment) ?? 0) +
-            (double.tryParse(receipt.load) ?? 0);
+        if (receipt.sellerName == currentSeller) {
+          double payment = double.tryParse(receipt.payment) ?? 0;
+          double load = double.tryParse(receipt.load) ?? 0;
+          total += (payment + load);
+        }
       }
     }
     return total;
@@ -1089,12 +960,14 @@ class _YieldScreenState extends State<YieldScreen> {
 
   // 6. الدالة الموحدة لتحديث كافة البيانات وعرضها في الشاشة
   Future<void> _refreshData() async {
-    if (widget.selectedDate == null || !_isLoggedIn) return;
+    // التأكد من وجود تاريخ واسم بائع قبل البدء
+    if (widget.selectedDate == null || _sellerNameController.text.isEmpty)
+      return;
 
-    setState(() => _isLoading = true);
+    if (mounted) setState(() => _isLoading = true);
 
     try {
-      // تشغيل جميع عمليات جلب البيانات بالتوازي لضمان السرعة
+      // جلب البيانات من المصادر الأربعة بالتوازي لسرعة التحديث
       final results = await Future.wait([
         _getFilteredCashSales(),
         _getFilteredCashPurchases(),
@@ -1102,27 +975,21 @@ class _YieldScreenState extends State<YieldScreen> {
         _getReceiptPayments(),
       ]);
 
-      final double sales = results[0] as double;
-      final double purchases = results[1] as double;
-      final Map<String, double> box = results[2] as Map<String, double>;
-      final double receiptPayments = results[3] as double;
-
       if (mounted) {
         setState(() {
-          // أولاً: مبيعات نقدية
-          _cashSalesController.text = sales.toStringAsFixed(2);
+          // تحديث الحقول في الواجهة
+          _cashSalesController.text = (results[0] as double).toStringAsFixed(2);
+          _cashPurchasesController.text =
+              (results[1] as double).toStringAsFixed(2);
 
-          // ثانياً: مشتريات نقدية
-          _cashPurchasesController.text = purchases.toStringAsFixed(2);
+          final boxData = results[2] as Map<String, double>;
+          _receiptsController.text = boxData['received']!.toStringAsFixed(2);
 
-          // ثالثاً: مقبوضات (من الصندوق)
-          _receiptsController.text = box['received']!.toStringAsFixed(2);
-
-          // رابعاً: مدفوعات (مدفوع الصندوق + دفعة الاستلام + حمولة الاستلام)
-          double totalPayments = box['paid']! + receiptPayments;
+          // إجمالي المدفوعات = (مدفوع الصندوق) + (دفعة وحمولة الاستلام المفلترة)
+          double totalPayments = boxData['paid']! + (results[3] as double);
           _paymentsController.text = totalPayments.toStringAsFixed(2);
 
-          // تحديث ناتج الغلة النهائي
+          // إعادة حساب الناتج النهائي (الغلة)
           _calculateYield();
           _isLoading = false;
         });

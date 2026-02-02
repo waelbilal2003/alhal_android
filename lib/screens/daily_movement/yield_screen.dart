@@ -1,4 +1,3 @@
-// yield_screen.dart (محدث)
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
@@ -54,9 +53,10 @@ class _YieldScreenState extends State<YieldScreen> {
     final double payments = double.tryParse(_paymentsController.text) ?? 0;
     final double collected = double.tryParse(_collectedController.text) ?? 0;
 
-    final double s = cashSales + receipts;
-    final double a = cashPurchases + payments;
-    _yield = double.parse((s - a).toStringAsFixed(2));
+    // الغلة = (المبيعات النقدية + المقبوضات) - (المشتريات النقدية + المدفوعات)
+    final double income = cashSales + receipts;
+    final double expenses = cashPurchases + payments;
+    _yield = double.parse((income - expenses).toStringAsFixed(2));
 
     if (collected == _yield) {
       _status = '';
@@ -1021,23 +1021,114 @@ class _YieldScreenState extends State<YieldScreen> {
     }
   }
 
-  // دالة موحدة لتحديث كافة البيانات
+  // 2. جلب مبيعات نقدية (من شاشة المبيعات - فلترة حسب البائع ونوع الدفع)
+  Future<double> _getFilteredCashSales() async {
+    if (widget.selectedDate == null) return 0;
+    final salesStorage = SalesStorageService();
+    final currentSeller = _sellerNameController.text;
+    double total = 0;
+
+    final doc = await salesStorage.loadSalesDocument(widget.selectedDate!);
+    if (doc != null) {
+      for (var sale in doc.sales) {
+        if (sale.sellerName == currentSeller && sale.cashOrDebt == 'نقدي') {
+          total += double.tryParse(sale.total) ?? 0;
+        }
+      }
+    }
+    return total;
+  }
+
+  // 3. جلب مشتريات نقدية (من شاشة المشتريات - فلترة حسب البائع ونوع الدفع)
+  Future<double> _getFilteredCashPurchases() async {
+    if (widget.selectedDate == null) return 0;
+    final purchaseStorage = PurchaseStorageService();
+    return await purchaseStorage.getCashPurchasesForSeller(
+      widget.selectedDate!,
+      _sellerNameController.text,
+    );
+  }
+
+  // 4. جلب بيانات الصندوق (مقبوضات ومدفوعات - فلترة حسب البائع)
+  Future<Map<String, double>> _getBoxData() async {
+    if (widget.selectedDate == null) return {'received': 0, 'paid': 0};
+    final boxStorage = BoxStorageService();
+    final currentSeller = _sellerNameController.text;
+    double received = 0;
+    double paid = 0;
+
+    final doc = await boxStorage.loadBoxDocumentForDate(widget.selectedDate!);
+    if (doc != null) {
+      for (var trans in doc.transactions) {
+        if (trans.sellerName == currentSeller) {
+          received += double.tryParse(trans.received) ?? 0;
+          paid += double.tryParse(trans.paid) ?? 0;
+        }
+      }
+    }
+    return {'received': received, 'paid': paid};
+  }
+
+// 5. جلب مدفوعات الاستلام (دفعة + حمولة - فلترة حسب البائع)
+  Future<double> _getReceiptPayments() async {
+    if (widget.selectedDate == null) return 0;
+    final receiptStorage = ReceiptStorageService();
+    final currentSeller = _sellerNameController.text;
+    double total = 0;
+
+    final doc =
+        await receiptStorage.loadReceiptDocumentForDate(widget.selectedDate!);
+    if (doc != null && doc.sellerName == currentSeller) {
+      for (var receipt in doc.receipts) {
+        total += (double.tryParse(receipt.payment) ?? 0) +
+            (double.tryParse(receipt.load) ?? 0);
+      }
+    }
+    return total;
+  }
+
+  // 6. الدالة الموحدة لتحديث كافة البيانات وعرضها في الشاشة
   Future<void> _refreshData() async {
-    if (widget.selectedDate != null && _isLoggedIn) {
-      // تشغيل جميع عمليات التحميل بالتوازي لسرعة الأداء
-      await Future.wait([
-        _loadCashPurchases(),
-        _loadCashSales(),
-        _loadBoxData(),
-        _loadReceiptData(),
-        _loadCollectedAmount(),
-        _loadSellers(),
+    if (widget.selectedDate == null || !_isLoggedIn) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      // تشغيل جميع عمليات جلب البيانات بالتوازي لضمان السرعة
+      final results = await Future.wait([
+        _getFilteredCashSales(),
+        _getFilteredCashPurchases(),
+        _getBoxData(),
+        _getReceiptPayments(),
       ]);
 
+      final double sales = results[0] as double;
+      final double purchases = results[1] as double;
+      final Map<String, double> box = results[2] as Map<String, double>;
+      final double receiptPayments = results[3] as double;
+
       if (mounted) {
-        _calculateYield();
-        setState(() {}); // تحديث الواجهة بعد جلب كل البيانات
+        setState(() {
+          // أولاً: مبيعات نقدية
+          _cashSalesController.text = sales.toStringAsFixed(2);
+
+          // ثانياً: مشتريات نقدية
+          _cashPurchasesController.text = purchases.toStringAsFixed(2);
+
+          // ثالثاً: مقبوضات (من الصندوق)
+          _receiptsController.text = box['received']!.toStringAsFixed(2);
+
+          // رابعاً: مدفوعات (مدفوع الصندوق + دفعة الاستلام + حمولة الاستلام)
+          double totalPayments = box['paid']! + receiptPayments;
+          _paymentsController.text = totalPayments.toStringAsFixed(2);
+
+          // تحديث ناتج الغلة النهائي
+          _calculateYield();
+          _isLoading = false;
+        });
       }
+    } catch (e) {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 }

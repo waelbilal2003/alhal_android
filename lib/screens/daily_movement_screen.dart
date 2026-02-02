@@ -9,7 +9,6 @@ import 'daily_movement/box_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'bait_screen.dart';
-// استيراد الشاشة الجديدة
 import 'daily_movement/customer_selection_screen.dart';
 
 class DailyMovementScreen extends StatefulWidget {

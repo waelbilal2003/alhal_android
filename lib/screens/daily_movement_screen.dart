@@ -57,7 +57,7 @@ class _DailyMovementScreenState extends State<DailyMovementScreen> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Text('الحركة اليومية - ${widget.selectedDate}',
+          title: Text('الحركة اليومية لتاريخ ${widget.selectedDate } البائع ${widget.sellerName}',
               style: const TextStyle(fontWeight: FontWeight.bold)),
           centerTitle: true,
           backgroundColor: Colors.green[600],
@@ -84,23 +84,16 @@ class _DailyMovementScreenState extends State<DailyMovementScreen> {
                         blurRadius: 3)
                   ],
                 ),
-                child: Text(
-                  'البائع: ${widget.sellerName}',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                  ),
-                ),
+               
               ),
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 20.0, vertical: 15.0),
+                      horizontal: 10.0, vertical: 7.0),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.start,
                     children: [
-                      // --- السطر الأول (4 أزرار) ---
+                      
                       Row(
                         children: [
                           Expanded(

@@ -38,6 +38,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
         style: const TextStyle(
           fontWeight: FontWeight.bold,
           color: Colors.white,
+          fontSize: 13, // تعديل حجم الخط ليتناسب
         ),
       ),
     );
@@ -65,7 +66,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          'فاتورة زبون ${widget.customerName}',
+          'فاتورة الزبون ${widget.customerName}',
           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
         bottom: PreferredSize(
@@ -131,6 +132,9 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                         _buildHeaderCell('المادة', 4),
                         _buildHeaderCell('العدد', 2),
                         _buildHeaderCell('العبوة', 3),
+                        // --- الإضافة هنا ---
+                        _buildHeaderCell('القائم', 2),
+                        // --- نهاية الإضافة ---
                         _buildHeaderCell('الصافي', 2),
                         _buildHeaderCell('السعر', 2),
                         _buildHeaderCell('الإجمالي', 3),
@@ -164,6 +168,9 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                               _buildDataCell(item.material, 4),
                               _buildDataCell(item.count, 2),
                               _buildDataCell(item.packaging, 3),
+                              // --- الإضافة هنا ---
+                              _buildDataCell(item.standing, 2),
+                              // --- نهاية الإضافة ---
                               _buildDataCell(item.net, 2),
                               _buildDataCell(item.price, 2),
                               _buildDataCell(

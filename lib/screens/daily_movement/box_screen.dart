@@ -1087,7 +1087,7 @@ class _BoxScreenState extends State<BoxScreen> {
     }
   }
 
-  @override
+    @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
@@ -1118,6 +1118,33 @@ class _BoxScreenState extends State<BoxScreen> {
                 textAlign: TextAlign.right,
               ),
             ),
+            // زر الإضافة في AppBar - يظهر عندما لا توجد اقتراحات
+            if (!_showFullScreenSuggestions ||
+                _getSuggestionsByType().isEmpty)
+              Container(
+                margin: const EdgeInsets.only(left: 8),
+                child: Material(
+                  color: Colors.blue[700],
+                  borderRadius: BorderRadius.circular(8),
+                  elevation: 4,
+                  child: InkWell(
+                    onTap: _addNewRow,
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 10),
+                      child: const Text(
+                        'إضافة',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
         centerTitle: false,
@@ -1258,35 +1285,8 @@ class _BoxScreenState extends State<BoxScreen> {
         ],
       ),
       body: _buildMainContent(),
-      // إخفاء زر الإضافة عند ظهور لوحة المفاتيح
-      floatingActionButton: MediaQuery.of(context).viewInsets.bottom > 0
-          ? null
-          : Container(
-              margin: const EdgeInsets.only(bottom: 16, right: 16),
-              child: Material(
-                color: Colors.blue[700],
-                borderRadius: BorderRadius.circular(12),
-                elevation: 8,
-                child: InkWell(
-                  onTap: _addNewRow,
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 28, vertical: 16),
-                    child: const Text(
-                      'إضافة',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.startDocked,
-      resizeToAvoidBottomInset: true, // تغيير من false إلى true
+    
+      resizeToAvoidBottomInset: true,
     );
   }
 

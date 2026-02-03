@@ -29,16 +29,18 @@ class _CustomerSelectionScreenState extends State<CustomerSelectionScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('اختر زبوناً لعرض الفاتورة'),
-        backgroundColor: Colors.indigo[700],
-        foregroundColor: Colors.white,
-      ),
-      
-      body: Directionality(
-        textDirection: TextDirection.rtl, // تحديد الاتجاه من اليمين لليسار
-        child: FutureBuilder<List<String>>(
+ 
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('اختر زبوناً لعرض الفاتورة'),
+        
+          centerTitle: false,
+          backgroundColor: Colors.indigo[700],
+          foregroundColor: Colors.white,
+        ),
+        body: FutureBuilder<List<String>>(
           future: _customersFuture,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
@@ -63,7 +65,6 @@ class _CustomerSelectionScreenState extends State<CustomerSelectionScreen> {
                 return ListTile(
                   title:
                       Text(customerName, style: const TextStyle(fontSize: 18)),
-                  // ستبقى leading كما هي، ولكنها ستظهر على اليمين تلقائياً
                   leading: const Icon(Icons.person, color: Colors.indigo),
                   onTap: () {
                     Navigator.of(context).push(
@@ -82,7 +83,7 @@ class _CustomerSelectionScreenState extends State<CustomerSelectionScreen> {
           },
         ),
       ),
-  
     );
+ 
   }
 }

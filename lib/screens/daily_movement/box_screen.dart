@@ -93,6 +93,9 @@ class _BoxScreenState extends State<BoxScreen> {
   Timer? _calculateTotalsDebouncer;
   bool _isCalculating = false;
   bool _isAdmin = false;
+  double? _lastFetchedBalance;
+  double? _calculatedRemaining;
+  String _lastAccountName = '';
 
   @override
   void initState() {
@@ -950,6 +953,9 @@ class _BoxScreenState extends State<BoxScreen> {
     } else if (colIndex == 2) {
       _showAccountTypeDialog(rowIndex);
     } else if (colIndex == 3) {
+      // تنفيذ حساب الرصيد والباقي فور الضغط على Enter
+      _fetchAndCalculateBalance(rowIndex);
+
       // إذا كان نوع الحساب زبون وكانت هناك اقتراحات
       if (accountTypeValues[rowIndex] == 'زبون' &&
           _customerSuggestions.isNotEmpty) {
@@ -1087,13 +1093,43 @@ class _BoxScreenState extends State<BoxScreen> {
     }
   }
 
-    @override
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        // تخصيص المسافة لزر الرجوع وزر إضافة معاً
+        leadingWidth: 120,
+        leading: Row(
+          children: [
+            const BackButton(),
+            // إظهار زر الإضافة فقط في حال عدم وجود اقتراحات نشطة
+            if (!_showFullScreenSuggestions)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8.0),
+                child: Material(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(8),
+                  child: InkWell(
+                    onTap: _addNewRow,
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          Icon(Icons.add),
+                          SizedBox(width: 4),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
         title: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
+            // عرض بانر الاقتراحات في حال تفعيلها
             if (_showFullScreenSuggestions &&
                 _getSuggestionsByType().isNotEmpty)
               SuggestionsBanner(
@@ -1110,39 +1146,15 @@ class _BoxScreenState extends State<BoxScreen> {
                 onClose: () =>
                     _toggleFullScreenSuggestions(type: '', show: false),
               ),
-            Expanded(
-              child: Text(
-                'يومية صندوق رقم /$serialNumber/ تاريخ ${widget.selectedDate} البائع ${widget.sellerName}',
-                style:
-                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                textAlign: TextAlign.right,
-              ),
-            ),
-            // زر الإضافة في AppBar - يظهر عندما لا توجد اقتراحات
-            if (!_showFullScreenSuggestions ||
-                _getSuggestionsByType().isEmpty)
-              Container(
-                margin: const EdgeInsets.only(left: 8),
-                child: Material(
-                  color: Colors.blue[700],
-                  borderRadius: BorderRadius.circular(8),
-                  elevation: 4,
-                  child: InkWell(
-                    onTap: _addNewRow,
-                    borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 10),
-                      child: const Text(
-                        'إضافة',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
-                  ),
+            // عنوان الصفحة (يختفي جزئياً عند ظهور الاقتراحات لفسح المجال)
+            if (!_showFullScreenSuggestions)
+              Expanded(
+                child: Text(
+                  'يومية صندوق رقم /$serialNumber/ تاريخ ${widget.selectedDate} البائع ${widget.sellerName}',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 13),
+                  textAlign: TextAlign.right,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
           ],
@@ -1152,13 +1164,13 @@ class _BoxScreenState extends State<BoxScreen> {
         foregroundColor: Colors.white,
         actions: [
           IconButton(
-            icon: const Icon(Icons.share),
-            tooltip: 'مشاركة الملف',
+            icon: const Icon(Icons.share, size: 20),
+            tooltip: 'مشاركة',
             onPressed: () => _shareFile(),
           ),
           IconButton(
             icon: _isSaving
-                ? SizedBox(
+                ? const SizedBox(
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(
@@ -1180,29 +1192,18 @@ class _BoxScreenState extends State<BoxScreen> {
                               borderRadius: BorderRadius.circular(6),
                             ),
                             constraints: const BoxConstraints(
-                              minWidth: 12,
-                              minHeight: 12,
-                            ),
-                            child: const SizedBox(
-                              width: 8,
-                              height: 8,
+                              minWidth: 10,
+                              minHeight: 10,
                             ),
                           ),
                         ),
                     ],
                   ),
-            tooltip: _hasUnsavedChanges
-                ? 'هناك تغييرات غير محفوظة - انقر للحفظ'
-                : 'حفظ اليومية',
-            onPressed: _isSaving
-                ? null
-                : () {
-                    _saveCurrentRecord();
-                  },
+            onPressed: _isSaving ? null : () => _saveCurrentRecord(),
           ),
+          // زر اختيار التاريخ (التقويم)
           PopupMenuButton<String>(
-            icon: const Icon(Icons.calendar_today),
-            tooltip: 'فتح يومية سابقة',
+            icon: const Icon(Icons.calendar_month),
             onSelected: (selectedDate) async {
               if (selectedDate != widget.selectedDate) {
                 if (_hasUnsavedChanges) {
@@ -1211,7 +1212,6 @@ class _BoxScreenState extends State<BoxScreen> {
                     await _saveCurrentRecord(silent: true);
                   }
                 }
-
                 Navigator.pushReplacement(
                   context,
                   MaterialPageRoute(
@@ -1225,73 +1225,158 @@ class _BoxScreenState extends State<BoxScreen> {
               }
             },
             itemBuilder: (BuildContext context) {
-              List<PopupMenuEntry<String>> items = [];
-
-              if (_isLoadingDates) {
-                items.add(
-                  const PopupMenuItem<String>(
-                    value: '',
-                    enabled: false,
-                    child: Text('جاري التحميل...'),
-                  ),
+              return _availableDates.map((dateInfo) {
+                return PopupMenuItem<String>(
+                  value: dateInfo['date'],
+                  child: Text(
+                      'يومية ${dateInfo['journalNumber']} - ${dateInfo['date']}'),
                 );
-              } else if (_availableDates.isEmpty) {
-                items.add(
-                  const PopupMenuItem<String>(
-                    value: '',
-                    enabled: false,
-                    child: Text('لا توجد يوميات سابقة'),
-                  ),
-                );
-              } else {
-                items.add(
-                  const PopupMenuItem<String>(
-                    value: '',
-                    enabled: false,
-                    child: Text(
-                      'اليوميات المتاحة',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                );
-                items.add(const PopupMenuDivider());
-
-                for (var dateInfo in _availableDates) {
-                  final date = dateInfo['date']!;
-                  final journalNumber = dateInfo['journalNumber']!;
-
-                  items.add(
-                    PopupMenuItem<String>(
-                      value: date,
-                      child: Text(
-                        'يومية رقم $journalNumber - تاريخ $date',
-                        style: TextStyle(
-                          fontWeight: date == widget.selectedDate
-                              ? FontWeight.bold
-                              : FontWeight.normal,
-                          color: date == widget.selectedDate
-                              ? Colors.blue
-                              : Colors.black,
-                        ),
-                      ),
-                    ),
-                  );
-                }
-              }
-
-              return items;
+              }).toList();
             },
           ),
         ],
       ),
-      body: _buildMainContent(),
-    
+      body: Column(
+        children: [
+          // شريط الرصيد والباقي: يظهر فقط إذا لم تكن الاقتراحات معروضة وهناك بيانات محملة
+          if (!_showFullScreenSuggestions && _lastFetchedBalance != null)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+              decoration: BoxDecoration(
+                color: Colors.yellow[100],
+                border: Border(
+                    bottom: BorderSide(color: Colors.grey[400]!, width: 0.5)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 2,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  // اسم الحساب
+                  Expanded(
+                    flex: 2,
+                    child: Text(
+                      'الحساب: $_lastAccountName',
+                      style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  // الرصيد الحالي
+                  Expanded(
+                    flex: 1,
+                    child: Column(
+                      children: [
+                        const Text('الرصيد',
+                            style: TextStyle(fontSize: 9, color: Colors.grey)),
+                        Text(
+                          _lastFetchedBalance!.toStringAsFixed(2),
+                          style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.blue),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // الباقي المتوقع
+                  Expanded(
+                    flex: 1,
+                    child: Column(
+                      children: [
+                        const Text('الباقي',
+                            style: TextStyle(fontSize: 9, color: Colors.grey)),
+                        Text(
+                          _calculatedRemaining!.toStringAsFixed(2),
+                          style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.red),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+          // الجدول الرئيسي
+          Expanded(
+            child: _buildTableWithStickyHeader(),
+          ),
+        ],
+      ),
+      // تم إلغاء زر الإضافة العائم من الأسفل
+      floatingActionButton: null,
       resizeToAvoidBottomInset: true,
     );
   }
 
   Widget _buildMainContent() {
-    return _buildTableWithStickyHeader();
+    return Column(
+      children: [
+        // شريط الرصيد والباقي المثبت
+        if (!_showFullScreenSuggestions && _lastFetchedBalance != null)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+            decoration: BoxDecoration(
+              color: Colors.blue[50],
+              border: Border(
+                  bottom: BorderSide(color: Colors.blue[200]!, width: 1)),
+              boxShadow: [
+                BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 2,
+                    offset: const Offset(0, 2)),
+              ],
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildBalanceInfoItem(
+                    'الحساب:', _lastAccountName, Colors.black87),
+                _buildBalanceInfoItem('الرصيد:',
+                    _lastFetchedBalance!.toStringAsFixed(2), Colors.blue[800]!),
+                _buildBalanceInfoItem('الباقي:',
+                    _calculatedRemaining!.toStringAsFixed(2), Colors.red[800]!,
+                    isBold: true),
+              ],
+            ),
+          ),
+        // الجدول
+        Expanded(child: _buildTableWithStickyHeader()),
+      ],
+    );
+  }
+
+  // دالة مساعدة لبناء عناصر شريط الرصيد
+  Widget _buildBalanceInfoItem(String label, String value, Color color,
+      {bool isBold = false}) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(label,
+            style: const TextStyle(fontSize: 11, color: Colors.black54)),
+        const SizedBox(width: 4),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
+            color: color,
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _buildTableWithStickyHeader() {
@@ -1653,6 +1738,46 @@ class _BoxScreenState extends State<BoxScreen> {
     }
     // البائع العادي يعدل سجلاته فقط
     return sellerNames[rowIndex] == widget.sellerName;
+  }
+
+  Future<void> _fetchAndCalculateBalance(int rowIndex) async {
+    final String type = accountTypeValues[rowIndex];
+    final String name = rowControllers[rowIndex][3].text.trim();
+    final double received =
+        double.tryParse(rowControllers[rowIndex][1].text) ?? 0;
+    final double paid = double.tryParse(rowControllers[rowIndex][2].text) ?? 0;
+
+    if (name.isEmpty || (received == 0 && paid == 0)) return;
+
+    double balance = 0;
+    double remaining = 0;
+
+    try {
+      if (type == 'زبون') {
+        final customers = await _customerIndexService.getAllCustomersWithData();
+        // البحث عن الزبون في الخريطة
+        final customerData = customers.values.firstWhere(
+          (c) => c.name.toLowerCase() == name.toLowerCase(),
+          orElse: () => CustomerData(name: name),
+        );
+        balance = customerData.balance;
+        // معادلة الزبون: مقبوض (رصيد - مقبوض) | مدفوع (رصيد + مدفوع)
+        remaining = (received > 0) ? (balance - received) : (balance + paid);
+      } else if (type == 'مورد') {
+        final supplierData = await _supplierIndexService.getSupplierData(name);
+        balance = supplierData?.balance ?? 0;
+        // معادلة المورد: مقبوض (رصيد + مقبوض) | مدفوع (رصيد - مدفوع)
+        remaining = (received > 0) ? (balance + received) : (balance - paid);
+      }
+
+      setState(() {
+        _lastFetchedBalance = balance;
+        _calculatedRemaining = remaining;
+        _lastAccountName = name;
+      });
+    } catch (e) {
+      debugPrint("Error calculating balance: $e");
+    }
   }
 }
 

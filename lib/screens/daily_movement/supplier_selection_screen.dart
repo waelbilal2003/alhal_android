@@ -1,35 +1,36 @@
 import 'package:flutter/material.dart';
-import '../../services/customer_index_service.dart';
-import 'invoices_screen.dart';
+import '../../services/supplier_index_service.dart';
+import 'supplier_invoices_screen.dart';
 
-class CustomerSelectionScreen extends StatefulWidget {
+class SupplierSelectionScreen extends StatefulWidget {
   final String selectedDate;
   final String storeName;
 
-  const CustomerSelectionScreen({
+  const SupplierSelectionScreen({
     Key? key,
     required this.selectedDate,
     required this.storeName,
   }) : super(key: key);
 
   @override
-  _CustomerSelectionScreenState createState() =>
-      _CustomerSelectionScreenState();
+  _SupplierSelectionScreenState createState() =>
+      _SupplierSelectionScreenState();
 }
 
-class _CustomerSelectionScreenState extends State<CustomerSelectionScreen> {
-  final CustomerIndexService _customerIndexService = CustomerIndexService();
+class _SupplierSelectionScreenState extends State<SupplierSelectionScreen> {
+  final SupplierIndexService _supplierIndexService = SupplierIndexService();
   final TextEditingController _searchController = TextEditingController();
 
-  late Future<List<String>> _customersFuture;
-  List<String> _allCustomers = [];
-  List<String> _filteredCustomers = [];
+  late Future<List<String>> _suppliersFuture;
+  List<String> _allSuppliers = [];
+  List<String> _filteredSuppliers = [];
 
   @override
   void initState() {
     super.initState();
-    _customersFuture = _customerIndexService.getAllCustomers();
-    _searchController.addListener(_filterCustomers);
+    // جلب الموردين بدلاً من الزبائن
+    _suppliersFuture = _supplierIndexService.getAllSuppliers();
+    _searchController.addListener(_filterSuppliers);
   }
 
   @override
@@ -38,17 +39,17 @@ class _CustomerSelectionScreenState extends State<CustomerSelectionScreen> {
     super.dispose();
   }
 
-  void _filterCustomers() {
+  void _filterSuppliers() {
     final query = _searchController.text;
     if (query.isEmpty) {
       setState(() {
-        _filteredCustomers = _allCustomers;
+        _filteredSuppliers = _allSuppliers;
       });
     } else {
       setState(() {
-        _filteredCustomers = _allCustomers
-            .where((customer) =>
-                customer.toLowerCase().startsWith(query.toLowerCase()))
+        _filteredSuppliers = _allSuppliers
+            .where((supplier) =>
+                supplier.toLowerCase().startsWith(query.toLowerCase()))
             .toList();
       });
     }
@@ -60,35 +61,33 @@ class _CustomerSelectionScreenState extends State<CustomerSelectionScreen> {
       textDirection: TextDirection.rtl,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('اختر زبوناً لعرض الفاتورة'),
+          title: const Text('اختر مورداً لعرض التفاصيل'),
           centerTitle: false,
-          backgroundColor: Colors.indigo[700],
+          backgroundColor: Colors.teal[700],
           foregroundColor: Colors.white,
         ),
         body: FutureBuilder<List<String>>(
-          future: _customersFuture,
+          future: _suppliersFuture,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
             }
             if (snapshot.hasError) {
               return Center(
-                  child: Text('خطأ في تحميل الزبائن: ${snapshot.error}'));
+                  child: Text('خطأ في تحميل الموردين: ${snapshot.error}'));
             }
             if (!snapshot.hasData || snapshot.data!.isEmpty) {
               return const Center(
-                child: Text('لا يوجد زبائن مسجلين في الفهرس',
+                child: Text('لا يوجد موردين مسجلين في الفهرس',
                     style: TextStyle(fontSize: 18, color: Colors.grey)),
               );
             }
 
-            // تخزين القائمة الكاملة لأول مرة فقط
-            if (_allCustomers.isEmpty) {
-              _allCustomers = snapshot.data!;
-              _filteredCustomers = _allCustomers;
+            if (_allSuppliers.isEmpty) {
+              _allSuppliers = snapshot.data!;
+              _filteredSuppliers = _allSuppliers;
             }
 
-            // --- بداية الواجهة الجديدة مع حقل البحث ---
             return Column(
               children: [
                 Padding(
@@ -96,7 +95,7 @@ class _CustomerSelectionScreenState extends State<CustomerSelectionScreen> {
                   child: TextField(
                     controller: _searchController,
                     decoration: InputDecoration(
-                      labelText: 'ابحث عن زبون...',
+                      labelText: 'ابحث عن مورد...',
                       prefixIcon: const Icon(Icons.search),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12.0),
@@ -106,22 +105,23 @@ class _CustomerSelectionScreenState extends State<CustomerSelectionScreen> {
                 ),
                 Expanded(
                   child: ListView.builder(
-                    itemCount: _filteredCustomers.length,
+                    itemCount: _filteredSuppliers.length,
                     itemBuilder: (context, index) {
-                      final customerName = _filteredCustomers[index];
+                      final supplierName = _filteredSuppliers[index];
                       return ListTile(
-                        title: Text(customerName,
+                        title: Text(supplierName,
                             style: const TextStyle(fontSize: 18)),
-                        leading: const Icon(Icons.person, color: Colors.indigo),
+                        leading: const Icon(Icons.local_shipping,
+                            color: Colors.teal),
                         onTap: () {
-                          // إخفاء لوحة المفاتيح عند الانتقال
                           FocusScope.of(context).unfocus();
+                          // الانتقال إلى شاشة فواتير المورد
                           Navigator.of(context).push(
                             MaterialPageRoute(
-                              builder: (context) => InvoicesScreen(
+                              builder: (context) => SupplierInvoicesScreen(
                                 selectedDate: widget.selectedDate,
                                 storeName: widget.storeName,
-                                customerName: customerName,
+                                supplierName: supplierName,
                               ),
                             ),
                           );

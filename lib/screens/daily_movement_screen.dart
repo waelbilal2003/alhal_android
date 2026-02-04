@@ -9,7 +9,7 @@ import 'daily_movement/box_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'bait_screen.dart';
-import 'daily_movement/customer_selection_screen.dart';
+import 'daily_movement/invoice_type_selection_screen.dart';
 
 class DailyMovementScreen extends StatefulWidget {
   final String selectedDate;
@@ -57,7 +57,8 @@ class _DailyMovementScreenState extends State<DailyMovementScreen> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Text('الحركة اليومية لتاريخ ${widget.selectedDate } البائع ${widget.sellerName}',
+          title: Text(
+              'الحركة اليومية لتاريخ ${widget.selectedDate} البائع ${widget.sellerName}',
               style: const TextStyle(fontWeight: FontWeight.bold)),
           centerTitle: true,
           backgroundColor: Colors.green[600],
@@ -84,7 +85,6 @@ class _DailyMovementScreenState extends State<DailyMovementScreen> {
                         blurRadius: 3)
                   ],
                 ),
-               
               ),
               Expanded(
                 child: Padding(
@@ -93,7 +93,6 @@ class _DailyMovementScreenState extends State<DailyMovementScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.start,
                     children: [
-                      
                       Row(
                         children: [
                           Expanded(
@@ -143,16 +142,16 @@ class _DailyMovementScreenState extends State<DailyMovementScreen> {
                               );
                             }),
                           ),
-                          // --- الزر الجديد: الفواتير ---
                           const SizedBox(width: 12.0),
                           Expanded(
                             child: _buildMenuButton(context,
-                                icon: Icons.receipt_long, // أيقونة مناسبة
+                                icon: Icons.receipt_long,
                                 label: 'الفواتير',
                                 color: Colors.indigo[700]!, onTap: () {
                               Navigator.of(context).push(
                                 MaterialPageRoute(
-                                  builder: (context) => CustomerSelectionScreen(
+                                  builder: (context) =>
+                                      InvoiceTypeSelectionScreen(
                                     selectedDate: widget.selectedDate,
                                     storeName: _storeName,
                                   ),

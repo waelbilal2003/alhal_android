@@ -243,6 +243,8 @@ class _BoxScreenState extends State<BoxScreen> {
                 _activeSupplierRowIndex = null;
                 _customerSuggestions = [];
                 _activeCustomerRowIndex = null;
+                _showFullScreenSuggestions = false;
+                _currentSuggestionType = '';
               });
             }
           });
@@ -343,6 +345,8 @@ class _BoxScreenState extends State<BoxScreen> {
                 _supplierSuggestions = [];
                 _activeCustomerRowIndex = null;
                 _activeSupplierRowIndex = null;
+                _showFullScreenSuggestions = false;
+                _currentSuggestionType = '';
               });
             }
           });
@@ -1238,8 +1242,8 @@ class _BoxScreenState extends State<BoxScreen> {
       ),
       body: Column(
         children: [
-          // شريط الرصيد والباقي: يظهر فقط إذا لم تكن الاقتراحات معروضة وهناك بيانات محملة
-          if (!_showFullScreenSuggestions && _lastFetchedBalance != null)
+          // شريط الرصيد والباقي: يظهر دائماً بمجرد وجود بيانات محملة بغض النظر عن حالة الاقتراحات
+          if (_lastFetchedBalance != null)
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
@@ -1626,6 +1630,8 @@ class _BoxScreenState extends State<BoxScreen> {
     setState(() {
       _customerSuggestions = [];
       _activeCustomerRowIndex = null;
+      _showFullScreenSuggestions = false;
+      _currentSuggestionType = '';
     });
 
     rowControllers[rowIndex][3].text = suggestion;
@@ -1648,6 +1654,8 @@ class _BoxScreenState extends State<BoxScreen> {
     setState(() {
       _supplierSuggestions = [];
       _activeSupplierRowIndex = null;
+      _showFullScreenSuggestions = false;
+      _currentSuggestionType = '';
     });
 
     rowControllers[rowIndex][3].text = suggestion;

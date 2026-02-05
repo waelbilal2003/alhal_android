@@ -1708,31 +1708,65 @@ class _BoxScreenState extends State<BoxScreen> {
   Future<void> _fetchAndCalculateBalance(int rowIndex) async {
     final String type = accountTypeValues[rowIndex];
     final String name = rowControllers[rowIndex][3].text.trim();
-    final double received =
+    // القيم الحالية للصف الذي نعمل عليه
+    final double currentReceived =
         double.tryParse(rowControllers[rowIndex][1].text) ?? 0;
-    final double paid = double.tryParse(rowControllers[rowIndex][2].text) ?? 0;
+    final double currentPaid =
+        double.tryParse(rowControllers[rowIndex][2].text) ?? 0;
 
-    if (name.isEmpty || (received == 0 && paid == 0)) return;
+    if (name.isEmpty) return;
 
     double balance = 0;
     double remaining = 0;
 
     try {
+      // 1. جلب الرصيد الأساسي (الافتتاحي) من ملفات الفهرس
       if (type == 'زبون') {
         final customers = await _customerIndexService.getAllCustomersWithData();
-        // البحث عن الزبون في الخريطة
         final customerData = customers.values.firstWhere(
           (c) => c.name.toLowerCase() == name.toLowerCase(),
           orElse: () => CustomerData(name: name),
         );
         balance = customerData.balance;
-        // معادلة الزبون: مقبوض (رصيد - مقبوض) | مدفوع (رصيد + مدفوع)
-        remaining = (received > 0) ? (balance - received) : (balance + paid);
       } else if (type == 'مورد') {
         final supplierData = await _supplierIndexService.getSupplierData(name);
         balance = supplierData?.balance ?? 0;
-        // معادلة المورد: مقبوض (رصيد + مقبوض) | مدفوع (رصيد - مدفوع)
-        remaining = (received > 0) ? (balance + received) : (balance - paid);
+      }
+
+      // 2. حساب الرصيد التراكمي (Running Balance)
+      // نمر على جميع الصفوف *السابقة* للصف الحالي لنحدث الرصيد بناءً على ما تم إدخاله في هذه الجلسة
+      for (int i = 0; i < rowIndex; i++) {
+        // شرط: الصف السابق يجب أن يكون لنفس الاسم ونفس نوع الحساب
+        if (accountTypeValues[i] == type &&
+            rowControllers[i][3].text.trim().toLowerCase() ==
+                name.toLowerCase()) {
+          final double prevRec =
+              double.tryParse(rowControllers[i][1].text) ?? 0;
+          final double prevPaid =
+              double.tryParse(rowControllers[i][2].text) ?? 0;
+
+          // تطبيق المعادلات لتحديث الرصيد "الافتتاحي" للصف الحالي
+          if (type == 'زبون') {
+            // معادلة الزبون: مقبوض ينقص الرصيد (تسديد) | مدفوع يزيد الرصيد (دين جديد)
+            balance =
+                (prevRec > 0) ? (balance - prevRec) : (balance + prevPaid);
+          } else if (type == 'مورد') {
+            // معادلة المورد: مقبوض يزيد الرصيد (دين علينا) | مدفوع ينقص الرصيد (سداد منا)
+            balance =
+                (prevRec > 0) ? (balance + prevRec) : (balance - prevPaid);
+          }
+        }
+      }
+
+      // 3. حساب الباقي (النتيجة النهائية) للصف الحالي
+      if (type == 'زبون') {
+        remaining = (currentReceived > 0)
+            ? (balance - currentReceived)
+            : (balance + currentPaid);
+      } else if (type == 'مورد') {
+        remaining = (currentReceived > 0)
+            ? (balance + currentReceived)
+            : (balance - currentPaid);
       }
 
       setState(() {

@@ -1698,85 +1698,51 @@ class _BoxScreenState extends State<BoxScreen> {
     final String type = accountTypeValues[rowIndex];
     final String name = rowControllers[rowIndex][3].text.trim();
 
-    // القيم الحالية للصف الذي نعمل عليه
+    // القيم الحالية للصف الذي نعمل عليه (آخر عملية إدخال)
     final double currentReceived =
         double.tryParse(rowControllers[rowIndex][1].text) ?? 0;
     final double currentPaid =
         double.tryParse(rowControllers[rowIndex][2].text) ?? 0;
 
-    // تم إزالة الشرط الذي يخفي الشريط عند name.isEmpty
-    // الشريط الآن يبقى معروضاً بآخر قيمة حتى يتم تحديثه
     if (name.isEmpty) {
-      // لا نفعل شيء - نبقي الشريط معروضاً بآخر قيمة
       return;
     }
 
-    // 1. إعادة تعيين الرصيد الأساسي لضمان عدم استخدام قيمة مخزنة قديمة
-    double baseBalance = 0;
-
     try {
-      // 2. جلب الرصيد الحقيقي الطازج من الفهرس (المصدر الرئيسي)
+      // جلب الرصيد الحقيقي مباشرة من الفهرس - بدون أي حسابات تراكمية
+      double realBalance = 0;
+
       if (type == 'زبون') {
-        // نستخدم await لضمان اكتمال الجلب قبل الحساب
         final customers = await _customerIndexService.getAllCustomersWithData();
-        // البحث عن الزبون
         final customerData = customers.values.firstWhere(
           (c) => c.name.toLowerCase() == name.toLowerCase(),
           orElse: () => CustomerData(name: name, balance: 0.0),
         );
-        baseBalance = customerData.balance;
+        realBalance = customerData.balance;
       } else if (type == 'مورد') {
         final supplierData = await _supplierIndexService.getSupplierData(name);
-        baseBalance = supplierData?.balance ?? 0.0;
+        realBalance = supplierData?.balance ?? 0.0;
       } else {
-        // في حال كان نوع الحساب "مصروف"، لا نحسب رصيداً لكن نبقي الشريط معروضاً
-        // تم إزالة الكود الذي يخفي الشريط هنا
+        // نوع الحساب "مصروف" - نبقي الشريط معروضاً
         return;
       }
 
-      // 3. حساب الرصيد التراكمي (Running Balance) من البداية
-      // نبدأ بالرصيد الأساسي القادم من السيرفر، ثم نطبق عليه عمليات هذه الجلسة
-      // حتى نصل للصف الحالي. هذا يمنع تراكم الأخطاء عند الضغط المتكرر على Enter.
-
-      double runningBalance = baseBalance;
-
-      // نمر على جميع الصفوف *السابقة* للصف الحالي فقط
-      for (int i = 0; i < rowIndex; i++) {
-        // شرط: الصف السابق يجب أن يكون لنفس الاسم ونفس نوع الحساب
-        if (accountTypeValues[i] == type &&
-            rowControllers[i][3].text.trim().toLowerCase() ==
-                name.toLowerCase()) {
-          final double prevRec =
-              double.tryParse(rowControllers[i][1].text) ?? 0;
-          final double prevPaid =
-              double.tryParse(rowControllers[i][2].text) ?? 0;
-
-          // تطبيق المعادلات لتحديث الرصيد الافتراضي للصف الحالي
-          if (type == 'زبون') {
-            // معادلة الزبون: الرصيد (عليه) - مقبوض (سدد) + مدفوع (دين جديد)
-            runningBalance = runningBalance - prevRec + prevPaid;
-          } else if (type == 'مورد') {
-            // معادلة المورد: الرصيد (لنا عليه أو له) + مقبوض (دين علينا) - مدفوع (سداد منا)
-            // ملاحظة: يعتمد اتجاه رصيد المورد على منطق التطبيق، هنا نفترض:
-            // مقبوض من المورد = زيادة في رصيدنا لديه (أو دينه علينا)
-            // مدفوع للمورد = نقص في الرصيد
-            runningBalance = runningBalance + prevRec - prevPaid;
-          }
-        }
-      }
-
-      // 4. حساب الباقي (النتيجة النهائية) للصف الحالي بناءً على الرصيد المحسوب بدقة
+      // حساب الباقي بناءً على آخر عملية إدخال فقط + الرصيد الحقيقي
       double remaining = 0;
+
       if (type == 'زبون') {
-        remaining = runningBalance - currentReceived + currentPaid;
+        // معادلة الزبون: الرصيد الحقيقي - مقبوض (سدد) + مدفوع (دين جديد)
+        remaining = realBalance - currentReceived + currentPaid;
       } else if (type == 'مورد') {
-        remaining = runningBalance + currentReceived - currentPaid;
+        // معادلة المورد: الرصيد الحقيقي + مقبوض (دين علينا) - مدفوع (سداد منا)
+        remaining = realBalance + currentReceived - currentPaid;
       }
 
       if (mounted) {
         setState(() {
-          _lastFetchedBalance = runningBalance; // الرصيد قبل عملية هذا الصف
-          _calculatedRemaining = remaining; // الرصيد بعد عملية هذا الصف
+          _lastFetchedBalance = realBalance; // الرصيد الحقيقي من الفهرس
+          _calculatedRemaining =
+              remaining; // الباقي = آخر عملية + الرصيد الحقيقي
           _lastAccountName = name;
         });
       }

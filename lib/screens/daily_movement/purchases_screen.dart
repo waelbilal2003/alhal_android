@@ -1165,7 +1165,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                   },
           ),
           PopupMenuButton<String>(
-            icon: const Icon(Icons.calendar_today),
+            icon: const Icon(Icons.calendar_month),
             tooltip: 'فتح يومية سابقة',
             onSelected: (selectedDate) async {
               if (selectedDate != widget.selectedDate) {

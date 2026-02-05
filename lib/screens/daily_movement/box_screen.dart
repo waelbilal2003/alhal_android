@@ -287,22 +287,26 @@ class _BoxScreenState extends State<BoxScreen> {
   // دالة مساعدة لإضافة المستمعات
   void _addChangeListenersToControllers(
       List<TextEditingController> controllers, int rowIndex) {
-    // حقل المقبوض
+    // حقل المقبوض (تعديل: إضافة حساب الرصيد الفوري)
     controllers[1].addListener(() {
       _hasUnsavedChanges = true;
       if (controllers[1].text.isNotEmpty) {
         controllers[2].text = '';
       }
       _calculateAllTotals();
+      // استدعاء حساب الرصيد والباقي فورياً عند الكتابة
+      _fetchAndCalculateBalance(rowIndex);
     });
 
-    // حقل المدفوع
+    // حقل المدفوع (تعديل: إضافة حساب الرصيد الفوري)
     controllers[2].addListener(() {
       _hasUnsavedChanges = true;
       if (controllers[2].text.isNotEmpty) {
         controllers[1].text = '';
       }
       _calculateAllTotals();
+      // استدعاء حساب الرصيد والباقي فورياً عند الكتابة
+      _fetchAndCalculateBalance(rowIndex);
     });
 
     // حقل اسم الحساب (الحقل رقم 3)
@@ -323,6 +327,8 @@ class _BoxScreenState extends State<BoxScreen> {
               _supplierSuggestions = [];
               _activeCustomerRowIndex = null;
               _activeSupplierRowIndex = null;
+              _showFullScreenSuggestions = false;
+              _currentSuggestionType = '';
             });
           }
         });
@@ -957,22 +963,23 @@ class _BoxScreenState extends State<BoxScreen> {
     } else if (colIndex == 2) {
       _showAccountTypeDialog(rowIndex);
     } else if (colIndex == 3) {
-      // تنفيذ حساب الرصيد والباقي فور الضغط على Enter
-      _fetchAndCalculateBalance(rowIndex);
-
-      // إذا كان نوع الحساب زبون وكانت هناك اقتراحات
+      // 1. الأولوية القصوى: هل يوجد اقتراح زبون مطابق؟
+      // إذا نعم، دالة الاختيار ستقوم بتحديث الاسم وحساب الرصيد، ونخرج من هنا
       if (accountTypeValues[rowIndex] == 'زبون' &&
           _customerSuggestions.isNotEmpty) {
         _selectCustomerSuggestion(_customerSuggestions[0], rowIndex);
         return;
       }
 
-      // إذا كان نوع الحساب مورد وكانت هناك اقتراحات
+      // 2. الأولوية القصوى: هل يوجد اقتراح مورد مطابق؟
       if (accountTypeValues[rowIndex] == 'مورد' &&
           _supplierSuggestions.isNotEmpty) {
         _selectSupplierSuggestion(_supplierSuggestions[0], rowIndex);
         return;
       }
+
+      // 3. إذا لم يتم اختيار أي اقتراح، نقوم بالحساب بناءً على النص المكتوب يدوياً
+      _fetchAndCalculateBalance(rowIndex);
 
       if (value.trim().isNotEmpty && value.trim().length > 1) {
         if (accountTypeValues[rowIndex] == 'زبون') {
@@ -1240,84 +1247,8 @@ class _BoxScreenState extends State<BoxScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // شريط الرصيد والباقي: يظهر دائماً بمجرد وجود بيانات محملة بغض النظر عن حالة الاقتراحات
-          if (_lastFetchedBalance != null)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-              decoration: BoxDecoration(
-                color: Colors.yellow[100],
-                border: Border(
-                    bottom: BorderSide(color: Colors.grey[400]!, width: 0.5)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 2,
-                    offset: const Offset(0, 1),
-                  ),
-                ],
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  // اسم الحساب
-                  Expanded(
-                    flex: 2,
-                    child: Text(
-                      'الحساب: $_lastAccountName',
-                      style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  // الرصيد الحالي
-                  Expanded(
-                    flex: 1,
-                    child: Column(
-                      children: [
-                        const Text('الرصيد',
-                            style: TextStyle(fontSize: 9, color: Colors.grey)),
-                        Text(
-                          _lastFetchedBalance!.toStringAsFixed(2),
-                          style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.blue),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // الباقي المتوقع
-                  Expanded(
-                    flex: 1,
-                    child: Column(
-                      children: [
-                        const Text('الباقي',
-                            style: TextStyle(fontSize: 9, color: Colors.grey)),
-                        Text(
-                          _calculatedRemaining!.toStringAsFixed(2),
-                          style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.red),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-          // الجدول الرئيسي
-          Expanded(
-            child: _buildTableWithStickyHeader(),
-          ),
-        ],
-      ),
+      // هنا تم استدعاء دالة بناء المحتوى التي قمنا بتفعيلها
+      body: _buildMainContent(),
       // تم إلغاء زر الإضافة العائم من الأسفل
       floatingActionButton: null,
       resizeToAvoidBottomInset: true,
@@ -1325,59 +1256,84 @@ class _BoxScreenState extends State<BoxScreen> {
   }
 
   Widget _buildMainContent() {
+    // التحقق مما إذا كان الكيبورد ظاهراً
+    final bool isKeyboardVisible = MediaQuery.of(context).viewInsets.bottom > 0;
+
     return Column(
       children: [
-        // شريط الرصيد والباقي المثبت
-        if (!_showFullScreenSuggestions && _lastFetchedBalance != null)
+        // شريط الرصيد والباقي: يظهر فقط إذا كان هناك رصيد والكيبورد مخفي
+        if (_lastFetchedBalance != null && !isKeyboardVisible)
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
             decoration: BoxDecoration(
-              color: Colors.blue[50],
+              color: Colors.yellow[100],
               border: Border(
-                  bottom: BorderSide(color: Colors.blue[200]!, width: 1)),
+                  bottom: BorderSide(color: Colors.grey[400]!, width: 0.5)),
               boxShadow: [
                 BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 2,
-                    offset: const Offset(0, 2)),
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 2,
+                  offset: const Offset(0, 1),
+                ),
               ],
             ),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _buildBalanceInfoItem(
-                    'الحساب:', _lastAccountName, Colors.black87),
-                _buildBalanceInfoItem('الرصيد:',
-                    _lastFetchedBalance!.toStringAsFixed(2), Colors.blue[800]!),
-                _buildBalanceInfoItem('الباقي:',
-                    _calculatedRemaining!.toStringAsFixed(2), Colors.red[800]!,
-                    isBold: true),
+                // اسم الحساب
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    'الحساب: $_lastAccountName',
+                    style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                // الرصيد الحالي
+                Expanded(
+                  flex: 1,
+                  child: Column(
+                    children: [
+                      const Text('الرصيد',
+                          style: TextStyle(fontSize: 9, color: Colors.grey)),
+                      Text(
+                        _lastFetchedBalance!.toStringAsFixed(2),
+                        style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue),
+                      ),
+                    ],
+                  ),
+                ),
+                // الباقي المتوقع
+                Expanded(
+                  flex: 1,
+                  child: Column(
+                    children: [
+                      const Text('الباقي',
+                          style: TextStyle(fontSize: 9, color: Colors.grey)),
+                      Text(
+                        _calculatedRemaining!.toStringAsFixed(2),
+                        style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.red),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
-        // الجدول
-        Expanded(child: _buildTableWithStickyHeader()),
-      ],
-    );
-  }
 
-  // دالة مساعدة لبناء عناصر شريط الرصيد
-  Widget _buildBalanceInfoItem(String label, String value, Color color,
-      {bool isBold = false}) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(label,
-            style: const TextStyle(fontSize: 11, color: Colors.black54)),
-        const SizedBox(width: 4),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
-            color: color,
-          ),
+        // الجدول الرئيسي
+        Expanded(
+          child: _buildTableWithStickyHeader(),
         ),
       ],
     );
@@ -1634,12 +1590,16 @@ class _BoxScreenState extends State<BoxScreen> {
       _currentSuggestionType = '';
     });
 
+    // 1. وضع الاسم الكامل في الحقل
     rowControllers[rowIndex][3].text = suggestion;
     _hasUnsavedChanges = true;
 
     if (suggestion.trim().length > 1) {
       _saveCustomerToIndex(suggestion);
     }
+
+    // 2. تحديث شريط الرصيد فوراً بناءً على الاسم الكامل الجديد
+    _fetchAndCalculateBalance(rowIndex);
 
     Future.delayed(const Duration(milliseconds: 50), () {
       if (mounted) {
@@ -1650,7 +1610,6 @@ class _BoxScreenState extends State<BoxScreen> {
 
   // اختيار اقتراح للمورد
   void _selectSupplierSuggestion(String suggestion, int rowIndex) {
-    // إخفاء الاقتراحات فوراً
     setState(() {
       _supplierSuggestions = [];
       _activeSupplierRowIndex = null;
@@ -1658,6 +1617,7 @@ class _BoxScreenState extends State<BoxScreen> {
       _currentSuggestionType = '';
     });
 
+    // 1. وضع الاسم الكامل في الحقل
     rowControllers[rowIndex][3].text = suggestion;
     _hasUnsavedChanges = true;
 
@@ -1665,14 +1625,11 @@ class _BoxScreenState extends State<BoxScreen> {
       _saveSupplierToIndex(suggestion);
     }
 
+    // 2. تحديث شريط الرصيد فوراً بناءً على الاسم الكامل الجديد
+    _fetchAndCalculateBalance(rowIndex);
+
     Future.delayed(const Duration(milliseconds: 50), () {
       if (mounted) {
-        // إخفاء باقي الاقتراحات أيضاً
-        setState(() {
-          _customerSuggestions = [];
-          _activeCustomerRowIndex = null;
-        });
-
         FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][4]);
       }
     });

@@ -88,7 +88,7 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          'تقرير المورد ${widget.supplierName}',
+          'مبيعات المورد ${widget.supplierName}',
           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
         bottom: PreferredSize(
@@ -142,8 +142,7 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
                 children: [
                   // --- جدول المبيعات (نفس فواتير الزبائن) ---
                   if (hasSales) ...[
-                    _buildSectionTitle(
-                        'جدول المبيعات (حسب العائدية)', Colors.indigo),
+                    _buildSectionTitle('المبيعات', Colors.indigo),
                     Container(
                       decoration: BoxDecoration(
                         border: Border.all(color: Colors.indigo.shade200),
@@ -203,7 +202,7 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
 
                   // --- جدول الاستلام (بدون العائدية) ---
                   if (hasReceipts) ...[
-                    _buildSectionTitle('جدول الاستلام', Colors.green[700]!),
+                    _buildSectionTitle('الاستلام', Colors.green[700]!),
                     Container(
                       decoration: BoxDecoration(
                         border: Border.all(color: Colors.green.shade200),
@@ -258,7 +257,7 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
                   // --- جدول المقارنة (الاستلام vs المبيعات) ---
                   if (hasSummary) ...[
                     _buildSectionTitle(
-                        'مقارنة الحركة (استلام - مبيعات)', Colors.orange[800]!),
+                        'الاستلام - المبيعات', Colors.orange[800]!),
                     Container(
                       decoration: BoxDecoration(
                         border: Border.all(color: Colors.orange.shade200),

@@ -162,9 +162,13 @@ class InvoicesService {
     }
 
     // فرز المشتريات حسب حقل العائدية (affiliation)
-    final List<Purchase> supplierPurchases = purchaseDocument.purchases
-        .where((purchase) => purchase.affiliation.trim() == supplierName.trim())
-        .toList();
+    final List<Purchase> supplierPurchases =
+        purchaseDocument.purchases.where((purchase) {
+      // جعل المقارنة غير حساسة لحالة الأحرف وتتجاهل الفراغات الزائدة
+      final purchaseAffiliation = purchase.affiliation.trim().toLowerCase();
+      final targetSupplierName = supplierName.trim().toLowerCase();
+      return purchaseAffiliation == targetSupplierName;
+    }).toList();
 
     return supplierPurchases;
   }

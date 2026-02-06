@@ -6,7 +6,7 @@ import 'supplier_purchases_screen.dart';
 class SupplierSelectionScreen extends StatefulWidget {
   final String selectedDate;
   final String storeName;
-  final String reportType;
+  final String reportType; // 'sales' or 'purchases'
 
   const SupplierSelectionScreen({
     Key? key,
@@ -31,7 +31,6 @@ class _SupplierSelectionScreenState extends State<SupplierSelectionScreen> {
   @override
   void initState() {
     super.initState();
-    // جلب الموردين بدلاً من الزبائن
     _suppliersFuture = _supplierIndexService.getAllSuppliers();
     _searchController.addListener(_filterSuppliers);
   }
@@ -52,7 +51,7 @@ class _SupplierSelectionScreenState extends State<SupplierSelectionScreen> {
       setState(() {
         _filteredSuppliers = _allSuppliers
             .where((supplier) =>
-                supplier.toLowerCase().startsWith(query.toLowerCase()))
+                supplier.toLowerCase().contains(query.toLowerCase()))
             .toList();
       });
     }
@@ -66,7 +65,9 @@ class _SupplierSelectionScreenState extends State<SupplierSelectionScreen> {
         appBar: AppBar(
           title: const Text('اختر مورداً لعرض التفاصيل'),
           centerTitle: false,
-          backgroundColor: Colors.teal[700],
+          backgroundColor: widget.reportType == 'purchases'
+              ? Colors.red[700]
+              : Colors.teal[700],
           foregroundColor: Colors.white,
         ),
         body: FutureBuilder<List<String>>(
@@ -114,12 +115,17 @@ class _SupplierSelectionScreenState extends State<SupplierSelectionScreen> {
                       return ListTile(
                         title: Text(supplierName,
                             style: const TextStyle(fontSize: 18)),
-                        leading: const Icon(Icons.local_shipping,
-                            color: Colors.teal),
+                        leading: Icon(
+                          Icons.local_shipping,
+                          color: widget.reportType == 'purchases'
+                              ? Colors.red[700]
+                              : Colors.teal,
+                        ),
                         onTap: () {
                           FocusScope.of(context).unfocus();
+
+                          // الشرط يضمن فتح شاشة واحدة فقط
                           if (widget.reportType == 'sales') {
-                            // الانتقال إلى شاشة مبيعات المورد (السلوك القديم)
                             Navigator.of(context).push(
                               MaterialPageRoute(
                                 builder: (context) => SupplierInvoicesScreen(
@@ -130,7 +136,6 @@ class _SupplierSelectionScreenState extends State<SupplierSelectionScreen> {
                               ),
                             );
                           } else if (widget.reportType == 'purchases') {
-                            // الانتقال إلى شاشة مشتريات المورد الجديدة
                             Navigator.of(context).push(
                               MaterialPageRoute(
                                 builder: (context) => SupplierPurchasesScreen(
@@ -140,16 +145,6 @@ class _SupplierSelectionScreenState extends State<SupplierSelectionScreen> {
                               ),
                             );
                           }
-                          // الانتقال إلى شاشة فواتير المورد
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (context) => SupplierInvoicesScreen(
-                                selectedDate: widget.selectedDate,
-                                storeName: widget.storeName,
-                                supplierName: supplierName,
-                              ),
-                            ),
-                          );
                         },
                       );
                     },

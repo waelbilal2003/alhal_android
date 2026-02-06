@@ -22,7 +22,7 @@ class InvoiceTypeSelectionScreen extends StatelessWidget {
         foregroundColor: Colors.white,
       ),
       body: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(8.0),
         child: Column(
           children: [
             // زر فاتورة الزبون (يبقى كما هو)
@@ -57,7 +57,7 @@ class InvoiceTypeSelectionScreen extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
             // زر مبيعات مورد (تعديل بسيط)
             Expanded(
               child: SizedBox(
@@ -91,7 +91,7 @@ class InvoiceTypeSelectionScreen extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
 
             Expanded(
               child: SizedBox(

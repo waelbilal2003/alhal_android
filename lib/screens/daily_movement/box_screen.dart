@@ -964,10 +964,10 @@ class _BoxScreenState extends State<BoxScreen> {
       _showAccountTypeDialog(rowIndex);
     } else if (colIndex == 3) {
       // 1. الأولوية القصوى: هل يوجد اقتراح زبون مطابق؟
-      // إذا نعم، دالة الاختيار ستقوم بتحديث الاسم وحساب الرصيد، ونخرج من هنا
       if (accountTypeValues[rowIndex] == 'زبون' &&
           _customerSuggestions.isNotEmpty) {
         _selectCustomerSuggestion(_customerSuggestions[0], rowIndex);
+        _saveCurrentRecord(silent: true); // حفظ تلقائي هنا
         return;
       }
 
@@ -975,6 +975,7 @@ class _BoxScreenState extends State<BoxScreen> {
       if (accountTypeValues[rowIndex] == 'مورد' &&
           _supplierSuggestions.isNotEmpty) {
         _selectSupplierSuggestion(_supplierSuggestions[0], rowIndex);
+        _saveCurrentRecord(silent: true); // حفظ تلقائي هنا
         return;
       }
 
@@ -989,8 +990,14 @@ class _BoxScreenState extends State<BoxScreen> {
         }
       }
 
+      // حفظ تلقائي بعد إدخال الاسم يدوياً
+      _saveCurrentRecord(silent: true);
+
       FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][4]);
     } else if (colIndex == 4) {
+      // حفظ تلقائي قبل إضافة صف جديد
+      _saveCurrentRecord(silent: true);
+
       _addNewRow();
       if (rowControllers.isNotEmpty) {
         final newRowIndex = rowControllers.length - 1;
@@ -1094,6 +1101,9 @@ class _BoxScreenState extends State<BoxScreen> {
         });
       }
     });
+
+    // حفظ تلقائي بعد اختيار نوع الحساب
+    _saveCurrentRecord(silent: true);
   }
 
   void _onAccountTypeCancelled(int rowIndex) {
@@ -1455,13 +1465,6 @@ class _BoxScreenState extends State<BoxScreen> {
         await _supplierIndexService.updateSupplierBalance(e.key, e.value);
       setState(() => _hasUnsavedChanges = false);
       await _loadOrCreateJournal();
-    }
-
-    setState(() => _isSaving = false);
-    if (!silent && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(success ? 'تم الحفظ بنجاح' : 'فشل الحفظ'),
-          backgroundColor: success ? Colors.green : Colors.red));
     }
   }
 

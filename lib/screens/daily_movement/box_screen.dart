@@ -967,7 +967,10 @@ class _BoxScreenState extends State<BoxScreen> {
       if (accountTypeValues[rowIndex] == 'زبون' &&
           _customerSuggestions.isNotEmpty) {
         _selectCustomerSuggestion(_customerSuggestions[0], rowIndex);
-        _saveCurrentRecord(silent: true); // حفظ تلقائي هنا
+        // حفظ تلقائي بعد الاختيار مباشرة
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _saveCurrentRecord(silent: true);
+        });
         return;
       }
 
@@ -975,7 +978,10 @@ class _BoxScreenState extends State<BoxScreen> {
       if (accountTypeValues[rowIndex] == 'مورد' &&
           _supplierSuggestions.isNotEmpty) {
         _selectSupplierSuggestion(_supplierSuggestions[0], rowIndex);
-        _saveCurrentRecord(silent: true); // حفظ تلقائي هنا
+        // حفظ تلقائي بعد الاختيار مباشرة
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _saveCurrentRecord(silent: true);
+        });
         return;
       }
 
@@ -991,12 +997,16 @@ class _BoxScreenState extends State<BoxScreen> {
       }
 
       // حفظ تلقائي بعد إدخال الاسم يدوياً
-      _saveCurrentRecord(silent: true);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _saveCurrentRecord(silent: true);
+      });
 
       FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][4]);
     } else if (colIndex == 4) {
       // حفظ تلقائي قبل إضافة صف جديد
-      _saveCurrentRecord(silent: true);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _saveCurrentRecord(silent: true);
+      });
 
       _addNewRow();
       if (rowControllers.isNotEmpty) {
@@ -1459,12 +1469,29 @@ class _BoxScreenState extends State<BoxScreen> {
     final success = await _storageService.saveBoxDocument(documentToSave);
 
     if (success) {
-      for (var e in custDiffs.entries)
-        await _customerIndexService.updateCustomerBalance(e.key, e.value);
-      for (var e in suppDiffs.entries)
-        await _supplierIndexService.updateSupplierBalance(e.key, e.value);
-      setState(() => _hasUnsavedChanges = false);
-      await _loadOrCreateJournal();
+      // تحديث الأرصدة في الخلفية دون الانتظار
+      Future.microtask(() async {
+        for (var e in custDiffs.entries) {
+          await _customerIndexService.updateCustomerBalance(e.key, e.value);
+        }
+        for (var e in suppDiffs.entries) {
+          await _supplierIndexService.updateSupplierBalance(e.key, e.value);
+        }
+      });
+
+      // فقط تحديث حالة الحفظ دون إعادة تحميل اليومية
+      if (mounted) {
+        setState(() {
+          _hasUnsavedChanges = false;
+          _isSaving = false;
+        });
+      }
+    } else {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+      }
     }
   }
 

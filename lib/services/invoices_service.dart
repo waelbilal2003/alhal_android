@@ -161,14 +161,27 @@ class InvoicesService {
       return [];
     }
 
-    // فرز المشتريات حسب حقل العائدية (affiliation)
+    // البحث في حقل العائدية (affiliation) - التصحيح
     final List<Purchase> supplierPurchases =
         purchaseDocument.purchases.where((purchase) {
-      // جعل المقارنة غير حساسة لحالة الأحرف وتتجاهل الفراغات الزائدة
-      final purchaseAffiliation = purchase.affiliation.trim().toLowerCase();
-      final targetSupplierName = supplierName.trim().toLowerCase();
-      return purchaseAffiliation == targetSupplierName;
+      final purchaseAffiliation = purchase.affiliation.trim();
+      final targetSupplierName = supplierName.trim();
+
+      // إضافة طباعة للتشخيص
+      if (purchaseAffiliation.isNotEmpty) {
+        print('🔍 البحث في صف ${purchase.serialNumber}:');
+        print('   العائدية في الملف: $purchaseAffiliation');
+        print('   المورد المطلوب: $targetSupplierName');
+        print('   المطابقة: ${purchaseAffiliation == targetSupplierName}');
+      }
+
+      // مقارنة مباشرة (دون حساسية لحالة الأحرف)
+      return purchaseAffiliation.toLowerCase() ==
+          targetSupplierName.toLowerCase();
     }).toList();
+
+    // طباعة عدد النتائج للتشخيص
+    print('📊 عدد مشتريات المورد $supplierName: ${supplierPurchases.length}');
 
     return supplierPurchases;
   }

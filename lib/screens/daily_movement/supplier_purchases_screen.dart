@@ -79,7 +79,7 @@ class _SupplierPurchasesScreenState extends State<SupplierPurchasesScreen> {
             ),
           ),
         ),
-        backgroundColor: Colors.red[700], // اللون الأحمر
+        backgroundColor: Colors.red[700],
         foregroundColor: Colors.white,
         centerTitle: true,
       ),
@@ -107,53 +107,49 @@ class _SupplierPurchasesScreenState extends State<SupplierPurchasesScreen> {
 
             final purchases = snapshot.data!;
 
-            return Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Column(
-                children: [
-                  // --- جدول المشتريات ---
-                  Container(
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.red.shade200),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Column(
-                      children: [
-                        // رأس الجدول
-                        Container(
-                          color: Colors.red.shade400,
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          child: Row(
-                            children: [
-                              _buildHeaderCell('ت', 1),
-                              _buildHeaderCell('المادة', 4),
-                              _buildHeaderCell('العدد', 2),
-                              _buildHeaderCell('العبوة', 3),
-                              _buildHeaderCell('القائم', 2),
-                              _buildHeaderCell('الصافي', 2),
-                              _buildHeaderCell('السعر', 2),
-                              _buildHeaderCell('الإجمالي', 3),
-                              _buildHeaderCell('فوارغ', 3),
-                            ],
+            return SingleChildScrollView(
+              // <-- التعديل المهم هنا
+              child: Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Column(
+                  children: [
+                    // --- جدول المشتريات ---
+                    Container(
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.red.shade200),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Column(
+                        children: [
+                          // رأس الجدول
+                          Container(
+                            color: Colors.red.shade400,
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            child: Row(
+                              children: [
+                                _buildHeaderCell('ت', 1),
+                                _buildHeaderCell('المادة', 4),
+                                _buildHeaderCell('العدد', 2),
+                                _buildHeaderCell('العبوة', 3),
+                                _buildHeaderCell('القائم', 2),
+                                _buildHeaderCell('الصافي', 2),
+                                _buildHeaderCell('السعر', 2),
+                                _buildHeaderCell('الإجمالي', 3),
+                                _buildHeaderCell('فوارغ', 3),
+                              ],
+                            ),
                           ),
-                        ),
-                        // قائمة البيانات
-                        Expanded(
-                          child: ListView.builder(
-                            itemCount: purchases.length,
-                            itemBuilder: (context, index) {
-                              final item = purchases[index];
-                              return Container(
+                          // البيانات
+                          ...purchases.map((item) => Container(
                                 padding:
                                     const EdgeInsets.symmetric(vertical: 8),
                                 decoration: BoxDecoration(
-                                  color: index.isEven
+                                  color: purchases.indexOf(item) % 2 == 0
                                       ? Colors.white
                                       : Colors.red.shade50,
                                   border: Border(
-                                    bottom:
-                                        BorderSide(color: Colors.grey.shade300),
-                                  ),
+                                      bottom: BorderSide(
+                                          color: Colors.grey.shade300)),
                                 ),
                                 child: Row(
                                   children: [
@@ -170,14 +166,12 @@ class _SupplierPurchasesScreenState extends State<SupplierPurchasesScreen> {
                                     _buildDataCell(item.empties, 3),
                                   ],
                                 ),
-                              );
-                            },
-                          ),
-                        ),
-                      ],
+                              )),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             );
           },

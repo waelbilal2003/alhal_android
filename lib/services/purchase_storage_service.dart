@@ -44,35 +44,70 @@ class PurchaseStorageService {
       final filePath = '$folderPath/$fileName';
       final file = File(filePath);
 
-      // --- المنطق الجديد: الحفظ المباشر ---
-      // المستند القادم من الواجهة يحتوي الآن على جميع السجلات المدمجة
+      // --- بداية المنطق الجديد والمبسط (مستوحى من SalesStorageService) ---
 
-      final String finalRecordNumber = journalNumber ?? document.recordNumber;
+      // 1. تحميل اليومية الحالية إن وجدت
+      PurchaseDocument? existingDocument;
+      if (await file.exists()) {
+        final jsonString = await file.readAsString();
+        if (jsonString.isNotEmpty) {
+          final jsonMap = jsonDecode(jsonString) as Map<String, dynamic>;
+          existingDocument = PurchaseDocument.fromJson(jsonMap);
+        }
+      }
+
+      // 2. الحصول على جميع السجلات القديمة التي لا تخص البائع الحالي
+      List<Purchase> otherSellersPurchases = [];
+      if (existingDocument != null) {
+        otherSellersPurchases = existingDocument.purchases
+            .where((p) => p.sellerName != document.sellerName)
+            .toList();
+      }
+
+      // 3. دمج سجلات الباعة الآخرين مع السجلات الجديدة الكاملة للبائع الحالي
+      // document.purchases تحتوي فقط على سجلات البائع الحالي وهي كاملة البيانات من الواجهة
+      List<Purchase> allPurchases = [
+        ...otherSellersPurchases,
+        ...document.purchases,
+      ];
+
+      // 4. إعادة ترقيم كل شيء لضمان تسلسل صحيح
+      allPurchases.sort((a, b) => (int.tryParse(a.serialNumber) ?? 0)
+          .compareTo(int.tryParse(b.serialNumber) ?? 0));
+      for (int i = 0; i < allPurchases.length; i++) {
+        allPurchases[i] =
+            allPurchases[i].copyWith(serialNumber: (i + 1).toString());
+      }
+
+      // --- نهاية المنطق الجديد ---
+
+      final String finalRecordNumber = journalNumber ??
+          (existingDocument?.recordNumber ?? await getNextJournalNumber());
 
       final updatedDocument = PurchaseDocument(
         recordNumber: finalRecordNumber,
         date: document.date,
-        sellerName: 'Multiple Sellers', // اسم عام للملف
+        sellerName: 'Multiple Sellers', // يبقى الاسم العام للملف
         storeName: document.storeName,
         dayName: document.dayName,
-        purchases: document.purchases, // <-- استخدام القائمة الكاملة كما هي
-        totals: _calculateTotals(
-            document.purchases), // حساب المجاميع على القائمة الكاملة
+        purchases: allPurchases, // استخدام القائمة المدمجة والمحدثة
+        totals:
+            _calculateTotals(allPurchases), // حساب المجاميع على القائمة الكاملة
       );
 
       final updatedJsonString = jsonEncode(updatedDocument.toJson());
       await file.writeAsString(updatedJsonString);
-      // --- نهاية المنطق الجديد ---
 
       if (kDebugMode) {
-        debugPrint('✅ تم حفظ اليومية رقم $finalRecordNumber: $filePath');
-        debugPrint('📊 إجمالي السجلات: ${updatedDocument.purchases.length}');
+        debugPrint(
+            '✅ تم حفظ يومية المشتريات رقم $finalRecordNumber: $filePath');
+        debugPrint('📊 إجمالي السجلات: ${allPurchases.length}');
       }
 
       return true;
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('❌ خطأ في حفظ اليومية: $e');
+        debugPrint('❌ خطأ في حفظ يومية المشتريات: $e');
       }
       return false;
     }

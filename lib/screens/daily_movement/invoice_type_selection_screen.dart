@@ -25,7 +25,7 @@ class InvoiceTypeSelectionScreen extends StatelessWidget {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            // زر فاتورة الزبون
+            // زر فاتورة الزبون (يبقى كما هو)
             Expanded(
               child: SizedBox(
                 width: double.infinity,
@@ -58,7 +58,7 @@ class InvoiceTypeSelectionScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            // زر مبيعات مورد
+            // زر مبيعات مورد (تعديل بسيط)
             Expanded(
               child: SizedBox(
                 width: double.infinity,
@@ -83,6 +83,42 @@ class InvoiceTypeSelectionScreen extends StatelessWidget {
                         builder: (context) => SupplierSelectionScreen(
                           selectedDate: selectedDate,
                           storeName: storeName,
+                          reportType: 'sales',
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            Expanded(
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red[700], // اللون الأحمر
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(15),
+                    ),
+                    elevation: 5,
+                  ),
+                  icon: const Icon(Icons.shopping_cart_checkout,
+                      size: 40), // أيقونة مناسبة
+                  label: const Text(
+                    'مشتريات من مورد',
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                  ),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => SupplierSelectionScreen(
+                          selectedDate: selectedDate,
+                          storeName: storeName,
+                          reportType: 'purchases',
                         ),
                       ),
                     );

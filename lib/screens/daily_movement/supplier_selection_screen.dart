@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 import '../../services/supplier_index_service.dart';
 import 'supplier_invoices_screen.dart';
+import 'supplier_purchases_screen.dart';
 
 class SupplierSelectionScreen extends StatefulWidget {
   final String selectedDate;
   final String storeName;
+  final String reportType;
 
   const SupplierSelectionScreen({
     Key? key,
     required this.selectedDate,
     required this.storeName,
+    required this.reportType,
   }) : super(key: key);
 
   @override
@@ -115,6 +118,28 @@ class _SupplierSelectionScreenState extends State<SupplierSelectionScreen> {
                             color: Colors.teal),
                         onTap: () {
                           FocusScope.of(context).unfocus();
+                          if (widget.reportType == 'sales') {
+                            // الانتقال إلى شاشة مبيعات المورد (السلوك القديم)
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) => SupplierInvoicesScreen(
+                                  selectedDate: widget.selectedDate,
+                                  storeName: widget.storeName,
+                                  supplierName: supplierName,
+                                ),
+                              ),
+                            );
+                          } else if (widget.reportType == 'purchases') {
+                            // الانتقال إلى شاشة مشتريات المورد الجديدة
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) => SupplierPurchasesScreen(
+                                  selectedDate: widget.selectedDate,
+                                  supplierName: supplierName,
+                                ),
+                              ),
+                            );
+                          }
                           // الانتقال إلى شاشة فواتير المورد
                           Navigator.of(context).push(
                             MaterialPageRoute(

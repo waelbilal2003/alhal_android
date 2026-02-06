@@ -1,8 +1,10 @@
 import '../models/sales_model.dart';
 import '../models/invoice_model.dart';
 import '../models/receipt_model.dart';
+import '../models/purchase_model.dart';
 import 'sales_storage_service.dart';
 import 'receipt_storage_service.dart';
+import 'purchase_storage_service.dart';
 
 // نموذج بسيط لبيانات المقارنة
 class SupplierMovementSummary {
@@ -35,6 +37,8 @@ class SupplierReportData {
 class InvoicesService {
   final SalesStorageService _salesStorageService = SalesStorageService();
   final ReceiptStorageService _receiptStorageService = ReceiptStorageService();
+  final PurchaseStorageService _purchaseStorageService =
+      PurchaseStorageService();
 
   // 1. دالة جلب فواتير الزبائن (الكود القديم)
   Future<List<InvoiceItem>> getInvoicesForCustomer(
@@ -145,5 +149,23 @@ class InvoicesService {
       receipts: supplierReceipts,
       summary: summaryList,
     );
+  }
+
+  // 3. دالة جديدة لجلب مشتريات مورد معين
+  Future<List<Purchase>> getPurchasesForSupplier(
+      String date, String supplierName) async {
+    final PurchaseDocument? purchaseDocument =
+        await _purchaseStorageService.loadPurchaseDocument(date);
+
+    if (purchaseDocument == null || purchaseDocument.purchases.isEmpty) {
+      return [];
+    }
+
+    // فرز المشتريات حسب حقل العائدية (affiliation)
+    final List<Purchase> supplierPurchases = purchaseDocument.purchases
+        .where((purchase) => purchase.affiliation.trim() == supplierName.trim())
+        .toList();
+
+    return supplierPurchases;
   }
 }

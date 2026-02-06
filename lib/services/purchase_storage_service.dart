@@ -35,87 +35,79 @@ class PurchaseStorageService {
       final basePath = await _getBasePath();
       final folderPath = '$basePath/AlhalJournals';
 
-      // إنشاء مجلد اليوميات إذا لم يكن موجوداً
       final folder = Directory(folderPath);
       if (!await folder.exists()) {
         await folder.create(recursive: true);
       }
 
-      // اسم الملف: purchases-YYYY-MM-DD.json
       final fileName = _createFileName(document.date);
       final filePath = '$folderPath/$fileName';
-
-      // قراءة الملف الحالي إذا كان موجوداً
       final file = File(filePath);
-      PurchaseDocument? existingDocument;
 
+      // --- بداية المنطق الجديد والمبسط (مستوحى من SalesStorageService) ---
+
+      // 1. تحميل اليومية الحالية إن وجدت
+      PurchaseDocument? existingDocument;
       if (await file.exists()) {
         final jsonString = await file.readAsString();
-        final jsonMap = jsonDecode(jsonString) as Map<String, dynamic>;
-        existingDocument = PurchaseDocument.fromJson(jsonMap);
-      }
-
-      // دمج السجلات
-      List<Purchase> mergedPurchases = [];
-      if (existingDocument != null) {
-        for (var existing in existingDocument.purchases) {
-          bool found = false;
-          for (var newPurchase in document.purchases) {
-            if (existing.serialNumber == newPurchase.serialNumber) {
-              found = true;
-              break;
-            }
-          }
-          if (!found) {
-            mergedPurchases.add(existing);
-          }
+        if (jsonString.isNotEmpty) {
+          final jsonMap = jsonDecode(jsonString) as Map<String, dynamic>;
+          existingDocument = PurchaseDocument.fromJson(jsonMap);
         }
       }
 
-      // إضافة السجلات الجديدة/المعدلة
-      mergedPurchases.addAll(document.purchases);
-
-      // ترتيب السجلات حسب الرقم المسلسل
-      mergedPurchases.sort((a, b) =>
-          int.parse(a.serialNumber).compareTo(int.parse(b.serialNumber)));
-
-      // الحصول على رقم اليومية
-      final String finalJournalNumber;
-      if (journalNumber != null) {
-        finalJournalNumber = journalNumber;
-      } else if (existingDocument != null &&
-          existingDocument.recordNumber.isNotEmpty) {
-        // استخدام الرقم الموجود إذا كان هناك
-        finalJournalNumber = existingDocument.recordNumber;
-      } else {
-        // الحصول على الرقم التالي
-        finalJournalNumber = await getNextJournalNumber();
+      // 2. الحصول على جميع السجلات القديمة التي لا تخص البائع الحالي
+      List<Purchase> otherSellersPurchases = [];
+      if (existingDocument != null) {
+        otherSellersPurchases = existingDocument.purchases
+            .where((p) => p.sellerName != document.sellerName)
+            .toList();
       }
 
-      // تحديث المجاميع
+      // 3. دمج سجلات الباعة الآخرين مع السجلات الجديدة الكاملة للبائع الحالي
+      // document.purchases تحتوي فقط على سجلات البائع الحالي وهي كاملة البيانات من الواجهة
+      List<Purchase> allPurchases = [
+        ...otherSellersPurchases,
+        ...document.purchases,
+      ];
+
+      // 4. إعادة ترقيم كل شيء لضمان تسلسل صحيح
+      allPurchases.sort((a, b) => (int.tryParse(a.serialNumber) ?? 0)
+          .compareTo(int.tryParse(b.serialNumber) ?? 0));
+      for (int i = 0; i < allPurchases.length; i++) {
+        allPurchases[i] =
+            allPurchases[i].copyWith(serialNumber: (i + 1).toString());
+      }
+
+      // --- نهاية المنطق الجديد ---
+
+      final String finalRecordNumber = journalNumber ??
+          (existingDocument?.recordNumber ?? await getNextJournalNumber());
+
       final updatedDocument = PurchaseDocument(
-        recordNumber: finalJournalNumber, // <-- رقم اليومية
+        recordNumber: finalRecordNumber,
         date: document.date,
-        sellerName: 'Multiple Sellers',
+        sellerName: 'Multiple Sellers', // يبقى الاسم العام للملف
         storeName: document.storeName,
         dayName: document.dayName,
-        purchases: mergedPurchases,
-        totals: _calculateTotals(mergedPurchases),
+        purchases: allPurchases, // استخدام القائمة المدمجة والمحدثة
+        totals:
+            _calculateTotals(allPurchases), // حساب المجاميع على القائمة الكاملة
       );
 
-      // حفظ المستند المحدث
       final updatedJsonString = jsonEncode(updatedDocument.toJson());
       await file.writeAsString(updatedJsonString);
 
       if (kDebugMode) {
-        debugPrint('✅ تم حفظ اليومية رقم $finalJournalNumber: $filePath');
-        debugPrint('📊 عدد السجلات: ${mergedPurchases.length}');
+        debugPrint(
+            '✅ تم حفظ يومية المشتريات رقم $finalRecordNumber: $filePath');
+        debugPrint('📊 إجمالي السجلات: ${allPurchases.length}');
       }
 
       return true;
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('❌ خطأ في حفظ اليومية: $e');
+        debugPrint('❌ خطأ في حفظ يومية المشتريات: $e');
       }
       return false;
     }

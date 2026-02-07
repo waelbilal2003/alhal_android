@@ -313,6 +313,13 @@ class _BoxScreenState extends State<BoxScreen> {
     controllers[3].addListener(() {
       _hasUnsavedChanges = true;
 
+      // *** إضافة: حساب الرصيد عند أي تغيير في اسم الحساب ***
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && controllers[3].text.isNotEmpty) {
+          _fetchAndCalculateBalance(rowIndex);
+        }
+      });
+
       // فقط تحديث الاقتراحات بناءً على نوع الحساب
       if (accountTypeValues[rowIndex] == 'زبون') {
         _updateCustomerSuggestions(rowIndex);
@@ -967,9 +974,9 @@ class _BoxScreenState extends State<BoxScreen> {
       if (accountTypeValues[rowIndex] == 'زبون' &&
           _customerSuggestions.isNotEmpty) {
         _selectCustomerSuggestion(_customerSuggestions[0], rowIndex);
-        // حفظ تلقائي بعد الاختيار مباشرة
+        // *** إضافة: حساب الرصيد فوراً بعد اختيار الاقتراح ***
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          _saveCurrentRecord(silent: true);
+          _fetchAndCalculateBalance(rowIndex);
         });
         return;
       }
@@ -978,15 +985,18 @@ class _BoxScreenState extends State<BoxScreen> {
       if (accountTypeValues[rowIndex] == 'مورد' &&
           _supplierSuggestions.isNotEmpty) {
         _selectSupplierSuggestion(_supplierSuggestions[0], rowIndex);
-        // حفظ تلقائي بعد الاختيار مباشرة
+        // *** إضافة: حساب الرصيد فوراً بعد اختيار الاقتراح ***
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          _saveCurrentRecord(silent: true);
+          _fetchAndCalculateBalance(rowIndex);
         });
         return;
       }
 
       // 3. إذا لم يتم اختيار أي اقتراح، نقوم بالحساب بناءً على النص المكتوب يدوياً
-      _fetchAndCalculateBalance(rowIndex);
+      // *** التعديل: حساب الرصيد فوراً قبل أي شيء آخر ***
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _fetchAndCalculateBalance(rowIndex);
+      });
 
       if (value.trim().isNotEmpty && value.trim().length > 1) {
         if (accountTypeValues[rowIndex] == 'زبون') {
@@ -999,6 +1009,8 @@ class _BoxScreenState extends State<BoxScreen> {
       // حفظ تلقائي بعد إدخال الاسم يدوياً
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _saveCurrentRecord(silent: true);
+        // *** إضافة: إعادة حساب الرصيد بعد الحفظ للتأكد من التحديث ***
+        _fetchAndCalculateBalance(rowIndex);
       });
 
       FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][4]);
@@ -1101,16 +1113,23 @@ class _BoxScreenState extends State<BoxScreen> {
       _supplierSuggestions = [];
       _activeCustomerRowIndex = null;
       _activeSupplierRowIndex = null;
-
-      if (value.isNotEmpty) {
-        Future.delayed(const Duration(milliseconds: 150), () {
-          if (mounted) {
-            FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][3]);
-            _scrollToField(rowIndex, 3);
-          }
-        });
-      }
     });
+
+    // *** إضافة: حساب الرصيد إذا كان هناك اسم حساب موجود ***
+    if (rowControllers[rowIndex][3].text.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _fetchAndCalculateBalance(rowIndex);
+      });
+    }
+
+    if (value.isNotEmpty) {
+      Future.delayed(const Duration(milliseconds: 150), () {
+        if (mounted) {
+          FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][3]);
+          _scrollToField(rowIndex, 3);
+        }
+      });
+    }
 
     // حفظ تلقائي بعد اختيار نوع الحساب
     _saveCurrentRecord(silent: true);
@@ -1479,6 +1498,19 @@ class _BoxScreenState extends State<BoxScreen> {
         }
       });
 
+      // *** إضافة: إعادة حساب الرصيد للصف النشط بعد الحفظ ***
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          // البحث عن الصف النشط (الذي تم التعديل عليه مؤخراً)
+          for (int i = 0; i < rowControllers.length; i++) {
+            if (rowControllers[i][3].text == _lastAccountName) {
+              _fetchAndCalculateBalance(i);
+              break;
+            }
+          }
+        }
+      });
+
       // فقط تحديث حالة الحفظ دون إعادة تحميل اليومية
       if (mounted) {
         setState(() {
@@ -1728,18 +1760,21 @@ class _BoxScreenState extends State<BoxScreen> {
     final String type = accountTypeValues[rowIndex];
     final String name = rowControllers[rowIndex][3].text.trim();
 
+    // *** إضافة: تأكد من وجود نوع حساب واسم ***
+    if (type.isEmpty || name.isEmpty) {
+      return;
+    }
+
     // القيم الحالية للصف الذي نعمل عليه (آخر عملية إدخال)
     final double currentReceived =
         double.tryParse(rowControllers[rowIndex][1].text) ?? 0;
     final double currentPaid =
         double.tryParse(rowControllers[rowIndex][2].text) ?? 0;
 
-    if (name.isEmpty) {
-      return;
-    }
-
     try {
-      // جلب الرصيد الحقيقي مباشرة من الفهرس - بدون أي حسابات تراكمية
+      // *** إضافة: تأخير قصير لضمان استقرار البيانات ***
+      await Future.delayed(const Duration(milliseconds: 10));
+
       double realBalance = 0;
 
       if (type == 'زبون') {

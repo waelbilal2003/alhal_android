@@ -12,7 +12,6 @@ import '../../services/enhanced_index_service.dart';
 import '../../widgets/suggestions_banner.dart';
 import '../../services/supplier_balance_tracker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter/foundation.dart';
 
 class BoxScreen extends StatefulWidget {
   final String sellerName;
@@ -948,7 +947,7 @@ class _BoxScreenState extends State<BoxScreen> {
     }
   }
 
-  void _handleFieldSubmitted(String value, int rowIndex, int colIndex) {
+ void _handleFieldSubmitted(String value, int rowIndex, int colIndex) {
     if (!_canEditRow(rowIndex)) {
       return;
     }
@@ -965,10 +964,11 @@ class _BoxScreenState extends State<BoxScreen> {
       _showAccountTypeDialog(rowIndex);
     } else if (colIndex == 3) {
       // 1. الأولوية القصوى: هل يوجد اقتراح زبون مطابق؟
-      // إذا نعم، دالة الاختيار ستقوم بتحديث الاسم وحساب الرصيد، ونخرج من هنا
       if (accountTypeValues[rowIndex] == 'زبون' &&
           _customerSuggestions.isNotEmpty) {
         _selectCustomerSuggestion(_customerSuggestions[0], rowIndex);
+        // *** إضافة: الحفظ الفوري بعد اختيار الاقتراح ***
+        _saveCurrentRecord(silent: true, reloadAfterSave: false);
         return;
       }
 
@@ -976,11 +976,19 @@ class _BoxScreenState extends State<BoxScreen> {
       if (accountTypeValues[rowIndex] == 'مورد' &&
           _supplierSuggestions.isNotEmpty) {
         _selectSupplierSuggestion(_supplierSuggestions[0], rowIndex);
+        // *** إضافة: الحفظ الفوري بعد اختيار الاقتراح ***
+        _saveCurrentRecord(silent: true, reloadAfterSave: false);
         return;
       }
 
-      // 3. إذا لم يتم اختيار أي اقتراح، نقوم بالحساب بناءً على النص المكتوب يدوياً
-      _fetchAndCalculateBalance(rowIndex);
+      // *** تعديل: المنطق الرئيسي لتحديث الرصيد عند ضغط Enter ***
+      // 3. إذا لم يتم اختيار أي اقتراح، نقوم بالحفظ ثم تحديث شريط الرصيد
+      _saveCurrentRecord(silent: true, reloadAfterSave: false).then((_) {
+        // نستدعي هذه الدالة بعد اكتمال الحفظ لضمان قراءة الرصيد المحدث
+        if (mounted) {
+          _fetchAndCalculateBalance(rowIndex);
+        }
+      });
 
       if (value.trim().isNotEmpty && value.trim().length > 1) {
         if (accountTypeValues[rowIndex] == 'زبون') {
@@ -1370,7 +1378,8 @@ class _BoxScreenState extends State<BoxScreen> {
     );
   }
 
-  Future<void> _saveCurrentRecord({bool silent = false}) async {
+ Future<void> _saveCurrentRecord(
+      {bool silent = false, bool reloadAfterSave = true}) async {
     if (_isSaving) return;
 
     final List<BoxTransaction> allTransFromUI = [];
@@ -1455,7 +1464,15 @@ class _BoxScreenState extends State<BoxScreen> {
       for (var e in suppDiffs.entries)
         await _supplierIndexService.updateSupplierBalance(e.key, e.value);
       setState(() => _hasUnsavedChanges = false);
-      await _loadOrCreateJournal();
+      if (reloadAfterSave) {
+        await _loadOrCreateJournal();
+      } else {
+        // إذا لم نقم بإعادة التحميل، يجب أن نعيد حالة الحفظ يدويًا
+        setState(() => _isSaving = false);
+      }
+    } else {
+      // إعادة حالة الحفظ عند الفشل أيضًا
+      setState(() => _isSaving = false);
     }
   }
 
@@ -1584,8 +1601,7 @@ class _BoxScreenState extends State<BoxScreen> {
     // 2. تحديث شريط الرصيد فوراً بناءً على الاسم الكامل الجديد
     _fetchAndCalculateBalance(rowIndex);
 
-    // 3. الانتقال إلى حقل الملاحظات
-    Future.delayed(const Duration(milliseconds: 100), () {
+    Future.delayed(const Duration(milliseconds: 50), () {
       if (mounted) {
         FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][4]);
       }
@@ -1612,8 +1628,7 @@ class _BoxScreenState extends State<BoxScreen> {
     // 2. تحديث شريط الرصيد فوراً بناءً على الاسم الكامل الجديد
     _fetchAndCalculateBalance(rowIndex);
 
-    // 3. الانتقال إلى حقل الملاحظات
-    Future.delayed(const Duration(milliseconds: 100), () {
+    Future.delayed(const Duration(milliseconds: 50), () {
       if (mounted) {
         FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][4]);
       }
@@ -1691,161 +1706,130 @@ class _BoxScreenState extends State<BoxScreen> {
   }
 
   Future<void> _fetchAndCalculateBalance(int rowIndex) async {
-    if (rowIndex >= rowControllers.length ||
-        rowIndex >= accountTypeValues.length) {
+    final String type = accountTypeValues[rowIndex];
+    final String name = rowControllers[rowIndex][3].text.trim();
+
+    // القيم الحالية للصف الذي نعمل عليه (آخر عملية إدخال)
+    final double currentReceived =
+        double.tryParse(rowControllers[rowIndex][1].text) ?? 0;
+    final double currentPaid =
+        double.tryParse(rowControllers[rowIndex][2].text) ?? 0;
+
+    if (name.isEmpty) {
       return;
     }
-
-    final accountName = rowControllers[rowIndex][3].text.trim();
-    final accountType = accountTypeValues[rowIndex];
-    final received = double.tryParse(rowControllers[rowIndex][1].text) ?? 0.0;
-    final paid = double.tryParse(rowControllers[rowIndex][2].text) ?? 0.0;
-
-    if (accountName.isEmpty || accountType.isEmpty) {
-      setState(() {
-        _lastFetchedBalance = null;
-        _lastAccountName = '';
-        _calculatedRemaining = null;
-      });
-      return;
-    }
-
-    double? currentBalance;
 
     try {
-      if (accountType == 'زبون') {
-        // جلب بيانات الزبون
-        final customersData =
-            await _customerIndexService.getAllCustomersWithData();
-        for (var entry in customersData.entries) {
-          if (entry.value.name.toLowerCase() == accountName.toLowerCase()) {
-            currentBalance = entry.value.balance;
-            break;
-          }
-        }
-      } else if (accountType == 'مورد') {
-        // جلب بيانات المورد
-        final suppliersData =
-            await _supplierIndexService.getAllSuppliersWithData();
-        for (var entry in suppliersData.entries) {
-          if (entry.value.name.toLowerCase() == accountName.toLowerCase()) {
-            currentBalance = entry.value.balance;
-            break;
-          }
-        }
+      // جلب الرصيد الحقيقي مباشرة من الفهرس - بدون أي حسابات تراكمية
+      double realBalance = 0;
+
+      if (type == 'زبون') {
+        final customers = await _customerIndexService.getAllCustomersWithData();
+        final customerData = customers.values.firstWhere(
+          (c) => c.name.toLowerCase() == name.toLowerCase(),
+          orElse: () => CustomerData(name: name, balance: 0.0),
+        );
+        realBalance = customerData.balance;
+      } else if (type == 'مورد') {
+        final supplierData = await _supplierIndexService.getSupplierData(name);
+        realBalance = supplierData?.balance ?? 0.0;
+      } else {
+        // نوع الحساب "مصروف" - نبقي الشريط معروضاً
+        return;
       }
 
-      // حساب الباقي
-      double remaining = 0.0;
-      if (currentBalance != null) {
-        if (accountType == 'زبون') {
-          // للزبون: الرصيد الحالي - المقبوض + المدفوع
-          remaining = currentBalance - received + paid;
-        } else if (accountType == 'مورد') {
-          // للمورد: الرصيد الحالي + المقبوض - المدفوع
-          remaining = currentBalance + received - paid;
-        }
+      // حساب الباقي بناءً على آخر عملية إدخال فقط + الرصيد الحقيقي
+      double remaining = 0;
+
+      if (type == 'زبون') {
+        // معادلة الزبون: الرصيد الحقيقي - مقبوض (سدد) + مدفوع (دين جديد)
+        remaining = realBalance - currentReceived + currentPaid;
+      } else if (type == 'مورد') {
+        // معادلة المورد: الرصيد الحقيقي + مقبوض (دين علينا) - مدفوع (سداد منا)
+        remaining = realBalance + currentReceived - currentPaid;
       }
 
-      // تحديث الواجهة
       if (mounted) {
         setState(() {
-          _lastFetchedBalance = currentBalance;
-          _lastAccountName = accountName;
-          _calculatedRemaining = remaining;
+          _lastFetchedBalance = realBalance; // الرصيد الحقيقي من الفهرس
+          _calculatedRemaining =
+              remaining; // الباقي = آخر عملية + الرصيد الحقيقي
+          _lastAccountName = name;
         });
       }
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ خطأ في حساب الرصيد: $e');
-      }
+      debugPrint("Error calculating balance: $e");
     }
   }
 
   Widget _buildAppBarBalanceWidget() {
-    // تصحيح: التأكد من أن كلا الفرعين يعيدان Future<String> لتجنب خطأ Type Mismatch
-    final Future<String> accountTypeFuture = _lastAccountName.isEmpty
-        ? Future.value(
-            '') // إعادة قيمة نصية فارغة داخل Future في حالة كان الاسم فارغاً
-        : _customerIndexService.getAllCustomersWithData().then((customers) {
-            // البحث عن الزبون أولاً
-            for (var entry in customers.entries) {
-              if (entry.value.name.toLowerCase() ==
-                  _lastAccountName.toLowerCase()) {
-                return 'زبون';
-              }
-            }
-            // إذا لم يتم العثور عليه، ابحث عن المورد
-            return _supplierIndexService
-                .getAllSuppliersWithData()
-                .then((suppliers) {
-              for (var entry in suppliers.entries) {
-                if (entry.value.name.toLowerCase() ==
-                    _lastAccountName.toLowerCase()) {
-                  return 'مورد';
-                }
-              }
-              return ''; // القيمة الافتراضية إذا لم يتم العثور عليه في أي مكان
-            });
-          });
-
-    return FutureBuilder<String>(
-      future: accountTypeFuture, // الآن النوع متوافق بشكل صحيح (Future<String>)
-      builder: (context, snapshot) {
-        final type = snapshot.data ?? '';
-        final balanceText = _lastFetchedBalance != null
-            ? _lastFetchedBalance!.toStringAsFixed(2)
-            : '0.00';
-        final remainingText = _calculatedRemaining != null
-            ? _calculatedRemaining!.toStringAsFixed(2)
-            : '0.00';
-
-        Color balanceColor = Colors.black;
-        String balanceLabel = 'الرصيد:';
-
-        if (type == 'زبون') {
-          balanceColor = _lastFetchedBalance != null && _lastFetchedBalance! < 0
-              ? Colors.red
-              : Colors.green;
-          balanceLabel = 'دين العميل:';
-        } else if (type == 'مورد') {
-          balanceColor = _lastFetchedBalance != null && _lastFetchedBalance! > 0
-              ? Colors.red
-              : Colors.green;
-          balanceLabel = 'رصيد المورد:';
-        }
-
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.9),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: balanceColor.withOpacity(0.5)),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+    return Container(
+      height: 48,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // اسم الحساب
+          Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(
-                '$balanceLabel $balanceText',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  color: balanceColor,
-                ),
+              const Text(
+                'الحساب',
+                style: TextStyle(fontSize: 10, color: Colors.white70),
               ),
-              if (_calculatedRemaining != null)
-                Text(
-                  'بعد العملية: $remainingText',
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: balanceColor.withOpacity(0.8),
-                  ),
-                ),
+              Text(
+                _lastAccountName.length > 12
+                    ? '${_lastAccountName.substring(0, 12)}...'
+                    : _lastAccountName,
+                style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white),
+              ),
             ],
           ),
-        );
-      },
+          const SizedBox(width: 12),
+          // الرصيد الحالي
+          Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text('الرصيد',
+                  style: TextStyle(fontSize: 10, color: Colors.white70)),
+              Text(
+                _lastFetchedBalance?.toStringAsFixed(2) ?? '0.00',
+                style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white),
+              ),
+            ],
+          ),
+          const SizedBox(width: 12),
+          // الباقي المتوقع
+          Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text('الباقي',
+                  style: TextStyle(fontSize: 10, color: Colors.white70)),
+              Text(
+                _calculatedRemaining?.toStringAsFixed(2) ?? '0.00',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: (_calculatedRemaining ?? 0) >= 0
+                      ? Colors.lightGreenAccent
+                      : Colors.redAccent,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

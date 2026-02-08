@@ -6,31 +6,31 @@ import 'sales_storage_service.dart';
 import 'receipt_storage_service.dart';
 import 'purchase_storage_service.dart';
 
-// نموذج بسيط لبيانات المقارنة
-class SupplierMovementSummary {
-  final String material;
-  double receiptCount;
-  double salesCount;
-
-  SupplierMovementSummary({
-    required this.material,
-    this.receiptCount = 0.0,
-    this.salesCount = 0.0,
-  });
-
-  double get balance => receiptCount - salesCount;
-}
-
 // نموذج يحتوي على كل البيانات المطلوبة لشاشة المورد
 class SupplierReportData {
   final List<InvoiceItem> sales;
   final List<Receipt> receipts;
-  final List<SupplierMovementSummary> summary;
+  final List<MaterialSummary> summary;
 
   SupplierReportData({
     required this.sales,
     required this.receipts,
     required this.summary,
+  });
+}
+
+// نموذج بيانات لملخص المواد (البايت)
+class MaterialSummary {
+  final String material;
+  final double receiptCount;
+  final double salesCount;
+  final double balance;
+
+  MaterialSummary({
+    required this.material,
+    required this.receiptCount,
+    required this.salesCount,
+    required this.balance,
   });
 }
 
@@ -40,7 +40,7 @@ class InvoicesService {
   final PurchaseStorageService _purchaseStorageService =
       PurchaseStorageService();
 
-  // 1. دالة جلب فواتير الزبائن (الكود القديم)
+  // 1. دالة جلب فواتير الزبائن (صحيحة)
   Future<List<InvoiceItem>> getInvoicesForCustomer(
       String date, String customerName) async {
     final SalesDocument? salesDocument =
@@ -58,6 +58,7 @@ class InvoicesService {
               serialNumber: sale.serialNumber,
               material: sale.material,
               affiliation: sale.affiliation,
+              sValue: sale.sValue,
               count: sale.count,
               packaging: sale.packaging,
               standing: sale.standing,
@@ -73,13 +74,13 @@ class InvoicesService {
     return customerInvoices;
   }
 
-  // 2. دالة جديدة لجلب تقرير المورد الشامل (مبيعات + استلام + ملخص)
+  // 2. دالة جلب تقرير المورد الشامل (صحيحة)
   Future<SupplierReportData> getSupplierReport(
       String date, String supplierName) async {
     final cleanSupplierName = supplierName.trim();
     List<InvoiceItem> supplierSales = [];
     List<Receipt> supplierReceipts = [];
-    Map<String, SupplierMovementSummary> summaryMap = {};
+    Map<String, MaterialSummary> summaryMap = {};
 
     // أ) جلب المبيعات الخاصة بالمورد (حسب العائدية affiliation)
     final SalesDocument? salesDocument =
@@ -87,13 +88,12 @@ class InvoicesService {
 
     if (salesDocument != null) {
       for (var sale in salesDocument.sales) {
-        // التحقق من العائدية
         if (sale.affiliation.trim() == cleanSupplierName) {
-          // إضافة للقائمة
           supplierSales.add(InvoiceItem(
             serialNumber: sale.serialNumber,
             material: sale.material,
             affiliation: sale.affiliation,
+            sValue: sale.sValue,
             count: sale.count,
             packaging: sale.packaging,
             standing: sale.standing,
@@ -105,14 +105,23 @@ class InvoicesService {
             sellerName: sale.sellerName,
           ));
 
-          // تحديث الملخص (المبيعات)
-          final material = sale.material.trim();
-          if (material.isNotEmpty) {
-            summaryMap.putIfAbsent(
-                material, () => SupplierMovementSummary(material: material));
-            summaryMap[material]!.salesCount +=
-                double.tryParse(sale.count) ?? 0.0;
-          }
+          final key = '${sale.material.trim()}-${sale.packaging.trim()}';
+          final count = double.tryParse(sale.count) ?? 0;
+          summaryMap.update(
+            key,
+            (value) => MaterialSummary(
+              material: value.material,
+              receiptCount: value.receiptCount,
+              salesCount: value.salesCount + count,
+              balance: value.receiptCount - (value.salesCount + count),
+            ),
+            ifAbsent: () => MaterialSummary(
+              material: '${sale.material} - ${sale.packaging}',
+              receiptCount: 0,
+              salesCount: count,
+              balance: -count,
+            ),
+          );
         }
       }
     }
@@ -123,24 +132,30 @@ class InvoicesService {
 
     if (receiptDocument != null) {
       for (var receipt in receiptDocument.receipts) {
-        // التحقق من العائدية
         if (receipt.affiliation.trim() == cleanSupplierName) {
-          // إضافة للقائمة
           supplierReceipts.add(receipt);
 
-          // تحديث الملخص (الاستلام)
-          final material = receipt.material.trim();
-          if (material.isNotEmpty) {
-            summaryMap.putIfAbsent(
-                material, () => SupplierMovementSummary(material: material));
-            summaryMap[material]!.receiptCount +=
-                double.tryParse(receipt.count) ?? 0.0;
-          }
+          final key = '${receipt.material.trim()}-${receipt.packaging.trim()}';
+          final count = double.tryParse(receipt.count) ?? 0;
+          summaryMap.update(
+            key,
+            (value) => MaterialSummary(
+              material: value.material,
+              receiptCount: value.receiptCount + count,
+              salesCount: value.salesCount,
+              balance: (value.receiptCount + count) - value.salesCount,
+            ),
+            ifAbsent: () => MaterialSummary(
+              material: '${receipt.material} - ${receipt.packaging}',
+              receiptCount: count,
+              salesCount: 0,
+              balance: count,
+            ),
+          );
         }
       }
     }
 
-    // ج) تحضير قائمة الملخص
     final summaryList = summaryMap.values.toList();
     summaryList.sort((a, b) => a.material.compareTo(b.material));
 
@@ -151,7 +166,7 @@ class InvoicesService {
     );
   }
 
-  // 3. دالة جديدة لجلب مشتريات مورد معين
+  // 3. دالة جلب مشتريات مورد معين (تم التصحيح هنا)
   Future<List<Purchase>> getPurchasesForSupplier(
       String date, String supplierName) async {
     final PurchaseDocument? purchaseDocument =
@@ -161,27 +176,16 @@ class InvoicesService {
       return [];
     }
 
-    // البحث في حقل العائدية (affiliation) - التصحيح
+    // البحث في حقل "affiliation" (العائدية) بدلاً من "supplierName" غير الموجود
     final List<Purchase> supplierPurchases =
         purchaseDocument.purchases.where((purchase) {
       final purchaseAffiliation = purchase.affiliation.trim();
       final targetSupplierName = supplierName.trim();
 
-      // إضافة طباعة للتشخيص
-      if (purchaseAffiliation.isNotEmpty) {
-        print('🔍 البحث في صف ${purchase.serialNumber}:');
-        print('   العائدية في الملف: $purchaseAffiliation');
-        print('   المورد المطلوب: $targetSupplierName');
-        print('   المطابقة: ${purchaseAffiliation == targetSupplierName}');
-      }
-
-      // مقارنة مباشرة (دون حساسية لحالة الأحرف)
+      // المقارنة تتم الآن مع الحقل الصحيح
       return purchaseAffiliation.toLowerCase() ==
           targetSupplierName.toLowerCase();
     }).toList();
-
-    // طباعة عدد النتائج للتشخيص
-    print('📊 عدد مشتريات المورد $supplierName: ${supplierPurchases.length}');
 
     return supplierPurchases;
   }

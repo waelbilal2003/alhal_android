@@ -136,11 +136,25 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
               );
             }
 
+            // --- حساب مجاميع المبيعات ---
+            double salesTotalStanding = 0;
+            double salesTotalNet = 0;
+            double salesTotalPrice = 0;
+            double salesTotalGrand = 0;
+            if (hasSales) {
+              for (var item in data.sales) {
+                salesTotalStanding += double.tryParse(item.standing) ?? 0;
+                salesTotalNet += double.tryParse(item.net) ?? 0;
+                salesTotalPrice += double.tryParse(item.price) ?? 0;
+                salesTotalGrand += double.tryParse(item.total) ?? 0;
+              }
+            }
+
             return SingleChildScrollView(
               padding: const EdgeInsets.all(8.0),
               child: Column(
                 children: [
-                  // --- جدول المبيعات (نفس فواتير الزبائن) ---
+                  // --- جدول المبيعات ---
                   if (hasSales) ...[
                     _buildSectionTitle('المبيعات', Colors.indigo),
                     Container(
@@ -158,14 +172,14 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
                               children: [
                                 _buildHeaderCell('ت', 1),
                                 _buildHeaderCell('المادة', 4),
+                                _buildHeaderCell('س', 1), // <-- حقل س للمبيعات
                                 _buildHeaderCell('العدد', 2),
                                 _buildHeaderCell('العبوة', 3),
                                 _buildHeaderCell('القائم', 2),
                                 _buildHeaderCell('الصافي', 2),
                                 _buildHeaderCell('السعر', 2),
                                 _buildHeaderCell('الإجمالي', 3),
-                                _buildHeaderCell('الزبون',
-                                    3), // أضفنا الزبون هنا لتمييز البيع
+                                _buildHeaderCell('الزبون', 3),
                               ],
                             ),
                           ),
@@ -183,6 +197,8 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
                                   children: [
                                     _buildDataCell(item.serialNumber, 1),
                                     _buildDataCell(item.material, 4),
+                                    _buildDataCell(
+                                        item.sValue, 1), // <-- حقل س للمبيعات
                                     _buildDataCell(item.count, 2),
                                     _buildDataCell(item.packaging, 3),
                                     _buildDataCell(item.standing, 2),
@@ -195,12 +211,41 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
                                   ],
                                 ),
                               )),
+                          // سطر المجموع للمبيعات
+                          Container(
+                            color: Colors.indigo.shade100,
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            child: Row(
+                              children: [
+                                _buildDataCell('المجموع', 1,
+                                    fontWeight: FontWeight.bold),
+                                _buildDataCell('', 4), // المادة
+                                _buildDataCell('', 1), // س
+                                _buildDataCell('', 2), // العدد
+                                _buildDataCell('', 3), // العبوة
+                                _buildDataCell(
+                                    salesTotalStanding.toStringAsFixed(2), 2,
+                                    fontWeight: FontWeight.bold),
+                                _buildDataCell(
+                                    salesTotalNet.toStringAsFixed(2), 2,
+                                    fontWeight: FontWeight.bold),
+                                _buildDataCell(
+                                    salesTotalPrice.toStringAsFixed(2), 2,
+                                    fontWeight: FontWeight.bold),
+                                _buildDataCell(
+                                    salesTotalGrand.toStringAsFixed(2), 3,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.indigo),
+                                _buildDataCell('', 3), // الزبون
+                              ],
+                            ),
+                          ),
                         ],
                       ),
                     ),
                   ],
 
-                  // --- جدول الاستلام (بدون العائدية) ---
+                  // --- جدول الاستلام ---
                   if (hasReceipts) ...[
                     _buildSectionTitle('الاستلام', Colors.green[700]!),
                     Container(
@@ -218,12 +263,12 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
                               children: [
                                 _buildHeaderCell('ت', 1),
                                 _buildHeaderCell('المادة', 4),
+                                _buildHeaderCell('س', 1), // <-- حقل س للاستلام
                                 _buildHeaderCell('العدد', 2),
                                 _buildHeaderCell('العبوة', 3),
                                 _buildHeaderCell('القائم', 2),
                                 _buildHeaderCell('الدفعة', 2),
                                 _buildHeaderCell('الحمولة', 2),
-                                // تم إخفاء العائدية
                               ],
                             ),
                           ),
@@ -241,6 +286,8 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
                                   children: [
                                     _buildDataCell(item.serialNumber, 1),
                                     _buildDataCell(item.material, 4),
+                                    _buildDataCell(
+                                        item.sValue, 1), // <-- حقل س للاستلام
                                     _buildDataCell(item.count, 2),
                                     _buildDataCell(item.packaging, 3),
                                     _buildDataCell(item.standing, 2),

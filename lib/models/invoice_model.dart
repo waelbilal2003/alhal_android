@@ -2,6 +2,7 @@ class InvoiceItem {
   final String serialNumber;
   final String material;
   final String affiliation;
+  final String sValue;
   final String count;
   final String packaging;
   final String standing;
@@ -16,6 +17,7 @@ class InvoiceItem {
     required this.serialNumber,
     required this.material,
     required this.affiliation,
+    required this.sValue,
     required this.count,
     required this.packaging,
     required this.standing,

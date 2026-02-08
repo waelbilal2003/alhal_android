@@ -38,7 +38,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
         style: const TextStyle(
           fontWeight: FontWeight.bold,
           color: Colors.white,
-          fontSize: 13, // تعديل حجم الخط ليتناسب
+          fontSize: 12, // تعديل حجم الخط ليتناسب
         ),
       ),
     );
@@ -106,8 +106,16 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
             }
 
             final invoiceItems = snapshot.data!;
+
+            // --- حساب المجاميع ---
+            double totalStanding = 0;
+            double totalNet = 0;
+            double totalPrice = 0;
             double grandTotal = 0;
             for (var item in invoiceItems) {
+              totalStanding += double.tryParse(item.standing) ?? 0;
+              totalNet += double.tryParse(item.net) ?? 0;
+              totalPrice += double.tryParse(item.price) ?? 0;
               grandTotal += double.tryParse(item.total) ?? 0;
             }
 
@@ -130,11 +138,10 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                       children: [
                         _buildHeaderCell('ت', 1),
                         _buildHeaderCell('المادة', 4),
+                        _buildHeaderCell('س', 1), // <-- الإضافة هنا
                         _buildHeaderCell('العدد', 2),
                         _buildHeaderCell('العبوة', 3),
-                        // --- الإضافة هنا ---
                         _buildHeaderCell('القائم', 2),
-                        // --- نهاية الإضافة ---
                         _buildHeaderCell('الصافي', 2),
                         _buildHeaderCell('السعر', 2),
                         _buildHeaderCell('الإجمالي', 3),
@@ -146,8 +153,47 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                   // 2. قائمة البيانات
                   Expanded(
                     child: ListView.builder(
-                      itemCount: invoiceItems.length,
+                      itemCount:
+                          invoiceItems.length + 1, // +1 for the total row
                       itemBuilder: (context, index) {
+                        // --- سطر المجموع ---
+                        if (index == invoiceItems.length) {
+                          return Container(
+                            padding: const EdgeInsets.symmetric(
+                                vertical: 10.0, horizontal: 4.0),
+                            decoration: BoxDecoration(
+                              color: Colors.indigo.shade100,
+                              border: Border(
+                                bottom: BorderSide(color: Colors.grey.shade300),
+                                left: BorderSide(color: Colors.grey.shade300),
+                                right: BorderSide(color: Colors.grey.shade300),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                _buildDataCell('المجموع', 1,
+                                    fontWeight: FontWeight.bold),
+                                _buildDataCell('', 4), // المادة
+                                _buildDataCell('', 1), // س
+                                _buildDataCell('', 2), // العدد
+                                _buildDataCell('', 3), // العبوة
+                                _buildDataCell(
+                                    totalStanding.toStringAsFixed(2), 2,
+                                    fontWeight: FontWeight.bold),
+                                _buildDataCell(totalNet.toStringAsFixed(2), 2,
+                                    fontWeight: FontWeight.bold),
+                                _buildDataCell(totalPrice.toStringAsFixed(2), 2,
+                                    fontWeight: FontWeight.bold),
+                                _buildDataCell(grandTotal.toStringAsFixed(2), 3,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.indigo.shade900),
+                                _buildDataCell('', 3), // فوارغ
+                              ],
+                            ),
+                          );
+                        }
+
+                        // --- أسطر البيانات العادية ---
                         final item = invoiceItems[index];
                         return Container(
                           padding: const EdgeInsets.symmetric(
@@ -166,11 +212,10 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                             children: [
                               _buildDataCell(item.serialNumber, 1),
                               _buildDataCell(item.material, 4),
+                              _buildDataCell(item.sValue, 1), // <-- الإضافة هنا
                               _buildDataCell(item.count, 2),
                               _buildDataCell(item.packaging, 3),
-                              // --- الإضافة هنا ---
                               _buildDataCell(item.standing, 2),
-                              // --- نهاية الإضافة ---
                               _buildDataCell(item.net, 2),
                               _buildDataCell(item.price, 2),
                               _buildDataCell(

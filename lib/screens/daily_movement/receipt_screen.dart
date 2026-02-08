@@ -227,29 +227,25 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     });
   }
 
-  // تعديل _addNewRow لتحسين المستمعات
   void _addNewRow() {
     setState(() {
       final newSerialNumber = (rowControllers.length + 1).toString();
 
+      // تغيير من 8 إلى 9
       List<TextEditingController> newControllers =
-          List.generate(8, (index) => TextEditingController());
+          List.generate(9, (index) => TextEditingController());
 
-      List<FocusNode> newFocusNodes = List.generate(8, (index) => FocusNode());
+      // تغيير من 8 إلى 9
+      List<FocusNode> newFocusNodes = List.generate(9, (index) => FocusNode());
 
       newControllers[0].text = newSerialNumber;
 
-      // إضافة مستمعات للتغيير باستخدام دالة مساعدة
       _addChangeListenersToControllers(newControllers, rowControllers.length);
-
-      // تخزين اسم البائع للصف الجديد
       sellerNames.add(widget.sellerName);
-
       rowControllers.add(newControllers);
       rowFocusNodes.add(newFocusNodes);
     });
 
-    // تركيز الماوس على حقل المادة في السجل الجديد
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (rowFocusNodes.isNotEmpty) {
         final newRowIndex = rowFocusNodes.length - 1;
@@ -277,65 +273,42 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
   // دالة مساعدة لإضافة المستمعات
   void _addChangeListenersToControllers(
       List<TextEditingController> controllers, int rowIndex) {
-    // حقل المادة
     controllers[1].addListener(() {
+      // المادة
       _hasUnsavedChanges = true;
       _updateMaterialSuggestions(rowIndex);
     });
-
-    // حقل العائدية
     controllers[2].addListener(() {
+      // العائدية
       _hasUnsavedChanges = true;
       _updateSupplierSuggestions(rowIndex);
     });
-
-    // حقل العبوة
+    // لا نحتاج مستمع خاص لـ س (controllers[3]) لأنه لا يؤثر على المجاميع
     controllers[4].addListener(() {
+      // العدد
+      _hasUnsavedChanges = true;
+      _calculateAllTotals();
+    });
+    controllers[5].addListener(() {
+      // العبوة
       _hasUnsavedChanges = true;
       _updatePackagingSuggestions(rowIndex);
     });
-
-    // الحقول الرقمية مع التحديث التلقائي
-    controllers[3].addListener(() {
-      _hasUnsavedChanges = true;
-      _calculateAllTotals();
-    });
-
-    controllers[5].addListener(() {
-      _hasUnsavedChanges = true;
-      _calculateAllTotals();
-    });
-
     controllers[6].addListener(() {
+      // القائم
       _hasUnsavedChanges = true;
       _calculateAllTotals();
     });
-
     controllers[7].addListener(() {
+      // الدفعة
       _hasUnsavedChanges = true;
       _calculateAllTotals();
     });
-  }
-
-  // تحديث اقتراحات المادة
-  void _updateMaterialSuggestions(int rowIndex) async {
-    final query = rowControllers[rowIndex][1].text;
-    if (query.length >= 1) {
-      final suggestions =
-          await getEnhancedSuggestions(_materialIndexService, query);
-      setState(() {
-        _materialSuggestions = suggestions;
-        _activeMaterialRowIndex = rowIndex;
-        _toggleFullScreenSuggestions(
-            type: 'material', show: suggestions.isNotEmpty);
-      });
-    } else {
-      // إخفاء الاقتراحات إذا كان الحقل فارغاً
-      setState(() {
-        _materialSuggestions = [];
-        _activeMaterialRowIndex = null;
-      });
-    }
+    controllers[8].addListener(() {
+      // الحمولة
+      _hasUnsavedChanges = true;
+      _calculateAllTotals();
+    });
   }
 
   // تحديث اقتراحات العبوة
@@ -355,6 +328,27 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
       setState(() {
         _packagingSuggestions = [];
         _activePackagingRowIndex = null;
+      });
+    }
+  }
+
+  // تحديث اقتراحات المادة
+  void _updateMaterialSuggestions(int rowIndex) async {
+    final query = rowControllers[rowIndex][1].text;
+    if (query.length >= 1) {
+      final suggestions =
+          await getEnhancedSuggestions(_materialIndexService, query);
+      setState(() {
+        _materialSuggestions = suggestions;
+        _activeMaterialRowIndex = rowIndex;
+        _toggleFullScreenSuggestions(
+            type: 'material', show: suggestions.isNotEmpty);
+      });
+    } else {
+      // إخفاء الاقتراحات إذا كان الحقل فارغاً
+      setState(() {
+        _materialSuggestions = [];
+        _activeMaterialRowIndex = null;
       });
     }
   }
@@ -474,13 +468,9 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
   }
 
   void _calculateAllTotals() {
-    // إلغاء أي حساب سابق منتظر
     _calculateTotalsDebouncer?.cancel();
-
-    // تأخير الحساب لتجنب التكرار المتعدد
     _calculateTotalsDebouncer = Timer(const Duration(milliseconds: 50), () {
       if (!mounted || _isCalculating) return;
-
       _isCalculating = true;
 
       double totalCount = 0;
@@ -490,13 +480,14 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
 
       for (var controllers in rowControllers) {
         try {
-          totalCount += double.tryParse(controllers[3].text) ?? 0;
-          totalStanding += double.tryParse(controllers[5].text) ?? 0;
-          totalPayment += double.tryParse(controllers[6].text) ?? 0;
-          totalLoad += double.tryParse(controllers[7].text) ?? 0;
-        } catch (e) {
-          // تجاهل الأخطاء
-        }
+          totalCount +=
+              double.tryParse(controllers[4].text) ?? 0; // تغيير إلى 4
+          totalStanding +=
+              double.tryParse(controllers[6].text) ?? 0; // تغيير إلى 6
+          totalPayment +=
+              double.tryParse(controllers[7].text) ?? 0; // تغيير إلى 7
+          totalLoad += double.tryParse(controllers[8].text) ?? 0; // تغيير إلى 8
+        } catch (e) {}
       }
 
       if (mounted) {
@@ -507,39 +498,29 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
           totalLoadController.text = totalLoad.toStringAsFixed(2);
         });
       }
-
       _isCalculating = false;
     });
   }
 
-  // تعديل _loadJournal لاستخدام الدالة المساعدة
   void _loadJournal(ReceiptDocument document) {
     setState(() {
-      // تنظيف المتحكمات القديمة
       for (var row in rowControllers) {
-        for (var controller in row) {
-          controller.dispose();
-        }
+        for (var controller in row) controller.dispose();
       }
       for (var row in rowFocusNodes) {
-        for (var node in row) {
-          node.dispose();
-        }
+        for (var node in row) node.dispose();
       }
-
-      // إعادة تهيئة القوائم
       rowControllers.clear();
       rowFocusNodes.clear();
       sellerNames.clear();
 
-      // تحميل السجلات من الوثيقة
       for (int i = 0; i < document.receipts.length; i++) {
         var receipt = document.receipts[i];
-
         List<TextEditingController> newControllers = [
           TextEditingController(text: receipt.serialNumber),
           TextEditingController(text: receipt.material),
           TextEditingController(text: receipt.affiliation),
+          TextEditingController(text: receipt.sValue), // <-- الحقل الجديد
           TextEditingController(text: receipt.count),
           TextEditingController(text: receipt.packaging),
           TextEditingController(text: receipt.standing),
@@ -547,26 +528,19 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
           TextEditingController(text: receipt.load),
         ];
 
+        // تغيير من 8 إلى 9
         List<FocusNode> newFocusNodes =
-            List.generate(8, (index) => FocusNode());
-
-        // تخزين اسم البائع لهذا الصف
+            List.generate(9, (index) => FocusNode());
         sellerNames.add(receipt.sellerName);
-
-        // التحقق إذا كان السجل مملوكاً للبائع الحالي
         final bool isOwnedByCurrentSeller =
             receipt.sellerName == widget.sellerName;
-
-        // إضافة مستمعات للتغيير فقط إذا كان السجل مملوكاً للبائع الحالي
         if (isOwnedByCurrentSeller) {
           _addChangeListenersToControllers(newControllers, i);
         }
-
         rowControllers.add(newControllers);
         rowFocusNodes.add(newFocusNodes);
       }
 
-      // تحميل المجاميع
       if (document.totals.isNotEmpty) {
         totalCountController.text = document.totals['totalCount'] ?? '0';
         totalStandingController.text =
@@ -574,7 +548,6 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
         totalPaymentController.text = document.totals['totalPayment'] ?? '0.00';
         totalLoadController.text = document.totals['totalLoad'] ?? '0.00';
       }
-
       _hasUnsavedChanges = false;
     });
   }
@@ -602,6 +575,10 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
   Widget _buildTableHeader() {
     return Table(
       defaultColumnWidth: const FlexColumnWidth(),
+      // <-- إضافة عرض الأعمدة
+      columnWidths: const {
+        3: FixedColumnWidth(30.0),
+      },
       border: TableBorder.all(color: Colors.grey, width: 0.5),
       children: [
         TableRow(
@@ -610,6 +587,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
             TableComponents.buildTableHeaderCell('مسلسل'),
             TableComponents.buildTableHeaderCell('المادة'),
             TableComponents.buildTableHeaderCell('العائدية'),
+            TableComponents.buildTableHeaderCell('س'), // <-- الحقل الجديد
             TableComponents.buildTableHeaderCell('العدد'),
             TableComponents.buildTableHeaderCell('العبوة'),
             TableComponents.buildTableHeaderCell('القائم'),
@@ -623,11 +601,8 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
 
   Widget _buildTableContent() {
     List<TableRow> contentRows = [];
-
     for (int i = 0; i < rowControllers.length; i++) {
-      // التحقق إذا كان السجل مملوكاً للبائع الحالي
       final bool isOwnedByCurrentSeller = sellerNames[i] == widget.sellerName;
-
       contentRows.add(
         TableRow(
           children: [
@@ -638,20 +613,22 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
             _buildSupplierCell(rowControllers[i][2], rowFocusNodes[i][2], i, 2,
                 isOwnedByCurrentSeller),
             _buildTableCell(rowControllers[i][3], rowFocusNodes[i][3], i, 3,
+                isOwnedByCurrentSeller,
+                isSField: true), // <-- الحقل الجديد
+            _buildTableCell(rowControllers[i][4], rowFocusNodes[i][4], i, 4,
                 isOwnedByCurrentSeller),
-            _buildPackagingCell(rowControllers[i][4], rowFocusNodes[i][4], i, 4,
-                isOwnedByCurrentSeller),
-            _buildTableCell(rowControllers[i][5], rowFocusNodes[i][5], i, 5,
+            _buildPackagingCell(rowControllers[i][5], rowFocusNodes[i][5], i, 5,
                 isOwnedByCurrentSeller),
             _buildTableCell(rowControllers[i][6], rowFocusNodes[i][6], i, 6,
                 isOwnedByCurrentSeller),
             _buildTableCell(rowControllers[i][7], rowFocusNodes[i][7], i, 7,
                 isOwnedByCurrentSeller),
+            _buildTableCell(rowControllers[i][8], rowFocusNodes[i][8], i, 8,
+                isOwnedByCurrentSeller),
           ],
         ),
       );
     }
-
     if (rowControllers.length >= 2) {
       contentRows.add(
         TableRow(
@@ -660,6 +637,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
             _buildEmptyCell(),
             _buildEmptyCell(),
             _buildEmptyCell(),
+            _buildEmptyCell(), // خلية فارغة لـ "س"
             TableComponents.buildTotalCell(totalCountController),
             _buildEmptyCell(),
             TableComponents.buildTotalCell(totalStandingController),
@@ -669,24 +647,30 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
         ),
       );
     }
-
     return Table(
       defaultColumnWidth: const FlexColumnWidth(),
+      // <-- إضافة عرض الأعمدة
+      columnWidths: const {
+        3: FixedColumnWidth(30.0),
+      },
       border: TableBorder.all(color: Colors.grey, width: 0.5),
       children: contentRows,
     );
   }
 
   Widget _buildTableCell(TextEditingController controller, FocusNode focusNode,
-      int rowIndex, int colIndex, bool isOwnedByCurrentSeller) {
+      int rowIndex, int colIndex, bool isOwnedByCurrentSeller,
+      {bool isSField = false}) {
+    // <-- إضافة isSField
     bool isSerialField = colIndex == 0;
+    // تعديل الأرقام
     bool isNumericField =
-        colIndex == 3 || colIndex == 5 || colIndex == 6 || colIndex == 7;
+        colIndex == 4 || colIndex == 6 || colIndex == 7 || colIndex == 8;
 
     return TableBuilder.buildTableCell(
       controller: controller,
       focusNode: focusNode,
-      enabled: _canEditRow(rowIndex), // <-- التمرير الصحيح للصلاحية
+      enabled: _canEditRow(rowIndex),
       isSerialField: isSerialField,
       isNumericField: isNumericField,
       rowIndex: rowIndex,
@@ -694,12 +678,21 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
       scrollToField: _scrollToField,
       onFieldSubmitted: _handleFieldSubmitted,
       onFieldChanged: _handleFieldChanged,
-      inputFormatters: isNumericField
-          ? [
-              TableComponents.PositiveDecimalInputFormatter(),
-              FilteringTextInputFormatter.deny(RegExp(r'\.\d{3,}')),
-            ]
-          : null,
+      isSField: isSField, // <-- تمرير القيمة
+      inputFormatters: isSField
+          ? [FilteringTextInputFormatter.digitsOnly]
+          : (isNumericField
+              ? [
+                  TableComponents.PositiveDecimalInputFormatter(),
+                  FilteringTextInputFormatter.deny(RegExp(r'\.\d{3,}')),
+                ]
+              : null),
+      fontSize: isSField ? 11 : 13, // <-- تعديل حجم الخط
+      textAlign:
+          isSField ? TextAlign.center : TextAlign.right, // <-- تعديل المحاذاة
+      textDirection: isSField
+          ? TextDirection.ltr
+          : TextDirection.rtl, // <-- تعديل اتجاه النص
     );
   }
 
@@ -767,6 +760,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     if (!_canEditRow(rowIndex)) return;
 
     if (colIndex == 1) {
+      // المادة
       if (_materialSuggestions.isNotEmpty) {
         _selectMaterialSuggestion(_materialSuggestions[0], rowIndex);
         return;
@@ -774,28 +768,32 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
       if (value.trim().length > 1) _saveMaterialToIndex(value);
       FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][2]);
     } else if (colIndex == 2) {
+      // العائدية
       if (_supplierSuggestions.isNotEmpty) {
         _selectSupplierSuggestion(_supplierSuggestions[0], rowIndex);
         return;
       }
       if (value.trim().length > 1) _saveSupplierToIndex(value);
       FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][3]);
-    } else if (colIndex == 4) {
+    } else if (colIndex == 5) {
+      // العبوة
       if (_packagingSuggestions.isNotEmpty) {
         _selectPackagingSuggestion(_packagingSuggestions[0], rowIndex);
         return;
       }
       if (value.trim().length > 1) _savePackagingToIndex(value);
-      FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][5]);
+      FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][6]);
     } else if (colIndex == 0) {
+      // مسلسل
       FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][1]);
-    } else if (colIndex == 7) {
+    } else if (colIndex == 8) {
+      // الحمولة
       _addNewRow();
       if (rowControllers.isNotEmpty) {
         final newRowIndex = rowControllers.length - 1;
         FocusScope.of(context).requestFocus(rowFocusNodes[newRowIndex][1]);
       }
-    } else if (colIndex < 7) {
+    } else if (colIndex < 8) {
       FocusScope.of(context)
           .requestFocus(rowFocusNodes[rowIndex][colIndex + 1]);
     }
@@ -1124,21 +1122,21 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     final List<Receipt> allReceiptsFromUI = [];
     for (int i = 0; i < rowControllers.length; i++) {
       final controllers = rowControllers[i];
-      if (controllers[1].text.isNotEmpty || controllers[3].text.isNotEmpty) {
+      if (controllers[1].text.isNotEmpty || controllers[4].text.isNotEmpty) {
         allReceiptsFromUI.add(Receipt(
-          serialNumber: (i + 1).toString(), // إعادة ترقيم لضمان التسلسل
+          serialNumber: (i + 1).toString(),
           material: controllers[1].text,
           affiliation: controllers[2].text,
-          count: controllers[3].text,
-          packaging: controllers[4].text,
-          standing: controllers[5].text,
-          payment: controllers[6].text,
-          load: controllers[7].text,
-          sellerName: sellerNames[i], // الأهم: الحفاظ على المالك الأصلي للسجل
+          sValue: controllers[3].text,
+          count: controllers[4].text,
+          packaging: controllers[5].text,
+          standing: controllers[6].text,
+          payment: controllers[7].text,
+          load: controllers[8].text,
+          sellerName: sellerNames[i],
         ));
       }
     }
-
     // =========================================================================
     // الخطوة 2: حساب التغير في الأرصدة (فقط للسجلات التي عدلها البائع الحالي)
     // =========================================================================

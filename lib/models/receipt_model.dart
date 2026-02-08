@@ -2,6 +2,7 @@ class Receipt {
   final String serialNumber;
   final String material;
   final String affiliation;
+  final String sValue;
   final String count;
   final String packaging;
   final String standing;
@@ -13,6 +14,7 @@ class Receipt {
     required this.serialNumber,
     required this.material,
     required this.affiliation,
+    required this.sValue,
     required this.count,
     required this.packaging,
     required this.standing,
@@ -26,6 +28,7 @@ class Receipt {
     String? serialNumber,
     String? material,
     String? affiliation,
+    String? sValue,
     String? count,
     String? packaging,
     String? standing,
@@ -37,6 +40,7 @@ class Receipt {
       serialNumber: serialNumber ?? this.serialNumber,
       material: material ?? this.material,
       affiliation: affiliation ?? this.affiliation,
+      sValue: sValue ?? this.sValue,
       count: count ?? this.count,
       packaging: packaging ?? this.packaging,
       standing: standing ?? this.standing,
@@ -51,6 +55,7 @@ class Receipt {
       serialNumber: json['serialNumber'] ?? '',
       material: json['material'] ?? '',
       affiliation: json['affiliation'] ?? '',
+      sValue: json['sValue'] ?? '',
       count: json['count'] ?? '',
       packaging: json['packaging'] ?? '',
       standing: json['standing'] ?? '',
@@ -65,6 +70,7 @@ class Receipt {
       'serialNumber': serialNumber,
       'material': material,
       'affiliation': affiliation,
+      'sValue': sValue,
       'count': count,
       'packaging': packaging,
       'standing': standing,

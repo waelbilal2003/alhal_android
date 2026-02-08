@@ -107,8 +107,19 @@ class _SupplierPurchasesScreenState extends State<SupplierPurchasesScreen> {
 
             final purchases = snapshot.data!;
 
+            // --- حساب مجاميع المشتريات ---
+            double totalStanding = 0;
+            double totalNet = 0;
+            double totalPrice = 0;
+            double totalGrand = 0;
+            for (var item in purchases) {
+              totalStanding += double.tryParse(item.standing) ?? 0;
+              totalNet += double.tryParse(item.net) ?? 0;
+              totalPrice += double.tryParse(item.price) ?? 0;
+              totalGrand += double.tryParse(item.total) ?? 0;
+            }
+
             return SingleChildScrollView(
-              // <-- التعديل المهم هنا
               child: Padding(
                 padding: const EdgeInsets.all(8.0),
                 child: Column(
@@ -167,6 +178,31 @@ class _SupplierPurchasesScreenState extends State<SupplierPurchasesScreen> {
                                   ],
                                 ),
                               )),
+                          // سطر المجموع
+                          Container(
+                            color: Colors.red.shade100,
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            child: Row(
+                              children: [
+                                _buildDataCell('المجموع', 1,
+                                    fontWeight: FontWeight.bold),
+                                _buildDataCell('', 4), // المادة
+                                _buildDataCell('', 2), // العدد
+                                _buildDataCell('', 3), // العبوة
+                                _buildDataCell(
+                                    totalStanding.toStringAsFixed(2), 2,
+                                    fontWeight: FontWeight.bold),
+                                _buildDataCell(totalNet.toStringAsFixed(2), 2,
+                                    fontWeight: FontWeight.bold),
+                                _buildDataCell(totalPrice.toStringAsFixed(2), 2,
+                                    fontWeight: FontWeight.bold),
+                                _buildDataCell(totalGrand.toStringAsFixed(2), 3,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.red.shade900),
+                                _buildDataCell('', 3), // فوارغ
+                              ],
+                            ),
+                          ),
                         ],
                       ),
                     ),

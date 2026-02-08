@@ -1,4 +1,11 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
+import 'package:path_provider/path_provider.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:share_plus/share_plus.dart';
+
 import '../../services/invoices_service.dart';
 
 class SupplierInvoicesScreen extends StatefulWidget {
@@ -28,7 +35,383 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
         widget.selectedDate, widget.supplierName);
   }
 
-  // دوال مساعدة لبناء الخلايا
+  // --- دالة توليد الـ PDF والمشاركة (3 جداول) ---
+  Future<void> _generateAndSharePdf(SupplierReportData data) async {
+    final pdf = pw.Document();
+
+    // تحميل الخط العربي
+    var arabicFont;
+    try {
+      final fontData = await rootBundle.load("assets/fonts/Cairo-Regular.ttf");
+      arabicFont = pw.Font.ttf(fontData);
+    } catch (e) {
+      arabicFont = pw.Font.courier();
+      debugPrint("Error loading font: $e");
+    }
+
+    // --- حساب المجاميع للـ PDF ---
+    // 1. المبيعات
+    double salesTotalStanding = 0;
+    double salesTotalNet = 0;
+    double salesTotalPrice = 0;
+    double salesTotalGrand = 0;
+    for (var item in data.sales) {
+      salesTotalStanding += double.tryParse(item.standing) ?? 0;
+      salesTotalNet += double.tryParse(item.net) ?? 0;
+      salesTotalPrice += double.tryParse(item.price) ?? 0;
+      salesTotalGrand += double.tryParse(item.total) ?? 0;
+    }
+
+    // 2. الاستلام
+    double receiptTotalCount = 0;
+    double receiptTotalStanding = 0;
+    double receiptTotalPayment = 0;
+    double receiptTotalLoad = 0;
+    for (var item in data.receipts) {
+      receiptTotalCount += double.tryParse(item.count) ?? 0;
+      receiptTotalStanding += double.tryParse(item.standing) ?? 0;
+      receiptTotalPayment += double.tryParse(item.payment) ?? 0;
+      receiptTotalLoad += double.tryParse(item.load) ?? 0;
+    }
+
+    // تعريف الألوان
+    final PdfColor borderColor = PdfColor.fromInt(0xFFE0E0E0);
+    final PdfColor headerTextColor = PdfColors.white;
+    final PdfColor rowEvenColor = PdfColors.white;
+    // ألوان المبيعات (Indigo)
+    final PdfColor salesHeader = PdfColor.fromInt(0xFF5C6BC0);
+    final PdfColor salesRowOdd = PdfColor.fromInt(0xFFE8EAF6);
+    final PdfColor salesTotalRow = PdfColor.fromInt(0xFFC5CAE9);
+    final PdfColor salesGrandColor = PdfColor.fromInt(0xFF283593);
+    // ألوان الاستلام (Green)
+    final PdfColor receiptHeader = PdfColor.fromInt(0xFF66BB6A);
+    final PdfColor receiptRowOdd = PdfColor.fromInt(0xFFE8F5E9);
+    final PdfColor receiptTotalRow = PdfColor.fromInt(0xFFC8E6C9);
+    // ألوان الملخص (Orange)
+    final PdfColor summaryHeader = PdfColor.fromInt(0xFFFFA726);
+    final PdfColor summaryRowOdd = PdfColor.fromInt(0xFFFFF3E0);
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        textDirection: pw.TextDirection.rtl,
+        theme: pw.ThemeData.withFont(
+          base: arabicFont,
+          bold: arabicFont,
+        ),
+        build: (pw.Context context) {
+          return [
+            pw.Directionality(
+              textDirection: pw.TextDirection.rtl,
+              child: pw.Column(
+                children: [
+                  // --- الترويسة الرئيسية ---
+                  pw.Center(
+                    child: pw.Text(
+                      'مبيعات المورد ${widget.supplierName}',
+                      style: pw.TextStyle(
+                          fontSize: 18, fontWeight: pw.FontWeight.bold),
+                      textDirection: pw.TextDirection.rtl,
+                    ),
+                  ),
+                  pw.SizedBox(height: 5),
+                  pw.Center(
+                    child: pw.Text(
+                      'بتاريخ ${widget.selectedDate}',
+                      style: const pw.TextStyle(
+                          fontSize: 14, color: PdfColors.grey700),
+                      textDirection: pw.TextDirection.rtl,
+                    ),
+                  ),
+                  pw.SizedBox(height: 15),
+
+                  // ================= القسم الأول: المبيعات =================
+                  if (data.sales.isNotEmpty) ...[
+                    _buildPdfSectionTitle('المبيعات', salesGrandColor),
+                    pw.Table(
+                      border:
+                          pw.TableBorder.all(color: borderColor, width: 0.5),
+                      columnWidths: {
+                        0: const pw.FlexColumnWidth(1), // ت
+                        1: const pw.FlexColumnWidth(4), // المادة
+                        2: const pw.FlexColumnWidth(1), // س
+                        3: const pw.FlexColumnWidth(2), // العدد
+                        4: const pw.FlexColumnWidth(3), // العبوة
+                        5: const pw.FlexColumnWidth(2), // القائم
+                        6: const pw.FlexColumnWidth(2), // الصافي
+                        7: const pw.FlexColumnWidth(2), // السعر
+                        8: const pw.FlexColumnWidth(3), // الإجمالي
+                        9: const pw.FlexColumnWidth(3), // الزبون
+                      },
+                      children: [
+                        // رأس الجدول
+                        pw.TableRow(
+                          decoration: pw.BoxDecoration(color: salesHeader),
+                          children: [
+                            _buildPdfHeaderCell('ت', headerTextColor),
+                            _buildPdfHeaderCell('المادة', headerTextColor),
+                            _buildPdfHeaderCell('س', headerTextColor),
+                            _buildPdfHeaderCell('العدد', headerTextColor),
+                            _buildPdfHeaderCell('العبوة', headerTextColor),
+                            _buildPdfHeaderCell('القائم', headerTextColor),
+                            _buildPdfHeaderCell('الصافي', headerTextColor),
+                            _buildPdfHeaderCell('السعر', headerTextColor),
+                            _buildPdfHeaderCell('الإجمالي', headerTextColor),
+                            _buildPdfHeaderCell('الزبون', headerTextColor),
+                          ],
+                        ),
+                        // البيانات
+                        ...data.sales.asMap().entries.map((entry) {
+                          final index = entry.key;
+                          final item = entry.value;
+                          final color =
+                              index % 2 == 0 ? rowEvenColor : salesRowOdd;
+                          return pw.TableRow(
+                            decoration: pw.BoxDecoration(color: color),
+                            children: [
+                              _buildPdfCell(item.serialNumber),
+                              _buildPdfCell(item.material),
+                              _buildPdfCell(item.sValue),
+                              _buildPdfCell(item.count),
+                              _buildPdfCell(item.packaging),
+                              _buildPdfCell(item.standing),
+                              _buildPdfCell(item.net),
+                              _buildPdfCell(item.price),
+                              _buildPdfCell(item.total,
+                                  textColor: salesGrandColor, isBold: true),
+                              _buildPdfCell(item.customerName ?? '-'),
+                            ],
+                          );
+                        }).toList(),
+                        // سطر المجموع
+                        pw.TableRow(
+                          decoration: pw.BoxDecoration(color: salesTotalRow),
+                          children: [
+                            _buildPdfCell('م', isBold: true),
+                            _buildPdfCell(''),
+                            _buildPdfCell(''),
+                            _buildPdfCell(''),
+                            _buildPdfCell(''),
+                            _buildPdfCell(salesTotalStanding.toStringAsFixed(2),
+                                isBold: true),
+                            _buildPdfCell(salesTotalNet.toStringAsFixed(2),
+                                isBold: true),
+                            _buildPdfCell(salesTotalPrice.toStringAsFixed(2),
+                                isBold: true),
+                            _buildPdfCell(salesTotalGrand.toStringAsFixed(2),
+                                textColor: salesGrandColor, isBold: true),
+                            _buildPdfCell(''),
+                          ],
+                        ),
+                      ],
+                    ),
+                    pw.SizedBox(height: 20),
+                  ],
+
+                  // ================= القسم الثاني: الاستلام =================
+                  if (data.receipts.isNotEmpty) ...[
+                    _buildPdfSectionTitle(
+                        'الاستلام', PdfColor.fromInt(0xFF388E3C)),
+                    pw.Table(
+                      border:
+                          pw.TableBorder.all(color: borderColor, width: 0.5),
+                      columnWidths: {
+                        0: const pw.FlexColumnWidth(1), // ت
+                        1: const pw.FlexColumnWidth(4), // المادة
+                        2: const pw.FlexColumnWidth(1), // س
+                        3: const pw.FlexColumnWidth(2), // العدد
+                        4: const pw.FlexColumnWidth(3), // العبوة
+                        5: const pw.FlexColumnWidth(2), // القائم
+                        6: const pw.FlexColumnWidth(2), // الدفعة
+                        7: const pw.FlexColumnWidth(2), // الحمولة
+                      },
+                      children: [
+                        // رأس الجدول
+                        pw.TableRow(
+                          decoration: pw.BoxDecoration(color: receiptHeader),
+                          children: [
+                            _buildPdfHeaderCell('ت', headerTextColor),
+                            _buildPdfHeaderCell('المادة', headerTextColor),
+                            _buildPdfHeaderCell('س', headerTextColor),
+                            _buildPdfHeaderCell('العدد', headerTextColor),
+                            _buildPdfHeaderCell('العبوة', headerTextColor),
+                            _buildPdfHeaderCell('القائم', headerTextColor),
+                            _buildPdfHeaderCell('الدفعة', headerTextColor),
+                            _buildPdfHeaderCell('الحمولة', headerTextColor),
+                          ],
+                        ),
+                        // البيانات
+                        ...data.receipts.asMap().entries.map((entry) {
+                          final index = entry.key;
+                          final item = entry.value;
+                          final color =
+                              index % 2 == 0 ? rowEvenColor : receiptRowOdd;
+                          return pw.TableRow(
+                            decoration: pw.BoxDecoration(color: color),
+                            children: [
+                              _buildPdfCell(item.serialNumber),
+                              _buildPdfCell(item.material),
+                              _buildPdfCell(item.sValue),
+                              _buildPdfCell(item.count),
+                              _buildPdfCell(item.packaging),
+                              _buildPdfCell(item.standing),
+                              _buildPdfCell(item.payment),
+                              _buildPdfCell(item.load),
+                            ],
+                          );
+                        }).toList(),
+                        // سطر المجموع للاستلام
+                        pw.TableRow(
+                          decoration: pw.BoxDecoration(color: receiptTotalRow),
+                          children: [
+                            _buildPdfCell('م', isBold: true),
+                            _buildPdfCell(''),
+                            _buildPdfCell(''),
+                            _buildPdfCell(receiptTotalCount.toStringAsFixed(0),
+                                isBold: true),
+                            _buildPdfCell(''),
+                            _buildPdfCell(
+                                receiptTotalStanding.toStringAsFixed(2),
+                                isBold: true),
+                            _buildPdfCell(
+                                receiptTotalPayment.toStringAsFixed(2),
+                                isBold: true),
+                            _buildPdfCell(receiptTotalLoad.toStringAsFixed(2),
+                                isBold: true),
+                          ],
+                        ),
+                      ],
+                    ),
+                    pw.SizedBox(height: 20),
+                  ],
+
+                  // ================= القسم الثالث: الملخص =================
+                  if (data.summary.isNotEmpty) ...[
+                    _buildPdfSectionTitle(
+                        'الاستلام - المبيعات', PdfColor.fromInt(0xFFEF6C00)),
+                    pw.Table(
+                      border:
+                          pw.TableBorder.all(color: borderColor, width: 0.5),
+                      columnWidths: {
+                        0: const pw.FlexColumnWidth(4), // المادة
+                        1: const pw.FlexColumnWidth(2), // وارد
+                        2: const pw.FlexColumnWidth(2), // صادر
+                        3: const pw.FlexColumnWidth(2), // البايت
+                      },
+                      children: [
+                        // رأس الجدول
+                        pw.TableRow(
+                          decoration: pw.BoxDecoration(color: summaryHeader),
+                          children: [
+                            _buildPdfHeaderCell('المادة', PdfColors.black),
+                            _buildPdfHeaderCell(
+                                'وارد (استلام)', PdfColors.black),
+                            _buildPdfHeaderCell(
+                                'صادر (مبيعات)', PdfColors.black),
+                            _buildPdfHeaderCell('البايت', PdfColors.black),
+                          ],
+                        ),
+                        // البيانات
+                        ...data.summary.asMap().entries.map((entry) {
+                          final index = entry.key;
+                          final item = entry.value;
+                          final color =
+                              index % 2 == 0 ? rowEvenColor : summaryRowOdd;
+                          final balanceColor = item.balance >= 0
+                              ? PdfColor.fromInt(0xFF2E7D32)
+                              : PdfColor.fromInt(0xFFC62828);
+
+                          return pw.TableRow(
+                            decoration: pw.BoxDecoration(color: color),
+                            children: [
+                              _buildPdfCell(item.material),
+                              _buildPdfCell(
+                                  item.receiptCount.toStringAsFixed(0)),
+                              _buildPdfCell(item.salesCount.toStringAsFixed(0)),
+                              _buildPdfCell(
+                                item.balance.toStringAsFixed(0),
+                                textColor: balanceColor,
+                                isBold: true,
+                              ),
+                            ],
+                          );
+                        }).toList(),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ];
+        },
+      ),
+    );
+
+    final output = await getTemporaryDirectory();
+    final file = File("${output.path}/تقرير_المورد_${widget.supplierName}.pdf");
+    await file.writeAsBytes(await pdf.save());
+
+    await Share.shareXFiles([XFile(file.path)],
+        text:
+            'مبيعات المورد ${widget.supplierName} بتاريخ ${widget.selectedDate}');
+  }
+
+  // --- دوال مساعدة للـ PDF ---
+  pw.Widget _buildPdfSectionTitle(String title, PdfColor bgColor) {
+    return pw.Container(
+      width: double.infinity,
+      padding: const pw.EdgeInsets.symmetric(vertical: 6, horizontal: 10),
+      margin: const pw.EdgeInsets.only(bottom: 5),
+      decoration: pw.BoxDecoration(
+        color: bgColor,
+        borderRadius: pw.BorderRadius.circular(4),
+      ),
+      child: pw.Text(
+        title,
+        style: pw.TextStyle(
+          color: PdfColors.white,
+          fontWeight: pw.FontWeight.bold,
+          fontSize: 12,
+        ),
+        textAlign: pw.TextAlign.right,
+        textDirection: pw.TextDirection.rtl,
+      ),
+    );
+  }
+
+  pw.Widget _buildPdfHeaderCell(String text, PdfColor color) {
+    return pw.Container(
+      padding: const pw.EdgeInsets.all(4),
+      alignment: pw.Alignment.center,
+      child: pw.Text(
+        text,
+        textAlign: pw.TextAlign.center,
+        textDirection: pw.TextDirection.rtl,
+        style: pw.TextStyle(
+            fontWeight: pw.FontWeight.bold, color: color, fontSize: 10),
+      ),
+    );
+  }
+
+  pw.Widget _buildPdfCell(String text,
+      {PdfColor textColor = PdfColors.black, bool isBold = false}) {
+    return pw.Container(
+      padding: const pw.EdgeInsets.all(4),
+      alignment: pw.Alignment.center,
+      child: pw.Text(
+        text,
+        textAlign: pw.TextAlign.center,
+        textDirection: pw.TextDirection.rtl,
+        style: pw.TextStyle(
+          color: textColor,
+          fontSize: 10,
+          fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal,
+        ),
+      ),
+    );
+  }
+
+  // --- دوال بناء الواجهة UI ---
   Widget _buildHeaderCell(String text, int flex, {Color color = Colors.white}) {
     return Expanded(
       flex: flex,
@@ -61,7 +444,6 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
     );
   }
 
-  // بناء قسم العنوان
   Widget _buildSectionTitle(String title, Color bgColor) {
     return Container(
       width: double.infinity,
@@ -91,6 +473,24 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
           'مبيعات المورد ${widget.supplierName}',
           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.share),
+            tooltip: 'مشاركة PDF',
+            onPressed: () async {
+              final data = await _reportDataFuture;
+              if (data.sales.isNotEmpty ||
+                  data.receipts.isNotEmpty ||
+                  data.summary.isNotEmpty) {
+                _generateAndSharePdf(data);
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('لا توجد بيانات لمشاركتها')),
+                );
+              }
+            },
+          ),
+        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(20.0),
           child: Padding(
@@ -136,7 +536,7 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
               );
             }
 
-            // --- حساب مجاميع المبيعات ---
+            // --- حساب مجاميع المبيعات UI ---
             double salesTotalStanding = 0;
             double salesTotalNet = 0;
             double salesTotalPrice = 0;
@@ -150,7 +550,7 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
               }
             }
 
-            // --- بداية التعديل: حساب مجاميع الاستلام ---
+            // --- حساب مجاميع الاستلام UI ---
             double receiptTotalCount = 0;
             double receiptTotalStanding = 0;
             double receiptTotalPayment = 0;
@@ -163,13 +563,12 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
                 receiptTotalLoad += double.tryParse(item.load) ?? 0;
               }
             }
-            // --- نهاية التعديل ---
 
             return SingleChildScrollView(
               padding: const EdgeInsets.all(8.0),
               child: Column(
                 children: [
-                  // --- جدول المبيعات (يبقى كما هو مع المجموع) ---
+                  // --- جدول المبيعات ---
                   if (hasSales) ...[
                     _buildSectionTitle('المبيعات', Colors.indigo),
                     Container(
@@ -179,7 +578,6 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
                       ),
                       child: Column(
                         children: [
-                          // رأس الجدول
                           Container(
                             color: Colors.indigo.shade400,
                             padding: const EdgeInsets.symmetric(vertical: 8),
@@ -198,9 +596,7 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
                               ],
                             ),
                           ),
-                          // البيانات
                           ...data.sales.map((item) => Container(
-                                // ... (كود عرض بيانات المبيعات يبقى كما هو)
                                 padding:
                                     const EdgeInsets.symmetric(vertical: 8),
                                 decoration: BoxDecoration(
@@ -226,7 +622,7 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
                                   ],
                                 ),
                               )),
-                          // سطر المجموع للمبيعات
+                          // سطر المجموع المبيعات
                           Container(
                             color: Colors.indigo.shade100,
                             padding: const EdgeInsets.symmetric(vertical: 8),
@@ -260,7 +656,7 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
                     ),
                   ],
 
-                  // --- جدول الاستلام (مضاف إليه سطر المجموع) ---
+                  // --- جدول الاستلام ---
                   if (hasReceipts) ...[
                     _buildSectionTitle('الاستلام', Colors.green[700]!),
                     Container(
@@ -270,7 +666,6 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
                       ),
                       child: Column(
                         children: [
-                          // رأس الجدول
                           Container(
                             color: Colors.green.shade600,
                             padding: const EdgeInsets.symmetric(vertical: 8),
@@ -287,7 +682,6 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
                               ],
                             ),
                           ),
-                          // البيانات
                           ...data.receipts.map((item) => Container(
                                 padding:
                                     const EdgeInsets.symmetric(vertical: 8),
@@ -310,7 +704,7 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
                                   ],
                                 ),
                               )),
-                          // *** بداية التعديل: إضافة سطر المجموع للاستلام ***
+                          // سطر المجموع الاستلام
                           Container(
                             color: Colors.green.shade100,
                             padding: const EdgeInsets.symmetric(vertical: 8),
@@ -318,12 +712,12 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
                               children: [
                                 _buildDataCell('المجموع', 1,
                                     fontWeight: FontWeight.bold),
-                                _buildDataCell('', 4), // المادة
-                                _buildDataCell('', 1), // س
+                                _buildDataCell('', 4),
+                                _buildDataCell('', 1),
                                 _buildDataCell(
                                     receiptTotalCount.toStringAsFixed(0), 2,
                                     fontWeight: FontWeight.bold),
-                                _buildDataCell('', 3), // العبوة
+                                _buildDataCell('', 3),
                                 _buildDataCell(
                                     receiptTotalStanding.toStringAsFixed(2), 2,
                                     fontWeight: FontWeight.bold),
@@ -336,13 +730,12 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
                               ],
                             ),
                           ),
-                          // *** نهاية التعديل ***
                         ],
                       ),
                     ),
                   ],
 
-                  // --- جدول المقارنة (يبقى كما هو) ---
+                  // --- جدول المقارنة ---
                   if (hasSummary) ...[
                     _buildSectionTitle(
                         'الاستلام - المبيعات', Colors.orange[800]!),
@@ -353,7 +746,6 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
                       ),
                       child: Column(
                         children: [
-                          // رأس الجدول
                           Container(
                             color: Colors.orange.shade300,
                             padding: const EdgeInsets.symmetric(vertical: 8),
@@ -370,9 +762,7 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
                               ],
                             ),
                           ),
-                          // البيانات
                           ...data.summary.map((item) => Container(
-                                // ... (كود عرض بيانات الملخص يبقى كما هو)
                                 padding:
                                     const EdgeInsets.symmetric(vertical: 8),
                                 decoration: BoxDecoration(

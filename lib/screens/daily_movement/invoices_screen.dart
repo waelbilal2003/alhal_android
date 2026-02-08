@@ -40,22 +40,17 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
   Future<void> _generateAndSharePdf(List<InvoiceItem> items) async {
     final pdf = pw.Document();
 
-    // 1. تحميل الخط العربي (ضروري جداً)
-    // تأكد من وجود ملف خط عربي في assets وإضافته في pubspec.yaml
-    // إذا لم يكن لديك خط، ستظهر الحروف العربية متقطعة أو مربعات.
-    // سنستخدم here 'assets/fonts/Cairo-Regular.ttf' كمثال.
+    // 1. تحميل الخط العربي
     var arabicFont;
     try {
       final fontData = await rootBundle.load("assets/fonts/Cairo-Regular.ttf");
       arabicFont = pw.Font.ttf(fontData);
     } catch (e) {
-      // إذا فشل تحميل الخط، نستخدم الخط الافتراضي (لن تظهر العربية بشكل صحيح)
-      // يفضل إظهار رسالة خطأ للمستخدم هنا
       arabicFont = pw.Font.courier();
       debugPrint("Error loading font: $e");
     }
 
-    // حساب المجاميع للـ PDF
+    // حساب المجاميع
     double totalStanding = 0;
     double totalNet = 0;
     double totalPrice = 0;
@@ -67,7 +62,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
       grandTotal += double.tryParse(item.total) ?? 0;
     }
 
-    // تعريف الألوان لتطابق تصميم الشاشة (Indigo Colors)
+    // تعريف الألوان
     final PdfColor headerColor = PdfColor.fromInt(0xFF5C6BC0); // Indigo 400
     final PdfColor headerTextColor = PdfColors.white;
     final PdfColor rowEvenColor = PdfColors.white;
@@ -76,26 +71,45 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
     final PdfColor totalRowColor = PdfColor.fromInt(0xFFC5CAE9); // Indigo 100
     final PdfColor grandTotalColor = PdfColor.fromInt(0xFF283593); // Indigo 800
 
-    // بناء الصفحة
     pdf.addPage(
       pw.MultiPage(
+        // إعداد الصفحة A4
         pageFormat: PdfPageFormat.a4,
-        theme: pw.ThemeData.withFont(base: arabicFont),
-        textDirection: pw.TextDirection.rtl, // اتجاه النص لليمين
+        // *** هام جداً: ضبط الاتجاه لليمين ***
+        textDirection: pw.TextDirection.rtl,
+
+        // *** الحل الجذري للمربعات ***
+        // نقوم بإخبار الـ PDF أن يستخدم نفس ملف الخط (Cairo-Regular)
+        // حتى لو طلبنا منه كتابة خط عريض (Bold).
+        theme: pw.ThemeData.withFont(
+          base: arabicFont,
+          bold: arabicFont, // استخدام نفس الخط للخط العريض لتجنب المربعات
+        ),
+
         build: (pw.Context context) {
           return [
             // العنوان
             pw.Header(
               level: 0,
               child: pw.Column(
+                crossAxisAlignment:
+                    pw.CrossAxisAlignment.center, // توسيط العنوان
                 children: [
-                  pw.Text('فاتورة الزبون ${widget.customerName}',
-                      style: pw.TextStyle(
-                          fontSize: 18, fontWeight: pw.FontWeight.bold)),
                   pw.Text(
-                      'بتاريخ ${widget.selectedDate} لمحل ${widget.storeName}',
-                      style: const pw.TextStyle(
-                          fontSize: 14, color: PdfColors.grey700)),
+                    'فاتورة الزبون ${widget.customerName}',
+                    style: pw.TextStyle(
+                      fontSize: 18,
+                      fontWeight:
+                          pw.FontWeight.bold, // الآن سيعمل بفضل التعديل أعلاه
+                    ),
+                    textDirection: pw.TextDirection.rtl,
+                  ),
+                  pw.Text(
+                    'بتاريخ ${widget.selectedDate} لمحل ${widget.storeName}',
+                    style: const pw.TextStyle(
+                        fontSize: 14, color: PdfColors.grey700),
+                    textDirection: pw.TextDirection.rtl,
+                  ),
                 ],
               ),
             ),
@@ -104,6 +118,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
             // الجدول
             pw.Table(
               border: pw.TableBorder.all(color: borderColor, width: 0.5),
+              // تحديد عرض الأعمدة
               columnWidths: {
                 0: const pw.FlexColumnWidth(1), // ت
                 1: const pw.FlexColumnWidth(4), // المادة
@@ -142,7 +157,8 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                     decoration: pw.BoxDecoration(color: color),
                     children: [
                       _buildPdfCell(item.serialNumber),
-                      _buildPdfCell(item.material),
+                      // جعل اسم المادة محاذاة لليمين
+                      _buildPdfCell(item.material, align: pw.TextAlign.right),
                       _buildPdfCell(item.sValue),
                       _buildPdfCell(item.count),
                       _buildPdfCell(item.packaging),
@@ -151,7 +167,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                       _buildPdfCell(item.price),
                       _buildPdfCell(item.total,
                           textColor: PdfColor.fromInt(0xFF1A237E),
-                          isBold: true), // Indigo 900
+                          isBold: true),
                       _buildPdfCell(item.empties),
                     ],
                   );
@@ -177,6 +193,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
               ],
             ),
             pw.SizedBox(height: 20),
+
             // المجموع النهائي (الذيل)
             pw.Container(
               width: double.infinity,
@@ -185,13 +202,17 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                 color: grandTotalColor,
                 borderRadius: pw.BorderRadius.circular(4),
               ),
-              child: pw.Text(
-                'المجموع ${grandTotal.toStringAsFixed(2)} ليرة سورية فقط لا غير .',
-                textAlign: pw.TextAlign.center,
-                style: pw.TextStyle(
-                  color: PdfColors.white,
-                  fontSize: 14,
-                  fontWeight: pw.FontWeight.bold,
+              // استخدام Directionality هنا أيضاً لضمان الترتيب
+              child: pw.Directionality(
+                textDirection: pw.TextDirection.rtl,
+                child: pw.Text(
+                  'المجموع ${grandTotal.toStringAsFixed(2)} ليرة سورية فقط لا غير .',
+                  textAlign: pw.TextAlign.center,
+                  style: pw.TextStyle(
+                    color: PdfColors.white,
+                    fontSize: 14,
+                    fontWeight: pw.FontWeight.bold, // سيعمل الآن بدون مربعات
+                  ),
                 ),
               ),
             ),
@@ -200,24 +221,25 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
       ),
     );
 
-    // الحفظ والمشاركة
     final output = await getTemporaryDirectory();
     final file = File("${output.path}/فاتورة_${widget.customerName}.pdf");
     await file.writeAsBytes(await pdf.save());
 
-    // مشاركة الملف
     await Share.shareXFiles([XFile(file.path)],
         text:
             'فاتورة الزبون ${widget.customerName} بتاريخ ${widget.selectedDate}');
   }
 
-  // دوال مساعدة لبناء خلايا الـ PDF
+  // --- تحديث الدوال المساعدة لتلقي المحاذاة ---
+
   pw.Widget _buildPdfHeaderCell(String text, PdfColor color) {
-    return pw.Padding(
+    return pw.Container(
       padding: const pw.EdgeInsets.all(4),
+      alignment: pw.Alignment.center,
       child: pw.Text(
         text,
         textAlign: pw.TextAlign.center,
+        textDirection: pw.TextDirection.rtl, // تأكيد الاتجاه
         style: pw.TextStyle(
             fontWeight: pw.FontWeight.bold, color: color, fontSize: 10),
       ),
@@ -225,12 +247,19 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
   }
 
   pw.Widget _buildPdfCell(String text,
-      {PdfColor textColor = PdfColors.black, bool isBold = false}) {
-    return pw.Padding(
+      {PdfColor textColor = PdfColors.black,
+      bool isBold = false,
+      pw.TextAlign align = pw.TextAlign.center}) {
+    // الافتراضي توسيط
+    return pw.Container(
       padding: const pw.EdgeInsets.all(4),
+      alignment: align == pw.TextAlign.right
+          ? pw.Alignment.centerRight
+          : pw.Alignment.center,
       child: pw.Text(
         text,
-        textAlign: pw.TextAlign.center,
+        textAlign: align,
+        textDirection: pw.TextDirection.rtl, // تأكيد الاتجاه لكل خلية
         style: pw.TextStyle(
           color: textColor,
           fontSize: 10,
@@ -239,7 +268,6 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
       ),
     );
   }
-
   // --- التعديلات على الـ UI ---
 
   Widget _buildHeaderCell(String text, int flex) {

@@ -1,4 +1,11 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
+import 'package:path_provider/path_provider.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:share_plus/share_plus.dart';
+
 import '../../models/invoice_model.dart';
 import '../../services/invoices_service.dart';
 
@@ -29,6 +36,212 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
         widget.selectedDate, widget.customerName);
   }
 
+  // --- دالة توليد الـ PDF والمشاركة ---
+  Future<void> _generateAndSharePdf(List<InvoiceItem> items) async {
+    final pdf = pw.Document();
+
+    // 1. تحميل الخط العربي (ضروري جداً)
+    // تأكد من وجود ملف خط عربي في assets وإضافته في pubspec.yaml
+    // إذا لم يكن لديك خط، ستظهر الحروف العربية متقطعة أو مربعات.
+    // سنستخدم here 'assets/fonts/Cairo-Regular.ttf' كمثال.
+    var arabicFont;
+    try {
+      final fontData = await rootBundle.load("assets/fonts/Cairo-Regular.ttf");
+      arabicFont = pw.Font.ttf(fontData);
+    } catch (e) {
+      // إذا فشل تحميل الخط، نستخدم الخط الافتراضي (لن تظهر العربية بشكل صحيح)
+      // يفضل إظهار رسالة خطأ للمستخدم هنا
+      arabicFont = pw.Font.courier();
+      debugPrint("Error loading font: $e");
+    }
+
+    // حساب المجاميع للـ PDF
+    double totalStanding = 0;
+    double totalNet = 0;
+    double totalPrice = 0;
+    double grandTotal = 0;
+    for (var item in items) {
+      totalStanding += double.tryParse(item.standing) ?? 0;
+      totalNet += double.tryParse(item.net) ?? 0;
+      totalPrice += double.tryParse(item.price) ?? 0;
+      grandTotal += double.tryParse(item.total) ?? 0;
+    }
+
+    // تعريف الألوان لتطابق تصميم الشاشة (Indigo Colors)
+    final PdfColor headerColor = PdfColor.fromInt(0xFF5C6BC0); // Indigo 400
+    final PdfColor headerTextColor = PdfColors.white;
+    final PdfColor rowEvenColor = PdfColors.white;
+    final PdfColor rowOddColor = PdfColor.fromInt(0xFFE8EAF6); // Indigo 50
+    final PdfColor borderColor = PdfColor.fromInt(0xFFE0E0E0); // Grey 300
+    final PdfColor totalRowColor = PdfColor.fromInt(0xFFC5CAE9); // Indigo 100
+    final PdfColor grandTotalColor = PdfColor.fromInt(0xFF283593); // Indigo 800
+
+    // بناء الصفحة
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        theme: pw.ThemeData.withFont(base: arabicFont),
+        textDirection: pw.TextDirection.rtl, // اتجاه النص لليمين
+        build: (pw.Context context) {
+          return [
+            // العنوان
+            pw.Header(
+              level: 0,
+              child: pw.Column(
+                children: [
+                  pw.Text('فاتورة الزبون ${widget.customerName}',
+                      style: pw.TextStyle(
+                          fontSize: 18, fontWeight: pw.FontWeight.bold)),
+                  pw.Text(
+                      'بتاريخ ${widget.selectedDate} لمحل ${widget.storeName}',
+                      style: const pw.TextStyle(
+                          fontSize: 14, color: PdfColors.grey700)),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 10),
+
+            // الجدول
+            pw.Table(
+              border: pw.TableBorder.all(color: borderColor, width: 0.5),
+              columnWidths: {
+                0: const pw.FlexColumnWidth(1), // ت
+                1: const pw.FlexColumnWidth(4), // المادة
+                2: const pw.FlexColumnWidth(1), // س
+                3: const pw.FlexColumnWidth(2), // العدد
+                4: const pw.FlexColumnWidth(3), // العبوة
+                5: const pw.FlexColumnWidth(2), // القائم
+                6: const pw.FlexColumnWidth(2), // الصافي
+                7: const pw.FlexColumnWidth(2), // السعر
+                8: const pw.FlexColumnWidth(3), // الإجمالي
+                9: const pw.FlexColumnWidth(3), // فوارغ
+              },
+              children: [
+                // رأس الجدول
+                pw.TableRow(
+                  decoration: pw.BoxDecoration(color: headerColor),
+                  children: [
+                    _buildPdfHeaderCell('ت', headerTextColor),
+                    _buildPdfHeaderCell('المادة', headerTextColor),
+                    _buildPdfHeaderCell('س', headerTextColor),
+                    _buildPdfHeaderCell('العدد', headerTextColor),
+                    _buildPdfHeaderCell('العبوة', headerTextColor),
+                    _buildPdfHeaderCell('القائم', headerTextColor),
+                    _buildPdfHeaderCell('الصافي', headerTextColor),
+                    _buildPdfHeaderCell('السعر', headerTextColor),
+                    _buildPdfHeaderCell('الإجمالي', headerTextColor),
+                    _buildPdfHeaderCell('فوارغ', headerTextColor),
+                  ],
+                ),
+                // صفوف البيانات
+                ...items.asMap().entries.map((entry) {
+                  final index = entry.key;
+                  final item = entry.value;
+                  final color = index % 2 == 0 ? rowEvenColor : rowOddColor;
+                  return pw.TableRow(
+                    decoration: pw.BoxDecoration(color: color),
+                    children: [
+                      _buildPdfCell(item.serialNumber),
+                      _buildPdfCell(item.material),
+                      _buildPdfCell(item.sValue),
+                      _buildPdfCell(item.count),
+                      _buildPdfCell(item.packaging),
+                      _buildPdfCell(item.standing),
+                      _buildPdfCell(item.net),
+                      _buildPdfCell(item.price),
+                      _buildPdfCell(item.total,
+                          textColor: PdfColor.fromInt(0xFF1A237E),
+                          isBold: true), // Indigo 900
+                      _buildPdfCell(item.empties),
+                    ],
+                  );
+                }).toList(),
+                // صف المجموع الفرعي
+                pw.TableRow(
+                  decoration: pw.BoxDecoration(color: totalRowColor),
+                  children: [
+                    _buildPdfCell('المجموع', isBold: true),
+                    _buildPdfCell(''),
+                    _buildPdfCell(''),
+                    _buildPdfCell(''),
+                    _buildPdfCell(''),
+                    _buildPdfCell(totalStanding.toStringAsFixed(2),
+                        isBold: true),
+                    _buildPdfCell(totalNet.toStringAsFixed(2), isBold: true),
+                    _buildPdfCell(totalPrice.toStringAsFixed(2), isBold: true),
+                    _buildPdfCell(grandTotal.toStringAsFixed(2),
+                        textColor: PdfColor.fromInt(0xFF1A237E), isBold: true),
+                    _buildPdfCell(''),
+                  ],
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 20),
+            // المجموع النهائي (الذيل)
+            pw.Container(
+              width: double.infinity,
+              padding: const pw.EdgeInsets.all(10),
+              decoration: pw.BoxDecoration(
+                color: grandTotalColor,
+                borderRadius: pw.BorderRadius.circular(4),
+              ),
+              child: pw.Text(
+                'المجموع ${grandTotal.toStringAsFixed(2)} ليرة سورية فقط لا غير .',
+                textAlign: pw.TextAlign.center,
+                style: pw.TextStyle(
+                  color: PdfColors.white,
+                  fontSize: 14,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+            ),
+          ];
+        },
+      ),
+    );
+
+    // الحفظ والمشاركة
+    final output = await getTemporaryDirectory();
+    final file = File("${output.path}/فاتورة_${widget.customerName}.pdf");
+    await file.writeAsBytes(await pdf.save());
+
+    // مشاركة الملف
+    await Share.shareXFiles([XFile(file.path)],
+        text:
+            'فاتورة الزبون ${widget.customerName} بتاريخ ${widget.selectedDate}');
+  }
+
+  // دوال مساعدة لبناء خلايا الـ PDF
+  pw.Widget _buildPdfHeaderCell(String text, PdfColor color) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.all(4),
+      child: pw.Text(
+        text,
+        textAlign: pw.TextAlign.center,
+        style: pw.TextStyle(
+            fontWeight: pw.FontWeight.bold, color: color, fontSize: 10),
+      ),
+    );
+  }
+
+  pw.Widget _buildPdfCell(String text,
+      {PdfColor textColor = PdfColors.black, bool isBold = false}) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.all(4),
+      child: pw.Text(
+        text,
+        textAlign: pw.TextAlign.center,
+        style: pw.TextStyle(
+          color: textColor,
+          fontSize: 10,
+          fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal,
+        ),
+      ),
+    );
+  }
+
+  // --- التعديلات على الـ UI ---
+
   Widget _buildHeaderCell(String text, int flex) {
     return Expanded(
       flex: flex,
@@ -38,7 +251,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
         style: const TextStyle(
           fontWeight: FontWeight.bold,
           color: Colors.white,
-          fontSize: 12, // تعديل حجم الخط ليتناسب
+          fontSize: 12,
         ),
       ),
     );
@@ -69,6 +282,24 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
           'فاتورة الزبون ${widget.customerName}',
           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
+        // زر المشاركة الجديد
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.share),
+            tooltip: 'مشاركة PDF',
+            onPressed: () async {
+              // ننتظر البيانات للتأكد من وجودها قبل الطباعة
+              final data = await _invoiceDataFuture;
+              if (data.isNotEmpty) {
+                _generateAndSharePdf(data);
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('لا توجد بيانات لمشاركتها')),
+                );
+              }
+            },
+          ),
+        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(20.0),
           child: Padding(
@@ -138,7 +369,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                       children: [
                         _buildHeaderCell('ت', 1),
                         _buildHeaderCell('المادة', 4),
-                        _buildHeaderCell('س', 1), // <-- الإضافة هنا
+                        _buildHeaderCell('س', 1),
                         _buildHeaderCell('العدد', 2),
                         _buildHeaderCell('العبوة', 3),
                         _buildHeaderCell('القائم', 2),
@@ -212,7 +443,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                             children: [
                               _buildDataCell(item.serialNumber, 1),
                               _buildDataCell(item.material, 4),
-                              _buildDataCell(item.sValue, 1), // <-- الإضافة هنا
+                              _buildDataCell(item.sValue, 1),
                               _buildDataCell(item.count, 2),
                               _buildDataCell(item.packaging, 3),
                               _buildDataCell(item.standing, 2),

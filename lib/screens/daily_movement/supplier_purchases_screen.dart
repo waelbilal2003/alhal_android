@@ -106,37 +106,39 @@ class _SupplierPurchasesScreenState extends State<SupplierPurchasesScreen> {
                   ),
                   pw.SizedBox(height: 15),
 
-                  // --- الجدول ---
+                  // --- الجدول (معكوس يدوياً) ---
                   pw.Table(
                     border: pw.TableBorder.all(color: borderColor, width: 0.5),
+                    // تم عكس العروض لتتناسب مع عكس الأعمدة
+                    // الترتيب الجديد: فوارغ، إجمالي، سعر، صافي، قائم، عبوة، عدد، مادة، ت
                     columnWidths: {
-                      0: const pw.FlexColumnWidth(1), // ت
-                      1: const pw.FlexColumnWidth(4), // المادة
-                      2: const pw.FlexColumnWidth(2), // العدد
-                      3: const pw.FlexColumnWidth(3), // العبوة
+                      0: const pw.FlexColumnWidth(3), // فوارغ (يسار الصفحة)
+                      1: const pw.FlexColumnWidth(3), // الإجمالي
+                      2: const pw.FlexColumnWidth(2), // السعر
+                      3: const pw.FlexColumnWidth(2), // الصافي
                       4: const pw.FlexColumnWidth(2), // القائم
-                      5: const pw.FlexColumnWidth(2), // الصافي
-                      6: const pw.FlexColumnWidth(2), // السعر
-                      7: const pw.FlexColumnWidth(3), // الإجمالي
-                      8: const pw.FlexColumnWidth(3), // فوارغ
+                      5: const pw.FlexColumnWidth(3), // العبوة
+                      6: const pw.FlexColumnWidth(2), // العدد
+                      7: const pw.FlexColumnWidth(4), // المادة
+                      8: const pw.FlexColumnWidth(1), // ت (يمين الصفحة)
                     },
                     children: [
-                      // رأس الجدول
+                      // رأس الجدول (معكوس)
                       pw.TableRow(
                         decoration: pw.BoxDecoration(color: headerColor),
                         children: [
-                          _buildPdfHeaderCell('ت', headerTextColor),
-                          _buildPdfHeaderCell('المادة', headerTextColor),
-                          _buildPdfHeaderCell('العدد', headerTextColor),
-                          _buildPdfHeaderCell('العبوة', headerTextColor),
-                          _buildPdfHeaderCell('القائم', headerTextColor),
-                          _buildPdfHeaderCell('الصافي', headerTextColor),
-                          _buildPdfHeaderCell('السعر', headerTextColor),
-                          _buildPdfHeaderCell('الإجمالي', headerTextColor),
                           _buildPdfHeaderCell('فوارغ', headerTextColor),
+                          _buildPdfHeaderCell('الإجمالي', headerTextColor),
+                          _buildPdfHeaderCell('السعر', headerTextColor),
+                          _buildPdfHeaderCell('الصافي', headerTextColor),
+                          _buildPdfHeaderCell('القائم', headerTextColor),
+                          _buildPdfHeaderCell('العبوة', headerTextColor),
+                          _buildPdfHeaderCell('العدد', headerTextColor),
+                          _buildPdfHeaderCell('المادة', headerTextColor),
+                          _buildPdfHeaderCell('ت', headerTextColor),
                         ],
                       ),
-                      // البيانات
+                      // البيانات (معكوسة)
                       ...items.asMap().entries.map((entry) {
                         final index = entry.key;
                         final item = entry.value;
@@ -145,36 +147,36 @@ class _SupplierPurchasesScreenState extends State<SupplierPurchasesScreen> {
                         return pw.TableRow(
                           decoration: pw.BoxDecoration(color: color),
                           children: [
-                            _buildPdfCell(item.serialNumber),
-                            _buildPdfCell(item.material),
-                            _buildPdfCell(item.count),
-                            _buildPdfCell(item.packaging),
-                            _buildPdfCell(item.standing),
-                            _buildPdfCell(item.net),
-                            _buildPdfCell(item.price),
+                            _buildPdfCell(item.empties),
                             _buildPdfCell(item.total,
                                 textColor: grandTotalColor, isBold: true),
-                            _buildPdfCell(item.empties),
+                            _buildPdfCell(item.price),
+                            _buildPdfCell(item.net),
+                            _buildPdfCell(item.standing),
+                            _buildPdfCell(item.packaging),
+                            _buildPdfCell(item.count),
+                            _buildPdfCell(item.material),
+                            _buildPdfCell(item.serialNumber),
                           ],
                         );
                       }).toList(),
-                      // سطر المجموع
+                      // سطر المجموع (معكوس)
                       pw.TableRow(
                         decoration: pw.BoxDecoration(color: totalRowColor),
                         children: [
-                          _buildPdfCell('م', isBold: true),
                           _buildPdfCell(''),
-                          _buildPdfCell(''),
-                          _buildPdfCell(''),
-                          _buildPdfCell(totalStanding.toStringAsFixed(2),
+                          _buildPdfCell(totalGrand.toStringAsFixed(2),
+                              textColor: grandTotalColor, isBold: true),
+                          _buildPdfCell(totalPrice.toStringAsFixed(2),
                               isBold: true),
                           _buildPdfCell(totalNet.toStringAsFixed(2),
                               isBold: true),
-                          _buildPdfCell(totalPrice.toStringAsFixed(2),
+                          _buildPdfCell(totalStanding.toStringAsFixed(2),
                               isBold: true),
-                          _buildPdfCell(totalGrand.toStringAsFixed(2),
-                              textColor: grandTotalColor, isBold: true),
                           _buildPdfCell(''),
+                          _buildPdfCell(''),
+                          _buildPdfCell(''),
+                          _buildPdfCell('م', isBold: true),
                         ],
                       ),
                     ],
@@ -364,7 +366,7 @@ class _SupplierPurchasesScreenState extends State<SupplierPurchasesScreen> {
                 padding: const EdgeInsets.all(8.0),
                 child: Column(
                   children: [
-                    // --- جدول المشتريات ---
+                    // --- جدول المشتريات UI (يبقى كما هو، التعديل في PDF فقط) ---
                     Container(
                       decoration: BoxDecoration(
                         border: Border.all(color: Colors.red.shade200),
@@ -372,7 +374,6 @@ class _SupplierPurchasesScreenState extends State<SupplierPurchasesScreen> {
                       ),
                       child: Column(
                         children: [
-                          // رأس الجدول
                           Container(
                             color: Colors.red.shade400,
                             padding: const EdgeInsets.symmetric(vertical: 8),
@@ -390,7 +391,6 @@ class _SupplierPurchasesScreenState extends State<SupplierPurchasesScreen> {
                               ],
                             ),
                           ),
-                          // البيانات
                           ...purchases.map((item) => Container(
                                 padding:
                                     const EdgeInsets.symmetric(vertical: 8),
@@ -418,7 +418,6 @@ class _SupplierPurchasesScreenState extends State<SupplierPurchasesScreen> {
                                   ],
                                 ),
                               )),
-                          // سطر المجموع
                           Container(
                             color: Colors.red.shade100,
                             padding: const EdgeInsets.symmetric(vertical: 8),

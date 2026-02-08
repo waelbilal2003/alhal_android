@@ -73,147 +73,149 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
 
     pdf.addPage(
       pw.MultiPage(
-        // إعداد الصفحة A4
         pageFormat: PdfPageFormat.a4,
-        // *** هام جداً: ضبط الاتجاه لليمين ***
+        // ضبط الاتجاه لليمين للصفحة ككل
         textDirection: pw.TextDirection.rtl,
-
-        // *** الحل الجذري للمربعات ***
-        // نقوم بإخبار الـ PDF أن يستخدم نفس ملف الخط (Cairo-Regular)
-        // حتى لو طلبنا منه كتابة خط عريض (Bold).
         theme: pw.ThemeData.withFont(
           base: arabicFont,
-          bold: arabicFont, // استخدام نفس الخط للخط العريض لتجنب المربعات
+          bold: arabicFont,
         ),
-
         build: (pw.Context context) {
           return [
-            // العنوان
-            pw.Header(
-              level: 0,
+            // استخدام Directionality هنا يضمن أن العناصر بداخله تتبع الترتيب الصحيح
+            pw.Directionality(
+              textDirection: pw.TextDirection.rtl,
               child: pw.Column(
-                crossAxisAlignment:
-                    pw.CrossAxisAlignment.center, // توسيط العنوان
                 children: [
-                  pw.Text(
-                    'فاتورة الزبون ${widget.customerName}',
-                    style: pw.TextStyle(
-                      fontSize: 18,
-                      fontWeight:
-                          pw.FontWeight.bold, // الآن سيعمل بفضل التعديل أعلاه
+                  // --- العناوين (في الوسط) ---
+                  pw.Center(
+                    child: pw.Text(
+                      'فاتورة الزبون ${widget.customerName}',
+                      style: pw.TextStyle(
+                        fontSize: 18,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                      textDirection: pw.TextDirection.rtl,
                     ),
-                    textDirection: pw.TextDirection.rtl,
                   ),
-                  pw.Text(
-                    'بتاريخ ${widget.selectedDate} لمحل ${widget.storeName}',
-                    style: const pw.TextStyle(
-                        fontSize: 14, color: PdfColors.grey700),
-                    textDirection: pw.TextDirection.rtl,
+                  pw.SizedBox(height: 5),
+                  pw.Center(
+                    child: pw.Text(
+                      'بتاريخ ${widget.selectedDate} لمحل ${widget.storeName}',
+                      style: const pw.TextStyle(
+                          fontSize: 14, color: PdfColors.grey700),
+                      textDirection: pw.TextDirection.rtl,
+                    ),
+                  ),
+                  pw.SizedBox(height: 15),
+
+                  // --- الجدول ---
+                  pw.Table(
+                    border: pw.TableBorder.all(color: borderColor, width: 0.5),
+                    // عند تفعيل RTL، العمود 0 سيكون أقصى اليمين
+                    columnWidths: {
+                      0: const pw.FlexColumnWidth(1), // ت (يمين)
+                      1: const pw.FlexColumnWidth(4), // المادة
+                      2: const pw.FlexColumnWidth(1), // س
+                      3: const pw.FlexColumnWidth(2), // العدد
+                      4: const pw.FlexColumnWidth(3), // العبوة
+                      5: const pw.FlexColumnWidth(2), // القائم
+                      6: const pw.FlexColumnWidth(2), // الصافي
+                      7: const pw.FlexColumnWidth(2), // السعر
+                      8: const pw.FlexColumnWidth(3), // الإجمالي
+                      9: const pw.FlexColumnWidth(3), // فوارغ (يسار)
+                    },
+                    children: [
+                      // رأس الجدول
+                      pw.TableRow(
+                        decoration: pw.BoxDecoration(color: headerColor),
+                        children: [
+                          _buildPdfHeaderCell('ت', headerTextColor),
+                          _buildPdfHeaderCell('المادة', headerTextColor),
+                          _buildPdfHeaderCell('س', headerTextColor),
+                          _buildPdfHeaderCell('العدد', headerTextColor),
+                          _buildPdfHeaderCell('العبوة', headerTextColor),
+                          _buildPdfHeaderCell('القائم', headerTextColor),
+                          _buildPdfHeaderCell('الصافي', headerTextColor),
+                          _buildPdfHeaderCell('السعر', headerTextColor),
+                          _buildPdfHeaderCell('الإجمالي', headerTextColor),
+                          _buildPdfHeaderCell('فوارغ', headerTextColor),
+                        ],
+                      ),
+                      // صفوف البيانات
+                      ...items.asMap().entries.map((entry) {
+                        final index = entry.key;
+                        final item = entry.value;
+                        final color =
+                            index % 2 == 0 ? rowEvenColor : rowOddColor;
+                        return pw.TableRow(
+                          decoration: pw.BoxDecoration(color: color),
+                          children: [
+                            _buildPdfCell(item.serialNumber),
+                            // المادة الآن في الوسط (pw.TextAlign.center)
+                            _buildPdfCell(item.material,
+                                align: pw.TextAlign.center),
+                            _buildPdfCell(item.sValue),
+                            _buildPdfCell(item.count),
+                            _buildPdfCell(item.packaging),
+                            _buildPdfCell(item.standing),
+                            _buildPdfCell(item.net),
+                            _buildPdfCell(item.price),
+                            _buildPdfCell(item.total,
+                                textColor: PdfColor.fromInt(0xFF1A237E),
+                                isBold: true),
+                            _buildPdfCell(item.empties),
+                          ],
+                        );
+                      }).toList(),
+                      // صف المجموع الفرعي
+                      pw.TableRow(
+                        decoration: pw.BoxDecoration(color: totalRowColor),
+                        children: [
+                          // استبدال "المجموع" بـ "م"
+                          _buildPdfCell('م', isBold: true),
+                          _buildPdfCell(''),
+                          _buildPdfCell(''),
+                          _buildPdfCell(''),
+                          _buildPdfCell(''),
+                          _buildPdfCell(totalStanding.toStringAsFixed(2),
+                              isBold: true),
+                          _buildPdfCell(totalNet.toStringAsFixed(2),
+                              isBold: true),
+                          _buildPdfCell(totalPrice.toStringAsFixed(2),
+                              isBold: true),
+                          _buildPdfCell(grandTotal.toStringAsFixed(2),
+                              textColor: PdfColor.fromInt(0xFF1A237E),
+                              isBold: true),
+                          _buildPdfCell(''),
+                        ],
+                      ),
+                    ],
+                  ),
+                  pw.SizedBox(height: 20),
+
+                  // المجموع النهائي (الذيل)
+                  pw.Container(
+                    width: double.infinity,
+                    padding: const pw.EdgeInsets.all(10),
+                    decoration: pw.BoxDecoration(
+                      color: grandTotalColor,
+                      borderRadius: pw.BorderRadius.circular(4),
+                    ),
+                    child: pw.Center(
+                      child: pw.Text(
+                        'المجموع ${grandTotal.toStringAsFixed(2)} ليرة سورية فقط لا غير .',
+                        textAlign: pw.TextAlign.center,
+                        style: pw.TextStyle(
+                          color: PdfColors.white,
+                          fontSize: 14,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                        textDirection: pw.TextDirection.rtl,
+                      ),
+                    ),
                   ),
                 ],
-              ),
-            ),
-            pw.SizedBox(height: 10),
-
-            // الجدول
-            pw.Table(
-              border: pw.TableBorder.all(color: borderColor, width: 0.5),
-              // تحديد عرض الأعمدة
-              columnWidths: {
-                0: const pw.FlexColumnWidth(1), // ت
-                1: const pw.FlexColumnWidth(4), // المادة
-                2: const pw.FlexColumnWidth(1), // س
-                3: const pw.FlexColumnWidth(2), // العدد
-                4: const pw.FlexColumnWidth(3), // العبوة
-                5: const pw.FlexColumnWidth(2), // القائم
-                6: const pw.FlexColumnWidth(2), // الصافي
-                7: const pw.FlexColumnWidth(2), // السعر
-                8: const pw.FlexColumnWidth(3), // الإجمالي
-                9: const pw.FlexColumnWidth(3), // فوارغ
-              },
-              children: [
-                // رأس الجدول
-                pw.TableRow(
-                  decoration: pw.BoxDecoration(color: headerColor),
-                  children: [
-                    _buildPdfHeaderCell('ت', headerTextColor),
-                    _buildPdfHeaderCell('المادة', headerTextColor),
-                    _buildPdfHeaderCell('س', headerTextColor),
-                    _buildPdfHeaderCell('العدد', headerTextColor),
-                    _buildPdfHeaderCell('العبوة', headerTextColor),
-                    _buildPdfHeaderCell('القائم', headerTextColor),
-                    _buildPdfHeaderCell('الصافي', headerTextColor),
-                    _buildPdfHeaderCell('السعر', headerTextColor),
-                    _buildPdfHeaderCell('الإجمالي', headerTextColor),
-                    _buildPdfHeaderCell('فوارغ', headerTextColor),
-                  ],
-                ),
-                // صفوف البيانات
-                ...items.asMap().entries.map((entry) {
-                  final index = entry.key;
-                  final item = entry.value;
-                  final color = index % 2 == 0 ? rowEvenColor : rowOddColor;
-                  return pw.TableRow(
-                    decoration: pw.BoxDecoration(color: color),
-                    children: [
-                      _buildPdfCell(item.serialNumber),
-                      // جعل اسم المادة محاذاة لليمين
-                      _buildPdfCell(item.material, align: pw.TextAlign.right),
-                      _buildPdfCell(item.sValue),
-                      _buildPdfCell(item.count),
-                      _buildPdfCell(item.packaging),
-                      _buildPdfCell(item.standing),
-                      _buildPdfCell(item.net),
-                      _buildPdfCell(item.price),
-                      _buildPdfCell(item.total,
-                          textColor: PdfColor.fromInt(0xFF1A237E),
-                          isBold: true),
-                      _buildPdfCell(item.empties),
-                    ],
-                  );
-                }).toList(),
-                // صف المجموع الفرعي
-                pw.TableRow(
-                  decoration: pw.BoxDecoration(color: totalRowColor),
-                  children: [
-                    _buildPdfCell('المجموع', isBold: true),
-                    _buildPdfCell(''),
-                    _buildPdfCell(''),
-                    _buildPdfCell(''),
-                    _buildPdfCell(''),
-                    _buildPdfCell(totalStanding.toStringAsFixed(2),
-                        isBold: true),
-                    _buildPdfCell(totalNet.toStringAsFixed(2), isBold: true),
-                    _buildPdfCell(totalPrice.toStringAsFixed(2), isBold: true),
-                    _buildPdfCell(grandTotal.toStringAsFixed(2),
-                        textColor: PdfColor.fromInt(0xFF1A237E), isBold: true),
-                    _buildPdfCell(''),
-                  ],
-                ),
-              ],
-            ),
-            pw.SizedBox(height: 20),
-
-            // المجموع النهائي (الذيل)
-            pw.Container(
-              width: double.infinity,
-              padding: const pw.EdgeInsets.all(10),
-              decoration: pw.BoxDecoration(
-                color: grandTotalColor,
-                borderRadius: pw.BorderRadius.circular(4),
-              ),
-              // استخدام Directionality هنا أيضاً لضمان الترتيب
-              child: pw.Directionality(
-                textDirection: pw.TextDirection.rtl,
-                child: pw.Text(
-                  'المجموع ${grandTotal.toStringAsFixed(2)} ليرة سورية فقط لا غير .',
-                  textAlign: pw.TextAlign.center,
-                  style: pw.TextStyle(
-                    color: PdfColors.white,
-                    fontSize: 14,
-                    fontWeight: pw.FontWeight.bold, // سيعمل الآن بدون مربعات
-                  ),
-                ),
               ),
             ),
           ];
@@ -230,16 +232,16 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
             'فاتورة الزبون ${widget.customerName} بتاريخ ${widget.selectedDate}');
   }
 
-  // --- تحديث الدوال المساعدة لتلقي المحاذاة ---
+  // --- الدوال المساعدة (محدثة لتكون في الوسط) ---
 
   pw.Widget _buildPdfHeaderCell(String text, PdfColor color) {
     return pw.Container(
       padding: const pw.EdgeInsets.all(4),
-      alignment: pw.Alignment.center,
+      alignment: pw.Alignment.center, // توسيط المحتوى
       child: pw.Text(
         text,
         textAlign: pw.TextAlign.center,
-        textDirection: pw.TextDirection.rtl, // تأكيد الاتجاه
+        textDirection: pw.TextDirection.rtl,
         style: pw.TextStyle(
             fontWeight: pw.FontWeight.bold, color: color, fontSize: 10),
       ),
@@ -250,16 +252,14 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
       {PdfColor textColor = PdfColors.black,
       bool isBold = false,
       pw.TextAlign align = pw.TextAlign.center}) {
-    // الافتراضي توسيط
+    // الافتراضي هو التوسيط
     return pw.Container(
       padding: const pw.EdgeInsets.all(4),
-      alignment: align == pw.TextAlign.right
-          ? pw.Alignment.centerRight
-          : pw.Alignment.center,
+      alignment: pw.Alignment.center, // توسيط المحتوى داخل الحاوية
       child: pw.Text(
         text,
-        textAlign: align,
-        textDirection: pw.TextDirection.rtl, // تأكيد الاتجاه لكل خلية
+        textAlign: align, // محاذاة النص
+        textDirection: pw.TextDirection.rtl,
         style: pw.TextStyle(
           color: textColor,
           fontSize: 10,

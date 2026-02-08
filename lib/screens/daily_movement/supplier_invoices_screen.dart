@@ -150,11 +150,26 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
               }
             }
 
+            // --- بداية التعديل: حساب مجاميع الاستلام ---
+            double receiptTotalCount = 0;
+            double receiptTotalStanding = 0;
+            double receiptTotalPayment = 0;
+            double receiptTotalLoad = 0;
+            if (hasReceipts) {
+              for (var item in data.receipts) {
+                receiptTotalCount += double.tryParse(item.count) ?? 0;
+                receiptTotalStanding += double.tryParse(item.standing) ?? 0;
+                receiptTotalPayment += double.tryParse(item.payment) ?? 0;
+                receiptTotalLoad += double.tryParse(item.load) ?? 0;
+              }
+            }
+            // --- نهاية التعديل ---
+
             return SingleChildScrollView(
               padding: const EdgeInsets.all(8.0),
               child: Column(
                 children: [
-                  // --- جدول المبيعات ---
+                  // --- جدول المبيعات (يبقى كما هو مع المجموع) ---
                   if (hasSales) ...[
                     _buildSectionTitle('المبيعات', Colors.indigo),
                     Container(
@@ -172,7 +187,7 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
                               children: [
                                 _buildHeaderCell('ت', 1),
                                 _buildHeaderCell('المادة', 4),
-                                _buildHeaderCell('س', 1), // <-- حقل س للمبيعات
+                                _buildHeaderCell('س', 1),
                                 _buildHeaderCell('العدد', 2),
                                 _buildHeaderCell('العبوة', 3),
                                 _buildHeaderCell('القائم', 2),
@@ -185,6 +200,7 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
                           ),
                           // البيانات
                           ...data.sales.map((item) => Container(
+                                // ... (كود عرض بيانات المبيعات يبقى كما هو)
                                 padding:
                                     const EdgeInsets.symmetric(vertical: 8),
                                 decoration: BoxDecoration(
@@ -197,8 +213,7 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
                                   children: [
                                     _buildDataCell(item.serialNumber, 1),
                                     _buildDataCell(item.material, 4),
-                                    _buildDataCell(
-                                        item.sValue, 1), // <-- حقل س للمبيعات
+                                    _buildDataCell(item.sValue, 1),
                                     _buildDataCell(item.count, 2),
                                     _buildDataCell(item.packaging, 3),
                                     _buildDataCell(item.standing, 2),
@@ -219,10 +234,10 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
                               children: [
                                 _buildDataCell('المجموع', 1,
                                     fontWeight: FontWeight.bold),
-                                _buildDataCell('', 4), // المادة
-                                _buildDataCell('', 1), // س
-                                _buildDataCell('', 2), // العدد
-                                _buildDataCell('', 3), // العبوة
+                                _buildDataCell('', 4),
+                                _buildDataCell('', 1),
+                                _buildDataCell('', 2),
+                                _buildDataCell('', 3),
                                 _buildDataCell(
                                     salesTotalStanding.toStringAsFixed(2), 2,
                                     fontWeight: FontWeight.bold),
@@ -236,7 +251,7 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
                                     salesTotalGrand.toStringAsFixed(2), 3,
                                     fontWeight: FontWeight.bold,
                                     color: Colors.indigo),
-                                _buildDataCell('', 3), // الزبون
+                                _buildDataCell('', 3),
                               ],
                             ),
                           ),
@@ -245,7 +260,7 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
                     ),
                   ],
 
-                  // --- جدول الاستلام ---
+                  // --- جدول الاستلام (مضاف إليه سطر المجموع) ---
                   if (hasReceipts) ...[
                     _buildSectionTitle('الاستلام', Colors.green[700]!),
                     Container(
@@ -263,7 +278,7 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
                               children: [
                                 _buildHeaderCell('ت', 1),
                                 _buildHeaderCell('المادة', 4),
-                                _buildHeaderCell('س', 1), // <-- حقل س للاستلام
+                                _buildHeaderCell('س', 1),
                                 _buildHeaderCell('العدد', 2),
                                 _buildHeaderCell('العبوة', 3),
                                 _buildHeaderCell('القائم', 2),
@@ -286,8 +301,7 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
                                   children: [
                                     _buildDataCell(item.serialNumber, 1),
                                     _buildDataCell(item.material, 4),
-                                    _buildDataCell(
-                                        item.sValue, 1), // <-- حقل س للاستلام
+                                    _buildDataCell(item.sValue, 1),
                                     _buildDataCell(item.count, 2),
                                     _buildDataCell(item.packaging, 3),
                                     _buildDataCell(item.standing, 2),
@@ -296,12 +310,39 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
                                   ],
                                 ),
                               )),
+                          // *** بداية التعديل: إضافة سطر المجموع للاستلام ***
+                          Container(
+                            color: Colors.green.shade100,
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            child: Row(
+                              children: [
+                                _buildDataCell('المجموع', 1,
+                                    fontWeight: FontWeight.bold),
+                                _buildDataCell('', 4), // المادة
+                                _buildDataCell('', 1), // س
+                                _buildDataCell(
+                                    receiptTotalCount.toStringAsFixed(0), 2,
+                                    fontWeight: FontWeight.bold),
+                                _buildDataCell('', 3), // العبوة
+                                _buildDataCell(
+                                    receiptTotalStanding.toStringAsFixed(2), 2,
+                                    fontWeight: FontWeight.bold),
+                                _buildDataCell(
+                                    receiptTotalPayment.toStringAsFixed(2), 2,
+                                    fontWeight: FontWeight.bold),
+                                _buildDataCell(
+                                    receiptTotalLoad.toStringAsFixed(2), 2,
+                                    fontWeight: FontWeight.bold),
+                              ],
+                            ),
+                          ),
+                          // *** نهاية التعديل ***
                         ],
                       ),
                     ),
                   ],
 
-                  // --- جدول المقارنة (الاستلام vs المبيعات) ---
+                  // --- جدول المقارنة (يبقى كما هو) ---
                   if (hasSummary) ...[
                     _buildSectionTitle(
                         'الاستلام - المبيعات', Colors.orange[800]!),
@@ -331,6 +372,7 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
                           ),
                           // البيانات
                           ...data.summary.map((item) => Container(
+                                // ... (كود عرض بيانات الملخص يبقى كما هو)
                                 padding:
                                     const EdgeInsets.symmetric(vertical: 8),
                                 decoration: BoxDecoration(

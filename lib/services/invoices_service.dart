@@ -82,7 +82,7 @@ class InvoicesService {
     List<Receipt> supplierReceipts = [];
     Map<String, MaterialSummary> summaryMap = {};
 
-    // أ) جلب المبيعات الخاصة بالمورد (حسب العائدية affiliation)
+    // أ) جلب المبيعات الخاصة بالمورد
     final SalesDocument? salesDocument =
         await _salesStorageService.loadSalesDocument(date);
 
@@ -105,7 +105,8 @@ class InvoicesService {
             sellerName: sale.sellerName,
           ));
 
-          final key = '${sale.material.trim()}-${sale.packaging.trim()}';
+          // *** بداية التعديل: استخدام اسم المادة فقط كمفتاح للتجميع ***
+          final key = sale.material.trim();
           final count = double.tryParse(sale.count) ?? 0;
           summaryMap.update(
             key,
@@ -116,17 +117,18 @@ class InvoicesService {
               balance: value.receiptCount - (value.salesCount + count),
             ),
             ifAbsent: () => MaterialSummary(
-              material: '${sale.material} - ${sale.packaging}',
+              material: key, // استخدام اسم المادة مباشرة
               receiptCount: 0,
               salesCount: count,
               balance: -count,
             ),
           );
+          // *** نهاية التعديل ***
         }
       }
     }
 
-    // ب) جلب الاستلام الخاص بالمورد (حسب العائدية affiliation)
+    // ب) جلب الاستلام الخاص بالمورد
     final ReceiptDocument? receiptDocument =
         await _receiptStorageService.loadReceiptDocumentForDate(date);
 
@@ -135,7 +137,8 @@ class InvoicesService {
         if (receipt.affiliation.trim() == cleanSupplierName) {
           supplierReceipts.add(receipt);
 
-          final key = '${receipt.material.trim()}-${receipt.packaging.trim()}';
+          // *** بداية التعديل: استخدام اسم المادة فقط كمفتاح للتجميع ***
+          final key = receipt.material.trim();
           final count = double.tryParse(receipt.count) ?? 0;
           summaryMap.update(
             key,
@@ -146,12 +149,13 @@ class InvoicesService {
               balance: (value.receiptCount + count) - value.salesCount,
             ),
             ifAbsent: () => MaterialSummary(
-              material: '${receipt.material} - ${receipt.packaging}',
+              material: key, // استخدام اسم المادة مباشرة
               receiptCount: count,
               salesCount: 0,
               balance: count,
             ),
           );
+          // *** نهاية التعديل ***
         }
       }
     }

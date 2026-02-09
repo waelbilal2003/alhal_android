@@ -407,7 +407,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     _hideAllSuggestionsImmediately();
 
     // ثم تعيين النص
-    rowControllers[rowIndex][4].text = suggestion;
+    rowControllers[rowIndex][5].text = suggestion;
     _hasUnsavedChanges = true;
 
     // حفظ العبوة في الفهرس إذا لم تكن موجودة (مع شرط الطول)
@@ -418,7 +418,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     // نقل التركيز إلى الحقل التالي بعد تأخير بسيط
     Future.delayed(const Duration(milliseconds: 50), () {
       if (mounted) {
-        FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][5]);
+        FocusScope.of(context).requestFocus(rowFocusNodes[rowIndex][6]);
       }
     });
   }

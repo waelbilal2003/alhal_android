@@ -318,7 +318,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
 
   // تحديث اقتراحات العبوة
   void _updatePackagingSuggestions(int rowIndex) async {
-    final query = rowControllers[rowIndex][4].text;
+    final query = rowControllers[rowIndex][5].text;
     if (query.length >= 1) {
       final suggestions =
           await getEnhancedSuggestions(_packagingIndexService, query);

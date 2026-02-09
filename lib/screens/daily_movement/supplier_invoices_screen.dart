@@ -332,8 +332,7 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
                                 textColor: balanceColor,
                                 isBold: true,
                               ),
-                              _buildPdfCell(
-                                  item.salesCount.toStringAsFixed(0)),
+                              _buildPdfCell(item.salesCount.toStringAsFixed(0)),
                               _buildPdfCell(
                                   item.receiptCount.toStringAsFixed(0)),
                               _buildPdfCell(item.material),
@@ -480,7 +479,7 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.share),
+            icon: const Icon(Icons.picture_as_pdf),
             tooltip: 'مشاركة PDF',
             onPressed: () async {
               final data = await _reportDataFuture;

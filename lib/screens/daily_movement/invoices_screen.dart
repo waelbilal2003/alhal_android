@@ -303,7 +303,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.share),
+            icon: const Icon(Icons.picture_as_pdf),
             tooltip: 'مشاركة PDF',
             onPressed: () async {
               final data = await _invoiceDataFuture;

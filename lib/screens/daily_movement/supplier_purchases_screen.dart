@@ -297,7 +297,7 @@ class _SupplierPurchasesScreenState extends State<SupplierPurchasesScreen> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.share),
+            icon: const Icon(Icons.picture_as_pdf),
             tooltip: 'مشاركة PDF',
             onPressed: () async {
               final data = await _purchasesDataFuture;

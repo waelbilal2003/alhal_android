@@ -53,12 +53,12 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
     // 1. المبيعات
     double salesTotalStanding = 0;
     double salesTotalNet = 0;
-    double salesTotalPrice = 0;
+    double salesTotalCount = 0;
     double salesTotalGrand = 0;
     for (var item in data.sales) {
       salesTotalStanding += double.tryParse(item.standing) ?? 0;
       salesTotalNet += double.tryParse(item.net) ?? 0;
-      salesTotalPrice += double.tryParse(item.price) ?? 0;
+      salesTotalCount += double.tryParse(item.count) ?? 0;
       salesTotalGrand += double.tryParse(item.total) ?? 0;
     }
 
@@ -197,7 +197,8 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
                             _buildPdfCell(salesTotalStanding.toStringAsFixed(2),
                                 isBold: true),
                             _buildPdfCell(''),
-                            _buildPdfCell(''),
+                            _buildPdfCell(salesTotalCount.toStringAsFixed(0),
+                                isBold: true),
                             _buildPdfCell(''),
                             _buildPdfCell(''),
                             _buildPdfCell('م', isBold: true),
@@ -542,13 +543,13 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
             // --- حساب مجاميع المبيعات UI ---
             double salesTotalStanding = 0;
             double salesTotalNet = 0;
-            double salesTotalPrice = 0;
+            double salesTotalCount = 0;
             double salesTotalGrand = 0;
             if (hasSales) {
               for (var item in data.sales) {
                 salesTotalStanding += double.tryParse(item.standing) ?? 0;
                 salesTotalNet += double.tryParse(item.net) ?? 0;
-                salesTotalPrice += double.tryParse(item.price) ?? 0;
+                salesTotalCount += double.tryParse(item.count) ?? 0;
                 salesTotalGrand += double.tryParse(item.total) ?? 0;
               }
             }
@@ -635,7 +636,9 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
                                     fontWeight: FontWeight.bold),
                                 _buildDataCell('', 4),
                                 _buildDataCell('', 1),
-                                _buildDataCell('', 2),
+                                _buildDataCell(
+                                    salesTotalCount.toStringAsFixed(0), 2,
+                                    fontWeight: FontWeight.bold),
                                 _buildDataCell('', 3),
                                 _buildDataCell(
                                     salesTotalStanding.toStringAsFixed(2), 2,
@@ -643,8 +646,7 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
                                 _buildDataCell(
                                     salesTotalNet.toStringAsFixed(2), 2,
                                     fontWeight: FontWeight.bold),
-                                _buildDataCell(
-                                    salesTotalPrice.toStringAsFixed(2), 2,
+                                _buildDataCell('', 2,
                                     fontWeight: FontWeight.bold),
                                 _buildDataCell(
                                     salesTotalGrand.toStringAsFixed(2), 3,

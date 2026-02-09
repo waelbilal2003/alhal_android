@@ -52,12 +52,12 @@ class _SupplierPurchasesScreenState extends State<SupplierPurchasesScreen> {
     // حساب المجاميع
     double totalStanding = 0;
     double totalNet = 0;
-    double totalPrice = 0;
+    double totalCount = 0;
     double totalGrand = 0;
     for (var item in items) {
       totalStanding += double.tryParse(item.standing) ?? 0;
       totalNet += double.tryParse(item.net) ?? 0;
-      totalPrice += double.tryParse(item.price) ?? 0;
+      totalCount += double.tryParse(item.count) ?? 0;
       totalGrand += double.tryParse(item.total) ?? 0;
     }
 
@@ -173,7 +173,8 @@ class _SupplierPurchasesScreenState extends State<SupplierPurchasesScreen> {
                           _buildPdfCell(totalStanding.toStringAsFixed(2),
                               isBold: true),
                           _buildPdfCell(''),
-                          _buildPdfCell(''),
+                          _buildPdfCell(totalCount.toStringAsFixed(0),
+                              isBold: true),
                           _buildPdfCell(''),
                           _buildPdfCell('م', isBold: true),
                         ],
@@ -351,12 +352,12 @@ class _SupplierPurchasesScreenState extends State<SupplierPurchasesScreen> {
             // --- حساب مجاميع المشتريات UI ---
             double totalStanding = 0;
             double totalNet = 0;
-            double totalPrice = 0;
+            double totalCount = 0;
             double totalGrand = 0;
             for (var item in purchases) {
               totalStanding += double.tryParse(item.standing) ?? 0;
               totalNet += double.tryParse(item.net) ?? 0;
-              totalPrice += double.tryParse(item.price) ?? 0;
+              totalCount += double.tryParse(item.count) ?? 0;
               totalGrand += double.tryParse(item.total) ?? 0;
             }
 
@@ -425,14 +426,15 @@ class _SupplierPurchasesScreenState extends State<SupplierPurchasesScreen> {
                                 _buildDataCell('المجموع', 1,
                                     fontWeight: FontWeight.bold),
                                 _buildDataCell('', 4),
-                                _buildDataCell('', 2),
+                                _buildDataCell(totalCount.toStringAsFixed(0), 2,
+                                    fontWeight: FontWeight.bold),
                                 _buildDataCell('', 3),
                                 _buildDataCell(
                                     totalStanding.toStringAsFixed(2), 2,
                                     fontWeight: FontWeight.bold),
                                 _buildDataCell(totalNet.toStringAsFixed(2), 2,
                                     fontWeight: FontWeight.bold),
-                                _buildDataCell(totalPrice.toStringAsFixed(2), 2,
+                                _buildDataCell('', 2,
                                     fontWeight: FontWeight.bold),
                                 _buildDataCell(totalGrand.toStringAsFixed(2), 3,
                                     fontWeight: FontWeight.bold,

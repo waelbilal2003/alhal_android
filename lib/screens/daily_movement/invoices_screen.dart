@@ -51,14 +51,15 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
     }
 
     // حساب المجاميع
+    double totalCount = 0;
     double totalStanding = 0;
     double totalNet = 0;
-    double totalPrice = 0;
+
     double grandTotal = 0;
     for (var item in items) {
       totalStanding += double.tryParse(item.standing) ?? 0;
       totalNet += double.tryParse(item.net) ?? 0;
-      totalPrice += double.tryParse(item.price) ?? 0;
+      totalCount += double.tryParse(item.count) ?? 0;
       grandTotal += double.tryParse(item.total) ?? 0;
     }
 
@@ -168,20 +169,23 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                       pw.TableRow(
                         decoration: pw.BoxDecoration(color: totalRowColor),
                         children: [
-                          _buildPdfCell(''),
+                          _buildPdfCell(''), // فوارغ
                           _buildPdfCell(grandTotal.toStringAsFixed(2),
                               textColor: PdfColor.fromInt(0xFF1A237E),
-                              isBold: true),
-                          _buildPdfCell(''),
+                              isBold: true), // الاجمالي
+                          _buildPdfCell('', isBold: true), // السعر (فارغ)
                           _buildPdfCell(totalNet.toStringAsFixed(2),
-                              isBold: true),
+                              isBold: true), // الصافي
                           _buildPdfCell(totalStanding.toStringAsFixed(2),
+                              isBold: true), // القائم
+                          _buildPdfCell(''), // العبوة
+
+                          _buildPdfCell(totalCount.toStringAsFixed(0),
                               isBold: true),
-                          _buildPdfCell(''),
-                          _buildPdfCell(''),
-                          _buildPdfCell(''),
-                          _buildPdfCell(''),
-                          _buildPdfCell('م', isBold: true),
+
+                          _buildPdfCell(''), // س
+                          _buildPdfCell(''), // المادة
+                          _buildPdfCell('م', isBold: true), // ت
                         ],
                       ),
                     ],
@@ -357,12 +361,13 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
             // --- حساب المجاميع ---
             double totalStanding = 0;
             double totalNet = 0;
-            double totalPrice = 0;
+
             double grandTotal = 0;
+            int totalCount = 0;
             for (var item in invoiceItems) {
               totalStanding += double.tryParse(item.standing) ?? 0;
               totalNet += double.tryParse(item.net) ?? 0;
-              totalPrice += double.tryParse(item.price) ?? 0;
+              totalCount += int.tryParse(item.count) ?? 0;
               grandTotal += double.tryParse(item.total) ?? 0;
             }
 
@@ -422,15 +427,18 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                                     fontWeight: FontWeight.bold),
                                 _buildDataCell('', 4), // المادة
                                 _buildDataCell('', 1), // س
-                                _buildDataCell('', 2), // العدد
+
+                                _buildDataCell(totalCount.toStringAsFixed(0), 2,
+                                    fontWeight: FontWeight.bold),
+
                                 _buildDataCell('', 3), // العبوة
                                 _buildDataCell(
                                     totalStanding.toStringAsFixed(2), 2,
                                     fontWeight: FontWeight.bold),
                                 _buildDataCell(totalNet.toStringAsFixed(2), 2,
                                     fontWeight: FontWeight.bold),
-                                _buildDataCell(totalPrice.toStringAsFixed(2), 2,
-                                    fontWeight: FontWeight.bold),
+                                _buildDataCell('', 2,
+                                    fontWeight: FontWeight.bold), // السعر فارغ
                                 _buildDataCell(grandTotal.toStringAsFixed(2), 3,
                                     fontWeight: FontWeight.bold,
                                     color: Colors.indigo.shade900),

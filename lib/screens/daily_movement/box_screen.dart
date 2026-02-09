@@ -1816,123 +1816,123 @@ class _BoxScreenState extends State<BoxScreen> {
 
   // --- دالة توليد PDF والمشاركة (BoxScreen) ---
   Future<void> _generateAndSharePdf() async {
-    final pdf = pw.Document();
-
-    var arabicFont;
     try {
-      final fontData = await rootBundle.load("assets/fonts/Cairo-Regular.ttf");
-      arabicFont = pw.Font.ttf(fontData);
-    } catch (e) {
-      arabicFont = pw.Font.courier();
-    }
+      final pdf = pw.Document();
 
-    final PdfColor headerColor = PdfColor.fromInt(0xFF1976D2); // Blue 700
-    final PdfColor headerTextColor = PdfColors.white;
-    final PdfColor rowEvenColor = PdfColors.white;
-    final PdfColor rowOddColor = PdfColor.fromInt(0xFFBBDEFB); // Blue 100
-    final PdfColor borderColor = PdfColor.fromInt(0xFFE0E0E0);
+      var arabicFont;
+      try {
+        final fontData = await rootBundle.load("assets/fonts/Cairo-Regular.ttf");
+        arabicFont = pw.Font.ttf(fontData);
+      } catch (e) {
+        arabicFont = pw.Font.courier();
+      }
 
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
-        textDirection: pw.TextDirection.rtl,
-        theme: pw.ThemeData.withFont(base: arabicFont, bold: arabicFont),
-        build: (pw.Context context) {
-          return [
-            pw.Directionality(
-              textDirection: pw.TextDirection.rtl,
-              child: pw.Column(
-                children: [
-                  pw.Center(
-                      child: pw.Text('يومية صندوق رقم /$serialNumber/',
-                          style: pw.TextStyle(
-                              fontSize: 16, fontWeight: pw.FontWeight.bold))),
-                  pw.Center(
-                      child: pw.Text(
-                          'تاريخ ${widget.selectedDate} - البائع ${widget.sellerName}',
-                          style: const pw.TextStyle(
-                              fontSize: 12, color: PdfColors.grey700))),
-                  pw.SizedBox(height: 10),
-                  pw.Table(
-                    border: pw.TableBorder.all(color: borderColor, width: 0.5),
-                    columnWidths: {
-                      0: const pw.FlexColumnWidth(2), // ملاحظات (يسار)
-                      1: const pw.FlexColumnWidth(4), // الحساب
-                      2: const pw.FlexColumnWidth(2), // مدفوع
-                      3: const pw.FlexColumnWidth(2), // مقبوض
-                      4: const pw.FlexColumnWidth(1), // ت (يمين)
-                    },
-                    children: [
-                      pw.TableRow(
-                        decoration: pw.BoxDecoration(color: headerColor),
-                        children: [
-                          _buildPdfHeaderCell('ملاحظات', headerTextColor),
-                          _buildPdfHeaderCell('الحساب', headerTextColor),
-                          _buildPdfHeaderCell('مدفوع', headerTextColor),
-                          _buildPdfHeaderCell('مقبوض', headerTextColor),
-                          _buildPdfHeaderCell('ت', headerTextColor),
-                        ],
-                      ),
-                      ...rowControllers.asMap().entries.map((entry) {
-                        final index = entry.key;
-                        final controllers = entry.value;
-                        if (controllers[1].text.isEmpty &&
-                            controllers[2].text.isEmpty &&
-                            controllers[3].text.isEmpty) {
-                          return pw.TableRow(
-                              children: List.filled(5, pw.SizedBox()));
-                        }
+      final PdfColor headerColor = PdfColor.fromInt(0xFF1976D2);
+      final PdfColor headerTextColor = PdfColors.white;
+      final PdfColor rowEvenColor = PdfColors.white;
+      final PdfColor rowOddColor = PdfColor.fromInt(0xFFBBDEFB);
+      final PdfColor borderColor = PdfColor.fromInt(0xFFE0E0E0);
 
-                        final color =
-                            index % 2 == 0 ? rowEvenColor : rowOddColor;
-
-                        // دمج النوع والاسم
-                        String accountInfo = controllers[3].text;
-                        if (accountTypeValues[index].isNotEmpty) {
-                          accountInfo =
-                              "(${accountTypeValues[index]}) " + accountInfo;
-                        }
-
-                        return pw.TableRow(
-                          decoration: pw.BoxDecoration(color: color),
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          textDirection: pw.TextDirection.rtl,
+          theme: pw.ThemeData.withFont(base: arabicFont, bold: arabicFont),
+          build: (pw.Context context) {
+            return [
+              pw.Directionality(
+                textDirection: pw.TextDirection.rtl,
+                child: pw.Column(
+                  children: [
+                    pw.Center(
+                        child: pw.Text('يومية صندوق رقم /$serialNumber/',
+                            style: pw.TextStyle(
+                                fontSize: 16, fontWeight: pw.FontWeight.bold))),
+                    pw.Center(
+                        child: pw.Text(
+                            'تاريخ ${widget.selectedDate} - البائع ${widget.sellerName}',
+                            style: const pw.TextStyle(
+                                fontSize: 12, color: PdfColors.grey700))),
+                    pw.SizedBox(height: 10),
+                    pw.Table(
+                      border: pw.TableBorder.all(color: borderColor, width: 0.5),
+                      columnWidths: {
+                        0: const pw.FlexColumnWidth(2),
+                        1: const pw.FlexColumnWidth(4),
+                        2: const pw.FlexColumnWidth(2),
+                        3: const pw.FlexColumnWidth(2),
+                        4: const pw.FlexColumnWidth(1),
+                      },
+                      children: [
+                        pw.TableRow(
+                          decoration: pw.BoxDecoration(color: headerColor),
                           children: [
-                            _buildPdfCell(controllers[4].text), // ملاحظات
-                            _buildPdfCell(accountInfo), // الحساب
-                            _buildPdfCell(controllers[2].text), // مدفوع
-                            _buildPdfCell(controllers[1].text), // مقبوض
-                            _buildPdfCell(controllers[0].text), // ت
+                            _buildPdfHeaderCell('ملاحظات', headerTextColor),
+                            _buildPdfHeaderCell('الحساب', headerTextColor),
+                            _buildPdfHeaderCell('مدفوع', headerTextColor),
+                            _buildPdfHeaderCell('مقبوض', headerTextColor),
+                            _buildPdfHeaderCell('ت', headerTextColor),
                           ],
-                        );
-                      }).toList(),
-                      pw.TableRow(
-                        decoration: pw.BoxDecoration(
-                            color: PdfColor.fromInt(0xFF90CAF9)),
-                        children: [
-                          _buildPdfCell(''),
-                          _buildPdfCell('المجموع', isBold: true),
-                          _buildPdfCell(totalPaidController.text, isBold: true),
-                          _buildPdfCell(totalReceivedController.text,
-                              isBold: true),
-                          _buildPdfCell(''),
-                        ],
-                      ),
-                    ],
-                  ),
-                ],
+                        ),
+                        ...rowControllers.asMap().entries.map((entry) {
+                          final index = entry.key;
+                          final controllers = entry.value;
+                          if (controllers[1].text.isEmpty &&
+                              controllers[2].text.isEmpty &&
+                              controllers[3].text.isEmpty) {
+                            return pw.TableRow(children: List.filled(5, pw.SizedBox()));
+                          }
+                          final color = index % 2 == 0 ? rowEvenColor : rowOddColor;
+                          String accountInfo = controllers[3].text;
+                          if (accountTypeValues[index].isNotEmpty) {
+                            accountInfo = "(${accountTypeValues[index]}) " + accountInfo;
+                          }
+                          return pw.TableRow(
+                            decoration: pw.BoxDecoration(color: color),
+                            children: [
+                              _buildPdfCell(controllers[4].text),
+                              _buildPdfCell(accountInfo),
+                              _buildPdfCell(controllers[2].text),
+                              _buildPdfCell(controllers[1].text),
+                              _buildPdfCell(controllers[0].text),
+                            ],
+                          );
+                        }).toList(),
+                        pw.TableRow(
+                          decoration: pw.BoxDecoration(color: PdfColor.fromInt(0xFF90CAF9)),
+                          children: [
+                            _buildPdfCell(''),
+                            _buildPdfCell('المجموع', isBold: true),
+                            _buildPdfCell(totalPaidController.text, isBold: true),
+                            _buildPdfCell(totalReceivedController.text, isBold: true),
+                            _buildPdfCell(''),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ];
-        },
-      ),
-    );
+            ];
+          },
+        ),
+      );
 
-    final output = await getTemporaryDirectory();
-    final file = File("${output.path}/يومية_صندوق_${widget.selectedDate}.pdf");
-    await file.writeAsBytes(await pdf.save());
-    await Share.shareXFiles([XFile(file.path)],
-        text: 'يومية صندوق ${widget.selectedDate}');
+      final output = await getTemporaryDirectory();
+      // *** التعديل الهام هنا: استبدال / بـ - لضمان صحة اسم الملف ***
+      final safeDate = widget.selectedDate.replaceAll('/', '-');
+      final file = File("${output.path}/يومية_صندوق_$safeDate.pdf");
+      
+      await file.writeAsBytes(await pdf.save());
+      await Share.shareXFiles([XFile(file.path)], text: 'يومية صندوق ${widget.selectedDate}');
+    
+    } catch (e) {
+      debugPrint("PDF Error: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('حدث خطأ أثناء تصدير PDF: $e'), backgroundColor: Colors.red),
+      );
+    }
   }
-
   pw.Widget _buildPdfHeaderCell(String text, PdfColor color) {
     return pw.Container(
       padding: const pw.EdgeInsets.all(4),

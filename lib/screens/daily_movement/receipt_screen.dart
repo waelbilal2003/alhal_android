@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter/services.dart';
 import 'dart:async';
 import '../../models/receipt_model.dart';
 import '../../services/receipt_storage_service.dart';
@@ -11,7 +11,6 @@ import '../../services/enhanced_index_service.dart';
 
 import '../../widgets/table_builder.dart' as TableBuilder;
 import '../../widgets/table_components.dart' as TableComponents;
-import '../../widgets/common_dialogs.dart' as CommonDialogs;
 import '../../widgets/suggestions_banner.dart';
 import '../../services/supplier_balance_tracker.dart';
 import 'package:flutter/foundation.dart';
@@ -1316,29 +1315,6 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
 
       default:
         return -1;
-    }
-  }
-
-  Future<void> _shareFile() async {
-    final filePath = await _storageService.getFilePath(widget.selectedDate);
-
-    if (filePath == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('الرجاء حفظ اليومية أولاً'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
-      return;
-    }
-
-    if (mounted) {
-      CommonDialogs.showFilePathDialog(
-        context: context,
-        filePath: filePath,
-      );
     }
   }
 

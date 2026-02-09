@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter/services.dart';
 import '../../models/sales_model.dart';
 import '../../services/sales_storage_service.dart';
 // استيراد خدمات الفهرس
@@ -1582,32 +1582,6 @@ class _SalesScreenState extends State<SalesScreen> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(success ? 'تم الحفظ بنجاح' : 'فشل الحفظ'),
           backgroundColor: success ? Colors.green : Colors.red));
-    }
-  }
-
-  Future<void> _shareFile() async {
-    final filePath = await _storageService.getFilePath(
-      widget.selectedDate,
-      serialNumber,
-    );
-
-    if (filePath == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('الرجاء حفظ اليومية أولاً'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
-      return;
-    }
-
-    if (mounted) {
-      CommonDialogs.showFilePathDialog(
-        context: context,
-        filePath: filePath,
-      );
     }
   }
 

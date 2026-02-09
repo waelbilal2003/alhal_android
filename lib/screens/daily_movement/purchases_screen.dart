@@ -1451,28 +1451,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     }
   }
 
-  Future<void> _shareFile() async {
-    final filePath = await _storageService.getFilePath(widget.selectedDate);
-
-    if (filePath == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('الرجاء حفظ اليومية أولاً'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
-      return;
-    }
-
-    if (mounted) {
-      CommonDialogs.showFilePathDialog(
-        context: context,
-        filePath: filePath,
-      );
-    }
-  }
 
   Future<bool> _showUnsavedChangesDialog() async {
     return await showDialog<bool>(

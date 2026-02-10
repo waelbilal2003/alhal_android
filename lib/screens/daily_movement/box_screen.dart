@@ -1382,13 +1382,14 @@ class _BoxScreenState extends State<BoxScreen> {
     );
   }
 
-  Future<void> _saveCurrentRecord(
+   Future<void> _saveCurrentRecord(
       {bool silent = false, bool reloadAfterSave = true}) async {
     if (_isSaving) return;
 
-    final List<BoxTransaction> allTransFromUI = [];
-    double tReceived = 0, tPaid = 0;
+    setState(() => _isSaving = true);
 
+    // 1. تجميع السجلات الحالية من الواجهة
+    final List<BoxTransaction> allTransFromUI = [];
     for (int i = 0; i < rowControllers.length; i++) {
       final controllers = rowControllers[i];
       if (controllers[1].text.isNotEmpty ||
@@ -1399,58 +1400,65 @@ class _BoxScreenState extends State<BoxScreen> {
           received: controllers[1].text,
           paid: controllers[2].text,
           accountType: accountTypeValues[i],
-          accountName: controllers[3].text,
+          accountName: controllers[3].text.trim(),
           notes: controllers[4].text,
           sellerName: sellerNames[i],
         );
         allTransFromUI.add(t);
-        tReceived += double.tryParse(t.received) ?? 0;
-        tPaid += double.tryParse(t.paid) ?? 0;
       }
     }
 
-    if (allTransFromUI.isEmpty) return;
+    // 2. منطق تحديث الأرصدة الجديد (الإلغاء ثم التطبيق)
+    Map<String, double> customerBalanceChanges = {};
+    Map<String, double> supplierBalanceChanges = {};
+    final existingDoc = await _storageService.loadBoxDocumentForDate(widget.selectedDate);
 
-    setState(() => _isSaving = true);
-
-    // حساب الفروقات (للبائع الحالي فقط)
-    Map<String, double> custDiffs = {};
-    Map<String, double> suppDiffs = {};
-    final existingDoc =
-        await _storageService.loadBoxDocumentForDate(widget.selectedDate);
-
-    Map<String, BoxTransaction> oldOwned = {};
+    // الخطوة أ: إلغاء أثر جميع معاملات الصندوق القديمة لهذا البائع
     if (existingDoc != null) {
-      for (var t in existingDoc.transactions) {
-        if (t.sellerName == widget.sellerName) oldOwned[t.serialNumber] = t;
-      }
-    }
+      for (var oldTrans in existingDoc.transactions) {
+        if (oldTrans.sellerName == widget.sellerName && oldTrans.accountName.isNotEmpty) {
+          double oldReceived = double.tryParse(oldTrans.received) ?? 0;
+          double oldPaid = double.tryParse(oldTrans.paid) ?? 0;
 
-    for (var nT in allTransFromUI) {
-      if (nT.sellerName == widget.sellerName) {
-        double oRec = 0, oPaid = 0;
-        final oT = oldOwned[nT.serialNumber];
-        if (oT != null) {
-          oRec = double.tryParse(oT.received) ?? 0;
-          oPaid = double.tryParse(oT.paid) ?? 0;
-        }
-        double nRec = double.tryParse(nT.received) ?? 0;
-        double nPaid = double.tryParse(nT.paid) ?? 0;
-
-        if (nT.accountType == 'زبون' && nT.accountName.isNotEmpty) {
-          double diff = (nPaid - nRec) - (oPaid - oRec);
-          custDiffs[nT.accountName] = (custDiffs[nT.accountName] ?? 0) + diff;
-        } else if (nT.accountType == 'مورد' && nT.accountName.isNotEmpty) {
-          double diff = (nRec - nPaid) - (oRec - oPaid);
-          suppDiffs[nT.accountName] = (suppDiffs[nT.accountName] ?? 0) + diff;
+          if (oldTrans.accountType == 'زبون') {
+            // معادلة الزبون: الرصيد يتأثر بـ (المدفوع له - المقبوض منه)
+            // للإلغاء، نطرح هذا التأثير
+            double effect = oldPaid - oldReceived;
+            customerBalanceChanges[oldTrans.accountName] = (customerBalanceChanges[oldTrans.accountName] ?? 0) - effect;
+          } else if (oldTrans.accountType == 'مورد') {
+            // معادلة المورد: الرصيد يتأثر بـ (المقبوض منه - المدفوع له)
+            // للإلغاء، نطرح هذا التأثير
+            double effect = oldReceived - oldPaid;
+            supplierBalanceChanges[oldTrans.accountName] = (supplierBalanceChanges[oldTrans.accountName] ?? 0) - effect;
+          }
         }
       }
     }
+
+    // الخطوة ب: تطبيق أثر جميع معاملات الصندوق الجديدة من الواجهة
+    for (var newTrans in allTransFromUI) {
+      if (newTrans.sellerName == widget.sellerName && newTrans.accountName.isNotEmpty) {
+        double newReceived = double.tryParse(newTrans.received) ?? 0;
+        double newPaid = double.tryParse(newTrans.paid) ?? 0;
+
+        if (newTrans.accountType == 'زبون') {
+          double effect = newPaid - newReceived;
+          customerBalanceChanges[newTrans.accountName] = (customerBalanceChanges[newTrans.accountName] ?? 0) + effect;
+        } else if (newTrans.accountType == 'مورد') {
+          double effect = newReceived - newPaid;
+          supplierBalanceChanges[newTrans.accountName] = (supplierBalanceChanges[newTrans.accountName] ?? 0) + effect;
+        }
+      }
+    }
+
+    // 3. بناء الوثيقة النهائية للحفظ
+    double tReceived = allTransFromUI.fold(0, (sum, t) => sum + (double.tryParse(t.received) ?? 0));
+    double tPaid = allTransFromUI.fold(0, (sum, t) => sum + (double.tryParse(t.paid) ?? 0));
 
     final documentToSave = BoxDocument(
       recordNumber: serialNumber,
       date: widget.selectedDate,
-      sellerName: widget.sellerName,
+      sellerName: "Multiple Sellers", // الاسم العام للملف
       storeName: widget.storeName,
       dayName: dayName,
       transactions: allTransFromUI,
@@ -1460,23 +1468,33 @@ class _BoxScreenState extends State<BoxScreen> {
       },
     );
 
+    // 4. الحفظ في الملف وتحديث الأرصدة
     final success = await _storageService.saveBoxDocument(documentToSave);
 
     if (success) {
-      for (var e in custDiffs.entries)
-        await _customerIndexService.updateCustomerBalance(e.key, e.value);
-      for (var e in suppDiffs.entries)
-        await _supplierIndexService.updateSupplierBalance(e.key, e.value);
+      // تطبيق التغييرات الصافية على أرصدة الزبائن والموردين
+      for (var entry in customerBalanceChanges.entries) {
+        if (entry.value != 0) {
+          await _customerIndexService.updateCustomerBalance(entry.key, entry.value);
+        }
+      }
+      for (var entry in supplierBalanceChanges.entries) {
+        if(entry.value != 0) {
+            await _supplierIndexService.updateSupplierBalance(entry.key, entry.value);
+        }
+      }
+      
       setState(() => _hasUnsavedChanges = false);
       if (reloadAfterSave) {
         await _loadOrCreateJournal();
-      } else {
-        // إذا لم نقم بإعادة التحميل، يجب أن نعيد حالة الحفظ يدويًا
-        setState(() => _isSaving = false);
       }
-    } else {
-      // إعادة حالة الحفظ عند الفشل أيضًا
-      setState(() => _isSaving = false);
+    }
+
+    setState(() => _isSaving = false);
+    if (!silent && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(success ? 'تم الحفظ بنجاح' : 'فشل الحفظ'),
+          backgroundColor: success ? Colors.green : Colors.red));
     }
   }
 

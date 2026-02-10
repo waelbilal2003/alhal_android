@@ -1471,16 +1471,18 @@ class _SalesScreenState extends State<SalesScreen> {
     );
   }
 
-  Future<void> _saveCurrentRecord({bool silent = false}) async {
+ Future<void> _saveCurrentRecord({bool silent = false}) async {
     if (_isSaving) return;
 
+    setState(() => _isSaving = true);
+
+    // 1. تجميع السجلات الحالية من الواجهة
     final List<Sale> allSalesFromUI = [];
     double tCount = 0, tStanding = 0, tNet = 0, tGrand = 0;
 
     for (int i = 0; i < rowControllers.length; i++) {
       final controllers = rowControllers[i];
       if (controllers[1].text.isNotEmpty || controllers[4].text.isNotEmpty) {
-        // تصحيح صامت للصافي والقائم
         if (_canEditRow(i)) {
           double s = double.tryParse(controllers[6].text) ?? 0;
           double n = double.tryParse(controllers[7].text) ?? 0;
@@ -1490,7 +1492,7 @@ class _SalesScreenState extends State<SalesScreen> {
           }
         }
 
-        final s = Sale(
+        final sale = Sale(
           serialNumber: (allSalesFromUI.length + 1).toString(),
           material: controllers[1].text,
           affiliation: controllers[2].text,
@@ -1503,61 +1505,48 @@ class _SalesScreenState extends State<SalesScreen> {
           total: controllers[9].text,
           cashOrDebt: cashOrDebtValues[i],
           empties: emptiesValues[i],
-          customerName: cashOrDebtValues[i] == 'دين' ? customerNames[i] : null,
+          customerName: cashOrDebtValues[i] == 'دين' ? customerNames[i].trim() : null,
           sellerName: sellerNames[i],
         );
 
-        allSalesFromUI.add(s);
-        tCount += double.tryParse(s.count) ?? 0;
-        tStanding += double.tryParse(s.standing) ?? 0;
-        tNet += double.tryParse(s.net) ?? 0;
-        tGrand += double.tryParse(s.total) ?? 0;
+        allSalesFromUI.add(sale);
+        tCount += double.tryParse(sale.count) ?? 0;
+        tStanding += double.tryParse(sale.standing) ?? 0;
+        tNet += double.tryParse(sale.net) ?? 0;
+        tGrand += double.tryParse(sale.total) ?? 0;
       }
     }
 
-    if (allSalesFromUI.isEmpty) return;
+    // 2. منطق تحديث الأرصدة الجديد (الإلغاء ثم التطبيق)
+    Map<String, double> customerBalanceChanges = {};
+    final existingDoc = await _storageService.loadSalesDocument(widget.selectedDate);
 
-    setState(() => _isSaving = true);
-
-    // حساب فروقات أرصدة الزبائن (للبائع الحالي فقط)
-    Map<String, double> customerChanges = {};
-    final existingDoc =
-        await _storageService.loadSalesDocument(widget.selectedDate);
-
-    Map<String, Sale> oldOwnedSales = {};
+    // الخطوة أ: إلغاء أثر جميع ديون البائع القديمة في هذا اليوم
     if (existingDoc != null) {
-      for (var s in existingDoc.sales) {
-        if (s.sellerName == widget.sellerName && s.cashOrDebt == 'دين') {
-          oldOwnedSales["${s.serialNumber}-${s.material}"] = s;
+      for (var oldSale in existingDoc.sales) {
+        if (oldSale.sellerName == widget.sellerName && oldSale.cashOrDebt == 'دين' && oldSale.customerName != null && oldSale.customerName!.isNotEmpty) {
+          double oldAmount = double.tryParse(oldSale.total) ?? 0;
+          customerBalanceChanges[oldSale.customerName!] = (customerBalanceChanges[oldSale.customerName!] ?? 0) - oldAmount;
         }
       }
     }
 
-    for (var newS in allSalesFromUI) {
-      if (newS.sellerName == widget.sellerName &&
-          newS.cashOrDebt == 'دين' &&
-          newS.customerName != null) {
-        double oldAmt = 0;
-        final oldS = oldOwnedSales["${newS.serialNumber}-${newS.material}"];
-        if (oldS != null) oldAmt = double.tryParse(oldS.total) ?? 0;
-
-        double newAmt = double.tryParse(newS.total) ?? 0;
-        double diff = newAmt - oldAmt;
-
-        if (diff != 0) {
-          customerChanges[newS.customerName!] =
-              (customerChanges[newS.customerName!] ?? 0) + diff;
-        }
+    // الخطوة ب: تطبيق أثر جميع ديون البائع الجديدة من الواجهة
+    for (var newSale in allSalesFromUI) {
+      if (newSale.sellerName == widget.sellerName && newSale.cashOrDebt == 'دين' && newSale.customerName != null && newSale.customerName!.isNotEmpty) {
+        double newAmount = double.tryParse(newSale.total) ?? 0;
+        customerBalanceChanges[newSale.customerName!] = (customerBalanceChanges[newSale.customerName!] ?? 0) + newAmount;
       }
     }
-
+    
+    // 3. بناء الوثيقة النهائية للحفظ
     final documentToSave = SalesDocument(
       recordNumber: serialNumber,
       date: widget.selectedDate,
-      sellerName: widget.sellerName,
+      sellerName: "Multiple Sellers", // الاسم العام للملف
       storeName: widget.storeName,
       dayName: dayName,
-      sales: allSalesFromUI,
+      sales: allSalesFromUI, // نرسل القائمة الكاملة من الواجهة
       totals: {
         'totalCount': tCount.toStringAsFixed(0),
         'totalBase': tStanding.toStringAsFixed(2),
@@ -1566,15 +1555,18 @@ class _SalesScreenState extends State<SalesScreen> {
       },
     );
 
+    // 4. الحفظ في الملف وتحديث الأرصدة
     final success = await _storageService.saveSalesDocument(documentToSave);
 
     if (success) {
-      for (var entry in customerChanges.entries) {
-        await _customerIndexService.updateCustomerBalance(
-            entry.key, entry.value);
+      // تطبيق التغييرات الصافية على أرصدة الزبائن
+      for (var entry in customerBalanceChanges.entries) {
+        if (entry.value != 0) {
+          await _customerIndexService.updateCustomerBalance(entry.key, entry.value);
+        }
       }
       setState(() => _hasUnsavedChanges = false);
-      await _loadOrCreateRecord();
+      await _loadOrCreateRecord(); // إعادة تحميل لضمان التناسق
     }
 
     setState(() => _isSaving = false);
@@ -1584,7 +1576,6 @@ class _SalesScreenState extends State<SalesScreen> {
           backgroundColor: success ? Colors.green : Colors.red));
     }
   }
-
   Future<bool> _showUnsavedChangesDialog() async {
     return await showDialog<bool>(
           context: context,

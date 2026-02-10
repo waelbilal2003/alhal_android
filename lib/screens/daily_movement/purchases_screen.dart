@@ -1333,111 +1333,86 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
   Future<void> _saveCurrentRecord({bool silent = false}) async {
     if (_isSaving) return;
-
-    // 1. تجميع السجلات المكتملة فقط من الواجهة
-    final List<Purchase> allPurchasesFromUI = [];
-    double tCount = 0, tStanding = 0, tNet = 0, tGrand = 0;
-
-    for (int i = 0; i < rowControllers.length; i++) {
-      final controllers = rowControllers[i];
-      // نعتبر السجل موجوداً إذا كان هناك مادة أو عدد
-      if (controllers[1].text.isNotEmpty || controllers[3].text.isNotEmpty) {
-        // تصحيح تلقائي صامت للقيم (القائم والصافي) للسجلات التي يملكها البائع الحالي فقط
-        if (_canEditRow(i)) {
-          double s = double.tryParse(controllers[5].text) ?? 0;
-          double n = double.tryParse(controllers[6].text) ?? 0;
-          if (s < n) {
-            controllers[6].text = s.toStringAsFixed(2);
-            _calculateRowValues(i);
-          }
-        }
-
-        final p = Purchase(
-          serialNumber: (allPurchasesFromUI.length + 1).toString(),
-          material: controllers[1].text,
-          affiliation: controllers[2].text,
-          count: controllers[3].text,
-          packaging: controllers[4].text,
-          standing: controllers[5].text,
-          net: controllers[6].text,
-          price: controllers[7].text,
-          total: controllers[8].text,
-          cashOrDebt: cashOrDebtValues[i],
-          empties: emptiesValues[i],
-          sellerName: sellerNames[i],
-        );
-
-        allPurchasesFromUI.add(p);
-
-        // حساب المجاميع للوثيقة
-        tCount += double.tryParse(p.count) ?? 0;
-        tStanding += double.tryParse(p.standing) ?? 0;
-        tNet += double.tryParse(p.net) ?? 0;
-        tGrand += double.tryParse(p.total) ?? 0;
-      }
-    }
-
-    if (allPurchasesFromUI.isEmpty) {
-      if (!silent) _showInlineWarning(-1, "لا توجد بيانات للحفظ");
-      return;
-    }
-
+    
     setState(() => _isSaving = true);
 
-    // 2. حساب فروقات أرصدة الموردين (للبائع الحالي فقط)
+    // 1. تجميع السجلات الحالية من الواجهة التي تخص البائع الحالي فقط
+    final List<Purchase> currentSellerPurchasesFromUI = [];
+    for (int i = 0; i < rowControllers.length; i++) {
+        // فقط السجلات التي يملكها البائع الحالي هي التي يمكن تعديلها وحفظها
+        if (sellerNames[i] == widget.sellerName) {
+            final controllers = rowControllers[i];
+            if (controllers[1].text.isNotEmpty || controllers[3].text.isNotEmpty) {
+                double s = double.tryParse(controllers[5].text) ?? 0;
+                double n = double.tryParse(controllers[6].text) ?? 0;
+                if (s < n) {
+                    controllers[6].text = s.toStringAsFixed(2);
+                    _calculateRowValues(i);
+                }
+
+                final p = Purchase(
+                    serialNumber: controllers[0].text, // الحفاظ على الرقم التسلسلي المؤقت
+                    material: controllers[1].text,
+                    affiliation: controllers[2].text.trim(),
+                    count: controllers[3].text,
+                    packaging: controllers[4].text,
+                    standing: controllers[5].text,
+                    net: controllers[6].text,
+                    price: controllers[7].text,
+                    total: controllers[8].text,
+                    cashOrDebt: cashOrDebtValues[i],
+                    empties: emptiesValues[i],
+                    sellerName: sellerNames[i],
+                );
+                currentSellerPurchasesFromUI.add(p);
+            }
+        }
+    }
+    
+    // 2. منطق تحديث الأرصدة الجديد (الإلغاء ثم التطبيق)
     Map<String, double> supplierBalanceChanges = {};
-    final existingDocument =
-        await _storageService.loadPurchaseDocument(widget.selectedDate);
+    final existingDocument = await _storageService.loadPurchaseDocument(widget.selectedDate);
 
-    Map<String, Purchase> oldOwnedPurchases = {};
+    // الخطوة أ: إلغاء أثر جميع ديون البائع القديمة في هذا اليوم
     if (existingDocument != null) {
-      for (var p in existingDocument.purchases) {
-        if (p.sellerName == widget.sellerName && p.cashOrDebt == 'دين') {
-          oldOwnedPurchases["${p.serialNumber}-${p.material}"] = p;
+        for (var oldPurchase in existingDocument.purchases) {
+            if (oldPurchase.sellerName == widget.sellerName && oldPurchase.cashOrDebt == 'دين' && oldPurchase.affiliation.isNotEmpty) {
+                double oldAmount = double.tryParse(oldPurchase.total) ?? 0;
+                supplierBalanceChanges[oldPurchase.affiliation] = (supplierBalanceChanges[oldPurchase.affiliation] ?? 0) - oldAmount;
+            }
         }
-      }
     }
 
-    for (var newP in allPurchasesFromUI) {
-      if (newP.sellerName == widget.sellerName &&
-          newP.cashOrDebt == 'دين' &&
-          newP.affiliation.isNotEmpty) {
-        double oldAmount = 0;
-        final oldP = oldOwnedPurchases["${newP.serialNumber}-${newP.material}"];
-        if (oldP != null) oldAmount = double.tryParse(oldP.total) ?? 0;
-
-        double newAmount = double.tryParse(newP.total) ?? 0;
-        double diff = newAmount - oldAmount;
-
-        if (diff != 0) {
-          supplierBalanceChanges[newP.affiliation] =
-              (supplierBalanceChanges[newP.affiliation] ?? 0) + diff;
+    // الخطوة ب: تطبيق أثر جميع ديون البائع الجديدة من الواجهة
+    for (var newPurchase in currentSellerPurchasesFromUI) {
+        if (newPurchase.cashOrDebt == 'دين' && newPurchase.affiliation.isNotEmpty) {
+            double newAmount = double.tryParse(newPurchase.total) ?? 0;
+            supplierBalanceChanges[newPurchase.affiliation] = (supplierBalanceChanges[newPurchase.affiliation] ?? 0) + newAmount;
         }
-      }
     }
 
-    // 3. الحفظ النهائي (إرسال القائمة المدمجة)
+    // 3. بناء الوثيقة النهائية للحفظ
+    // هذه الوثيقة تحتوي فقط على سجلات البائع الحالي ليتم دمجها في خدمة التخزين
     final documentToSave = PurchaseDocument(
       recordNumber: serialNumber,
       date: widget.selectedDate,
-      sellerName: widget.sellerName,
+      sellerName: widget.sellerName, // إرسال اسم البائع الحالي
       storeName: widget.storeName,
       dayName: dayName,
-      purchases: allPurchasesFromUI,
-      totals: {
-        'totalCount': tCount.toStringAsFixed(0),
-        'totalBase': tStanding.toStringAsFixed(2),
-        'totalNet': tNet.toStringAsFixed(2),
-        'totalGrand': tGrand.toStringAsFixed(2),
-      },
+      purchases: currentSellerPurchasesFromUI, // إرسال سجلات البائع الحالي فقط
+      totals: {}, // سيتم حساب المجاميع النهائية في خدمة التخزين
     );
 
+    // 4. الحفظ في الملف وتحديث الأرصدة
+    // دالة savePurchaseDocument ستقوم بدمج هذه السجلات مع سجلات الباعة الآخرين
     final success = await _storageService.savePurchaseDocument(documentToSave);
 
     if (success) {
+      // تطبيق التغييرات الصافية على أرصدة الموردين
       for (var entry in supplierBalanceChanges.entries) {
-        await _supplierIndexService.updateSupplierBalance(
-            entry.key, entry.value);
+          if (entry.value != 0) {
+            await _supplierIndexService.updateSupplierBalance(entry.key, entry.value);
+          }
       }
       setState(() => _hasUnsavedChanges = false);
       await _loadOrCreateJournal(); // تحديث الواجهة والـ sellerNames
@@ -1450,7 +1425,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           backgroundColor: success ? Colors.green : Colors.red));
     }
   }
-
   Future<bool> _showUnsavedChangesDialog() async {
     return await showDialog<bool>(
           context: context,

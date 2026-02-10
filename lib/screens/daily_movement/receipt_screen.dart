@@ -1103,35 +1103,20 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     );
   }
 
-  Future<void> _saveCurrentRecord({bool silent = false}) async {
+   Future<void> _saveCurrentRecord({bool silent = false}) async {
     if (_isSaving) return;
-
-    final hasActualContent = rowControllers.any((controllers) =>
-        controllers[1].text.isNotEmpty || controllers[3].text.isNotEmpty);
-
-    if (!hasActualContent) {
-      if (!silent) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('لا توجد بيانات للحفظ'),
-            backgroundColor: Colors.orange));
-      }
-      return;
-    }
 
     setState(() => _isSaving = true);
 
-    // =========================================================================
-    // الخطوة 1: بناء القائمة الكاملة للسجلات من واجهة المستخدم (مصدر الحقيقة)
-    // *** بدون فلترة أو فرز ***
-    // =========================================================================
+    // 1. تجميع السجلات الحالية من واجهة المستخدم
     final List<Receipt> allReceiptsFromUI = [];
     for (int i = 0; i < rowControllers.length; i++) {
       final controllers = rowControllers[i];
       if (controllers[1].text.isNotEmpty || controllers[4].text.isNotEmpty) {
         allReceiptsFromUI.add(Receipt(
-          serialNumber: (i + 1).toString(),
+          serialNumber: (allReceiptsFromUI.length + 1).toString(), // إعادة ترقيم لضمان التسلسل
           material: controllers[1].text,
-          affiliation: controllers[2].text,
+          affiliation: controllers[2].text.trim(),
           sValue: controllers[3].text,
           count: controllers[4].text,
           packaging: controllers[5].text,
@@ -1142,76 +1127,70 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
         ));
       }
     }
-    // =========================================================================
-    // الخطوة 2: حساب التغير في الأرصدة (فقط للسجلات التي عدلها البائع الحالي)
-    // =========================================================================
+
+    // إذا لم تكن هناك بيانات فعلية، توقف عن الحفظ
+    if (allReceiptsFromUI.isEmpty) {
+      setState(() => _isSaving = false);
+      if (!silent) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('لا توجد بيانات للحفظ'),
+            backgroundColor: Colors.orange));
+      }
+      return;
+    }
+    
+    // 2. منطق تحديث الأرصدة الجديد (الإلغاء ثم التطبيق)
     Map<String, double> supplierBalanceChanges = {};
-    final existingDocument =
-        await _storageService.loadReceiptDocumentForDate(widget.selectedDate);
+    final existingDocument = await _storageService.loadReceiptDocumentForDate(widget.selectedDate);
 
-    // إنشاء خريطة للقيم القديمة التي يملكها البائع الحالي لتسهيل المقارنة
-    Map<String, Receipt> oldOwnedReceipts = {};
+    // الخطوة أ: إلغاء أثر جميع سجلات الاستلام القديمة لهذا البائع
     if (existingDocument != null) {
-      for (var receipt in existingDocument.receipts) {
-        if (receipt.sellerName == widget.sellerName) {
-          // نستخدم مزيج المسلسل والمادة كمانع تكرار مؤقت
-          oldOwnedReceipts["${receipt.serialNumber}-${receipt.material}"] =
-              receipt;
+      for (var oldReceipt in existingDocument.receipts) {
+        if (oldReceipt.sellerName == widget.sellerName && oldReceipt.affiliation.isNotEmpty) {
+          double oldPayment = double.tryParse(oldReceipt.payment) ?? 0;
+          double oldLoad = double.tryParse(oldReceipt.load) ?? 0;
+          // في الاستلام، الدفعة والحمولة تخفض رصيد المورد. لإلغاء هذا الأثر، نعيد إضافة القيمة.
+          double totalOldDeduction = oldPayment + oldLoad;
+          supplierBalanceChanges[oldReceipt.affiliation] = (supplierBalanceChanges[oldReceipt.affiliation] ?? 0) + totalOldDeduction;
         }
       }
     }
 
-    // مقارنة القيم الجديدة بالقديمة للبائع الحالي فقط
+    // الخطوة ب: تطبيق أثر جميع سجلات الاستلام الجديدة من الواجهة
     for (var newReceipt in allReceiptsFromUI) {
-      if (newReceipt.sellerName == widget.sellerName) {
-        double oldDeduction = 0;
-        // البحث عن السجل المطابق في القائمة القديمة
-        final oldReceipt = oldOwnedReceipts[
-            "${newReceipt.serialNumber}-${newReceipt.material}"];
-        if (oldReceipt != null) {
-          oldDeduction = (double.tryParse(oldReceipt.payment) ?? 0) +
-              (double.tryParse(oldReceipt.load) ?? 0);
-        }
-
-        double newDeduction = (double.tryParse(newReceipt.payment) ?? 0) +
-            (double.tryParse(newReceipt.load) ?? 0);
-
-        // حساب الفرق الصافي
-        double change = newDeduction - oldDeduction;
-
-        if (newReceipt.affiliation.isNotEmpty && change != 0) {
-          supplierBalanceChanges[newReceipt.affiliation] =
-              (supplierBalanceChanges[newReceipt.affiliation] ?? 0) + change;
-        }
+      if (newReceipt.sellerName == widget.sellerName && newReceipt.affiliation.isNotEmpty) {
+        double newPayment = double.tryParse(newReceipt.payment) ?? 0;
+        double newLoad = double.tryParse(newReceipt.load) ?? 0;
+        // تطبيق الخصم الجديد من رصيد المورد.
+        double totalNewDeduction = newPayment + newLoad;
+        supplierBalanceChanges[newReceipt.affiliation] = (supplierBalanceChanges[newReceipt.affiliation] ?? 0) - totalNewDeduction;
       }
     }
 
-    // =========================================================================
-    // الخطوة 3: إنشاء المستند النهائي وإرساله للحفظ (بالقائمة الكاملة)
-    // =========================================================================
+    // 3. بناء الوثيقة النهائية وإرسالها للحفظ
     final documentToSave = ReceiptDocument(
       recordNumber: serialNumber,
       date: widget.selectedDate,
-      sellerName: widget.sellerName,
+      sellerName: "Multiple Sellers", // الاسم العام للملف
       storeName: widget.storeName,
       dayName: dayName,
-      receipts: allReceiptsFromUI,
-      totals: {},
+      receipts: allReceiptsFromUI, // نرسل القائمة الكاملة والمحدثة
+      totals: {}, // سيتم حساب المجاميع في خدمة التخزين
     );
 
     final success = await _storageService.saveReceiptDocument(documentToSave);
 
     if (success) {
+      // 4. تطبيق التغييرات الصافية على أرصدة الموردين
       for (var entry in supplierBalanceChanges.entries) {
         if (entry.value != 0) {
-          // نرسل الفرق الصافي للتحديث
-          await _supplierIndexService.updateSupplierBalance(
-              entry.key, -entry.value);
+          // دالة updateSupplierBalance تضيف القيمة، لذا نرسل القيمة الصافية مباشرة (موجبة أو سالبة)
+          await _supplierIndexService.updateSupplierBalance(entry.key, entry.value);
         }
       }
 
-      await _loadOrCreateJournal();
       setState(() => _hasUnsavedChanges = false);
+      await _loadOrCreateJournal(); // إعادة تحميل لضمان التناسق
     }
 
     setState(() => _isSaving = false);

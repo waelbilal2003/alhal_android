@@ -39,6 +39,10 @@ dependencies:
 
   # اللوغو
   flutter_launcher_icons: ^0.13.1
+
+   # مكتبات الأمان والحماية
+  device_info_plus: 10.1.2      # الحصول على معلومات الجهاز
+  crypto: 3.0.6                 # التشفير وإنشاء البصمات
   
 dev_dependencies:
   flutter_test:

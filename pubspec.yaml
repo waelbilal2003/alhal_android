@@ -31,11 +31,7 @@ dependencies:
   path_provider: 2.1.5
   shared_preferences: 2.5.3
 
-  # الحزمة التي تمكن sqflite من العمل على سطح المكتب والويب
-  sqflite_common_ffi: ^2.3.0+2 
-
-   # الحزمة الإضافية المطلوبة للويب
-  sqflite_common_ffi_web: ^0.4.2+2
+  http: ^1.1.0  # لإجراء طلبات الشبكة
 
   # اللوغو
   flutter_launcher_icons: ^0.13.1

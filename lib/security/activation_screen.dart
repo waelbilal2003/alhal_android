@@ -4,10 +4,9 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import '../screens/login_screen.dart'; // تأكد من صحة المسار
+import '../screens/login_screen.dart';
 
 // دالة بسيطة لتعتيم المفتاح السري قليلاً
-// في التطبيقات الحقيقية، تستخدم تقنيات أكثر تعقيداً
 String getSecretKey() {
   const part1 = 'your_super_s';
   const part2 = 'ecret_key_123';
@@ -35,14 +34,8 @@ class _ActivationScreenState extends State<ActivationScreen> {
     final deviceInfo = DeviceInfoPlugin();
     if (Platform.isAndroid) {
       final androidInfo = await deviceInfo.androidInfo;
-      // androidId هو خيار جيد لأنه فريد لكل جهاز + تثبيت تطبيق
       return androidInfo.id;
     }
-    // يمكنك إضافة دعم iOS هنا إذا احتجت
-    // if (Platform.isIOS) {
-    //   final iosInfo = await deviceInfo.iosInfo;
-    //   return iosInfo.identifierForVendor;
-    // }
     return null;
   }
 
@@ -65,18 +58,21 @@ class _ActivationScreenState extends State<ActivationScreen> {
       return;
     }
 
-    // تأكد من أن الرابط يحتوي على http/https
+    // --- بداية التعديل على منطق الرابط ---
+
+    // نأخذ الرابط كما هو دون تغيير بدايته
     String url = _ngrokUrlController.text.trim();
-    if (!url.startsWith('http')) {
-      url = 'https://' + url;
+
+    // إزالة الشرطة المائلة من النهاية إن وجدت لتجنب تكرارها
+    if (url.endsWith('/')) {
+      url = url.substring(0, url.length - 1);
     }
 
-    // تأكد من أن الرابط ينتهي بـ /
-    if (!url.endsWith('/')) {
-      url += '/';
-    }
+    // إضافة النهاية المطلوبة مباشرة
+    // النتيجة النهائية ستكون: (الرابط المدخل) + /api/register_device.php
+    final fullUrl = Uri.parse('$url/api/register_device.php');
 
-    final fullUrl = Uri.parse('${url}api/register_device.php');
+    // --- نهاية التعديل ---
 
     try {
       final response = await http
@@ -86,18 +82,16 @@ class _ActivationScreenState extends State<ActivationScreen> {
             body: jsonEncode({
               'customer_name': _customerNameController.text.trim(),
               'device_id': deviceId,
-              'app_key': getSecretKey(), // إرسال المفتاح السري
+              'app_key': getSecretKey(),
             }),
           )
-          .timeout(const Duration(seconds: 20)); // مهلة زمنية للطلب
+          .timeout(const Duration(seconds: 20));
 
       final responseData = jsonDecode(response.body);
 
       if (response.statusCode == 201 || response.statusCode == 200) {
         if (responseData['status'] == 'success') {
-          // حفظ حالة التفعيل محلياً
           final prefs = await SharedPreferences.getInstance();
-          // نستخدم قيمة مشفرة بسيطة بدلاً من 'true' مباشرة
           await prefs.setString(
               'activation_status', base64.encode(utf8.encode('activated_ok')));
 
@@ -131,67 +125,79 @@ class _ActivationScreenState extends State<ActivationScreen> {
         child: SingleChildScrollView(
           child: Padding(
             padding: const EdgeInsets.all(24.0),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text(
-                    'تفعيل التطبيق',
-                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 30),
-                  TextFormField(
-                    controller: _ngrokUrlController,
-                    decoration: const InputDecoration(
-                      labelText: 'ادخل رابط التفعيل (ngrok)',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.link),
+            // تم إضافة Directionality لجعل الواجهة تبدأ من اليمين
+            child: Directionality(
+              textDirection: TextDirection.rtl,
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text(
+                      'تفعيل التطبيق',
+                      style:
+                          TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
                     ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'حقل الرابط مطلوب';
-                      }
-                      return null;
-                    },
-                    keyboardType: TextInputType.url,
-                  ),
-                  const SizedBox(height: 20),
-                  TextFormField(
-                    controller: _customerNameController,
-                    decoration: const InputDecoration(
-                      labelText: 'اسم الزبون',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.person),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'حقل اسم الزبون مطلوب';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 30),
-                  if (_isLoading)
-                    const CircularProgressIndicator()
-                  else
-                    ElevatedButton(
-                      onPressed: _activateDevice,
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 50, vertical: 15),
-                        textStyle: const TextStyle(fontSize: 18),
+                    const SizedBox(height: 30),
+                    TextFormField(
+                      controller: _ngrokUrlController,
+                      // محاذاة النص لليمين داخل الحقل
+                      textAlign: TextAlign.right,
+                      decoration: const InputDecoration(
+                        labelText: 'ادخل رابط التفعيل',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.link),
+                        // لجعل النص في الملصق يبدأ من اليمين
+                        alignLabelWithHint: true,
                       ),
-                      child: const Text('تفعيل'),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'حقل الرابط مطلوب';
+                        }
+                        return null;
+                      },
+                      keyboardType: TextInputType.url,
                     ),
-                  const SizedBox(height: 20),
-                  if (_errorMessage.isNotEmpty)
-                    Text(
-                      _errorMessage,
-                      style: const TextStyle(color: Colors.red),
-                      textAlign: TextAlign.center,
+                    const SizedBox(height: 20),
+                    TextFormField(
+                      controller: _customerNameController,
+                      // محاذاة النص لليمين داخل الحقل
+                      textAlign: TextAlign.right,
+                      decoration: const InputDecoration(
+                        labelText: 'اسم الزبون',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.person),
+                        alignLabelWithHint: true,
+                      ),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'حقل اسم الزبون مطلوب';
+                        }
+                        return null;
+                      },
                     ),
-                ],
+                    const SizedBox(height: 30),
+                    if (_isLoading)
+                      const CircularProgressIndicator()
+                    else
+                      ElevatedButton(
+                        onPressed: _activateDevice,
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 50, vertical: 15),
+                          textStyle: const TextStyle(fontSize: 18),
+                        ),
+                        child: const Text('تفعيل'),
+                      ),
+                    const SizedBox(height: 20),
+                    if (_errorMessage.isNotEmpty)
+                      Text(
+                        _errorMessage,
+                        style: const TextStyle(color: Colors.red),
+                        textAlign: TextAlign.center,
+                      ),
+                  ],
+                ),
               ),
             ),
           ),

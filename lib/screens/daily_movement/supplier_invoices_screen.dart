@@ -7,6 +7,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
 
 import '../../services/invoices_service.dart';
+import '../../services/supplier_index_service.dart';
 
 class SupplierInvoicesScreen extends StatefulWidget {
   final String selectedDate;
@@ -26,17 +27,36 @@ class SupplierInvoicesScreen extends StatefulWidget {
 
 class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
   final InvoicesService _invoicesService = InvoicesService();
+  final SupplierIndexService _supplierIndexService = SupplierIndexService();
   late Future<SupplierReportData> _reportDataFuture;
+  double? _supplierBalance;
 
   @override
   void initState() {
     super.initState();
     _reportDataFuture = _invoicesService.getSupplierReport(
         widget.selectedDate, widget.supplierName);
+    _loadSupplierBalance();
+  }
+
+  Future<void> _loadSupplierBalance() async {
+    final allSuppliers = await _supplierIndexService.getAllSuppliersWithData();
+    for (var entry in allSuppliers.entries) {
+      if (entry.value.name.toLowerCase() ==
+          widget.supplierName.trim().toLowerCase()) {
+        if (mounted) {
+          setState(() {
+            _supplierBalance = entry.value.balance;
+          });
+        }
+        return;
+      }
+    }
   }
 
   // --- دالة توليد الـ PDF والمشاركة (3 جداول - معكوسة الترتيب) ---
-  Future<void> _generateAndSharePdf(SupplierReportData data) async {
+  Future<void> _generateAndSharePdf(
+      SupplierReportData data, double? supplierBalance) async {
     final pdf = pw.Document();
 
     // تحميل الخط العربي
@@ -90,6 +110,9 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
     // ألوان الملخص (Orange)
     final PdfColor summaryHeader = PdfColor.fromInt(0xFFFFA726);
     final PdfColor summaryRowOdd = PdfColor.fromInt(0xFFFFF3E0);
+
+    final String balanceTextPdf =
+        supplierBalance != null ? supplierBalance.toStringAsFixed(2) : '---';
 
     pdf.addPage(
       pw.MultiPage(
@@ -342,6 +365,29 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
                       ],
                     ),
                   ],
+
+                  // رصيد المورد في الـ PDF
+                  pw.SizedBox(height: 20),
+                  pw.Container(
+                    width: double.infinity,
+                    padding: const pw.EdgeInsets.all(10),
+                    decoration: pw.BoxDecoration(
+                      color: PdfColor.fromInt(0xFFE65100),
+                      borderRadius: pw.BorderRadius.circular(4),
+                    ),
+                    child: pw.Center(
+                      child: pw.Text(
+                        'الرصيد : $balanceTextPdf',
+                        textAlign: pw.TextAlign.center,
+                        style: pw.TextStyle(
+                          color: PdfColors.white,
+                          fontSize: 14,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                        textDirection: pw.TextDirection.rtl,
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -486,7 +532,7 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
               if (data.sales.isNotEmpty ||
                   data.receipts.isNotEmpty ||
                   data.summary.isNotEmpty) {
-                _generateAndSharePdf(data);
+                _generateAndSharePdf(data, _supplierBalance);
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('لا توجد بيانات لمشاركتها')),
@@ -567,6 +613,10 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
                 receiptTotalLoad += double.tryParse(item.load) ?? 0;
               }
             }
+
+            final String balanceText = _supplierBalance != null
+                ? _supplierBalance!.toStringAsFixed(2)
+                : '---';
 
             return SingleChildScrollView(
               padding: const EdgeInsets.all(8.0),
@@ -799,6 +849,26 @@ class _SupplierInvoicesScreenState extends State<SupplierInvoicesScreen> {
                       ),
                     ),
                   ],
+
+                  // --- رصيد المورد ---
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16.0),
+                    margin: const EdgeInsets.only(top: 16.0),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade800,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      'الرصيد : $balanceText',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
 
                   const SizedBox(height: 20),
                 ],

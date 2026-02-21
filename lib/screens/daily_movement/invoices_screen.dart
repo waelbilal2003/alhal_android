@@ -8,6 +8,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../models/invoice_model.dart';
 import '../../services/invoices_service.dart';
+import '../../services/customer_index_service.dart';
 
 class InvoicesScreen extends StatefulWidget {
   final String selectedDate;
@@ -27,17 +28,36 @@ class InvoicesScreen extends StatefulWidget {
 
 class _InvoicesScreenState extends State<InvoicesScreen> {
   final InvoicesService _invoicesService = InvoicesService();
+  final CustomerIndexService _customerIndexService = CustomerIndexService();
   late Future<List<InvoiceItem>> _invoiceDataFuture;
+  double? _customerBalance;
 
   @override
   void initState() {
     super.initState();
     _invoiceDataFuture = _invoicesService.getInvoicesForCustomer(
         widget.selectedDate, widget.customerName);
+    _loadCustomerBalance();
+  }
+
+  Future<void> _loadCustomerBalance() async {
+    final allCustomers = await _customerIndexService.getAllCustomersWithData();
+    for (var entry in allCustomers.entries) {
+      if (entry.value.name.toLowerCase() ==
+          widget.customerName.trim().toLowerCase()) {
+        if (mounted) {
+          setState(() {
+            _customerBalance = entry.value.balance;
+          });
+        }
+        return;
+      }
+    }
   }
 
   // --- دالة توليد الـ PDF والمشاركة (تم عكس الجدول يدوياً) ---
-  Future<void> _generateAndSharePdf(List<InvoiceItem> items) async {
+  Future<void> _generateAndSharePdf(
+      List<InvoiceItem> items, double? customerBalance) async {
     final pdf = pw.Document();
 
     // 1. تحميل الخط العربي
@@ -71,6 +91,9 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
     final PdfColor borderColor = PdfColor.fromInt(0xFFE0E0E0); // Grey 300
     final PdfColor totalRowColor = PdfColor.fromInt(0xFFC5CAE9); // Indigo 100
     final PdfColor grandTotalColor = PdfColor.fromInt(0xFF283593); // Indigo 800
+
+    final String balanceTextPdf =
+        customerBalance != null ? customerBalance.toStringAsFixed(2) : '---';
 
     pdf.addPage(
       pw.MultiPage(
@@ -202,7 +225,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                     ),
                     child: pw.Center(
                       child: pw.Text(
-                        'المجموع ${grandTotal.toStringAsFixed(2)} ليرة سورية فقط لا غير .',
+                        'المجموع ${grandTotal.toStringAsFixed(2)} ليرة سورية فقط لا غير  الرصيد : $balanceTextPdf.',
                         textAlign: pw.TextAlign.center,
                         style: pw.TextStyle(
                           color: PdfColors.white,
@@ -311,7 +334,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
             onPressed: () async {
               final data = await _invoiceDataFuture;
               if (data.isNotEmpty) {
-                _generateAndSharePdf(data);
+                _generateAndSharePdf(data, _customerBalance);
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('لا توجد بيانات لمشاركتها')),
@@ -370,6 +393,10 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
               totalCount += int.tryParse(item.count) ?? 0;
               grandTotal += double.tryParse(item.total) ?? 0;
             }
+
+            final String balanceText = _customerBalance != null
+                ? _customerBalance!.toStringAsFixed(2)
+                : '---';
 
             return Padding(
               padding: const EdgeInsets.all(8.0),
@@ -497,7 +524,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
-                      'المجموع ${grandTotal.toStringAsFixed(2)} ليرة سورية فقط لا غير .',
+                      'المجموع ${grandTotal.toStringAsFixed(2)} ليرة سورية فقط لا غير  الرصيد : $balanceText.',
                       textAlign: TextAlign.center,
                       style: const TextStyle(
                         color: Colors.white,

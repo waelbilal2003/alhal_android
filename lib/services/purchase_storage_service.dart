@@ -33,7 +33,7 @@ class PurchaseStorageService {
   }) async {
     try {
       final basePath = await _getBasePath();
-      final folderPath = '$basePath/AlhalJournals';
+      final folderPath = '$basePath/PurchaseJournals';
 
       final folder = Directory(folderPath);
       if (!await folder.exists()) {

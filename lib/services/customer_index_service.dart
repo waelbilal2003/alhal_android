@@ -63,7 +63,7 @@ class CustomerIndexService {
       directory = await getApplicationDocumentsDirectory();
     }
 
-    final folderPath = '${directory!.path}/SupplierIndex';
+    final folderPath = '${directory!.path}/CustomerIndex';
     final folder = Directory(folderPath);
     if (!await folder.exists()) {
       await folder.create(recursive: true);

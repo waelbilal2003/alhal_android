@@ -54,6 +54,4 @@ flutter:
 # 👇 قسم أيقونة التطبيق
 flutter_launcher_icons:
   android: true
-  image_path: "assets/images/logo.png"
-  adaptive_icon_foreground: "assets/images/logo.png"
-  #adaptive_icon_background: "#FFFFFF"
+  

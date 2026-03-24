@@ -117,7 +117,7 @@ class PurchaseStorageService {
   Future<PurchaseDocument?> loadPurchaseDocument(String date) async {
     try {
       final basePath = await _getBasePath();
-      final folderPath = '$basePath/AlhalJournals';
+      final folderPath = '$basePath/PurchaseJournals';
       final fileName = _createFileName(date);
       final filePath = '$folderPath/$fileName';
 
@@ -152,7 +152,7 @@ class PurchaseStorageService {
   Future<List<Map<String, String>>> getAvailableDatesWithNumbers() async {
     try {
       final basePath = await _getBasePath();
-      final folderPath = '$basePath/AlhalJournals';
+      final folderPath = '$basePath/PurchaseJournals';
 
       final folder = Directory(folderPath);
       if (!await folder.exists()) {
@@ -273,7 +273,7 @@ class PurchaseStorageService {
   Future<String?> getFilePath(String date) async {
     try {
       final basePath = await _getBasePath();
-      final folderPath = '$basePath/AlhalJournals';
+      final folderPath = '$basePath/PurchaseJournals';
       final fileName = _createFileName(date);
       final filePath = '$folderPath/$fileName';
 
@@ -320,7 +320,7 @@ class PurchaseStorageService {
   Future<String> getJournalNumberForDate(String date) async {
     try {
       final basePath = await _getBasePath();
-      final folderPath = '$basePath/AlhalJournals';
+      final folderPath = '$basePath/PurchaseJournals';
       final fileName = _createFileName(date);
       final filePath = '$folderPath/$fileName';
 
@@ -344,7 +344,7 @@ class PurchaseStorageService {
   Future<String> getNextJournalNumber() async {
     try {
       final basePath = await _getBasePath();
-      final folderPath = '$basePath/AlhalJournals';
+      final folderPath = '$basePath/PurchaseJournals';
       final folder = Directory(folderPath);
 
       if (!await folder.exists()) {

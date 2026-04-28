@@ -25,7 +25,7 @@ class ReceiptStorageService {
   Future<bool> saveReceiptDocument(ReceiptDocument document) async {
     try {
       final basePath = await _getBasePath();
-      final folderPath = '$basePath/Receipts';
+      final folderPath = '$basePath/ReceiptJournals';
 
       final folder = Directory(folderPath);
       if (!await folder.exists()) {
@@ -99,7 +99,7 @@ class ReceiptStorageService {
   Future<ReceiptDocument?> loadReceiptDocumentForDate(String date) async {
     try {
       final basePath = await _getBasePath();
-      final folderPath = '$basePath/Receipts';
+      final folderPath = '$basePath/ReceiptJournals';
       final fileName = _createFileName(date);
       final filePath = '$folderPath/$fileName';
 
@@ -145,7 +145,7 @@ class ReceiptStorageService {
   Future<List<Map<String, String>>> getAvailableDatesWithNumbers() async {
     try {
       final basePath = await _getBasePath();
-      final receiptsPath = '$basePath/Receipts';
+      final receiptsPath = '$basePath/ReceiptJournals';
 
       final folder = Directory(receiptsPath);
       if (!await folder.exists()) {
@@ -192,7 +192,7 @@ class ReceiptStorageService {
   Future<String?> getFilePath(String date) async {
     try {
       final basePath = await _getBasePath();
-      final folderPath = '$basePath/Receipts';
+      final folderPath = '$basePath/ReceiptJournals';
       final fileName = _createFileName(date);
       final filePath = '$folderPath/$fileName';
 
@@ -224,7 +224,7 @@ class ReceiptStorageService {
   Future<String> getNextJournalNumber() async {
     try {
       final basePath = await _getBasePath();
-      final receiptsPath = '$basePath/Receipts';
+      final receiptsPath = '$basePath/ReceiptJournals';
 
       final folder = Directory(receiptsPath);
       if (!await folder.exists()) {

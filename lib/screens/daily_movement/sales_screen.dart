@@ -96,7 +96,7 @@ class _SalesScreenState extends State<SalesScreen> {
   int? _activePackagingRowIndex;
   int? _activeSupplierRowIndex;
   int? _activeCustomerRowIndex;
-// متغير لتتبع ما إذا كان يجب عرض الاقتراحات على كامل الشاشة
+  // متغير لتتبع ما إذا كان يجب عرض الاقتراحات على كامل الشاشة
   bool _showFullScreenSuggestions = false;
   String _currentSuggestionType = '';
 
@@ -175,7 +175,7 @@ class _SalesScreenState extends State<SalesScreen> {
       'الأربعاء',
       'الخميس',
       'الجمعة',
-      'السبت'
+      'السبت',
     ];
     final now = DateTime.now();
     return days[now.weekday % 7];
@@ -183,8 +183,9 @@ class _SalesScreenState extends State<SalesScreen> {
 
   // تحميل السجل إذا كان موجوداً، أو إنشاء جديد
   Future<void> _loadOrCreateRecord() async {
-    final document =
-        await _storageService.loadSalesDocument(widget.selectedDate);
+    final document = await _storageService.loadSalesDocument(
+      widget.selectedDate,
+    );
 
     if (document != null && document.sales.isNotEmpty) {
       // تحميل اليومية الموجودة
@@ -231,8 +232,10 @@ class _SalesScreenState extends State<SalesScreen> {
     setState(() {
       final newSerialNumber = (rowControllers.length + 1).toString();
 
-      List<TextEditingController> newControllers =
-          List.generate(12, (index) => TextEditingController());
+      List<TextEditingController> newControllers = List.generate(
+        12,
+        (index) => TextEditingController(),
+      );
 
       List<FocusNode> newFocusNodes = List.generate(12, (index) => FocusNode());
 
@@ -260,9 +263,11 @@ class _SalesScreenState extends State<SalesScreen> {
     });
   }
 
-// دالة مساعدة لإضافة المستمعات - مثل purchases_screen
+  // دالة مساعدة لإضافة المستمعات - مثل purchases_screen
   void _addChangeListenersToControllers(
-      List<TextEditingController> controllers, int rowIndex) {
+    List<TextEditingController> controllers,
+    int rowIndex,
+  ) {
     // حقل المادة
     controllers[1].addListener(() {
       _hasUnsavedChanges = true;
@@ -319,8 +324,10 @@ class _SalesScreenState extends State<SalesScreen> {
   void _updateMaterialSuggestions(int rowIndex) async {
     final query = rowControllers[rowIndex][1].text;
     if (query.length >= 1) {
-      final suggestions =
-          await getEnhancedSuggestions(_materialIndexService, query);
+      final suggestions = await getEnhancedSuggestions(
+        _materialIndexService,
+        query,
+      );
       if (mounted) {
         setState(() {
           _materialSuggestions = suggestions;
@@ -349,8 +356,10 @@ class _SalesScreenState extends State<SalesScreen> {
   void _updatePackagingSuggestions(int rowIndex) async {
     final query = rowControllers[rowIndex][5].text;
     if (query.length >= 1) {
-      final suggestions =
-          await getEnhancedSuggestions(_packagingIndexService, query);
+      final suggestions = await getEnhancedSuggestions(
+        _packagingIndexService,
+        query,
+      );
       if (mounted) {
         setState(() {
           _packagingSuggestions = suggestions;
@@ -379,8 +388,10 @@ class _SalesScreenState extends State<SalesScreen> {
   void _updateSupplierSuggestions(int rowIndex) async {
     final query = rowControllers[rowIndex][2].text;
     if (query.length >= 1) {
-      final suggestions =
-          await getEnhancedSuggestions(_supplierIndexService, query);
+      final suggestions = await getEnhancedSuggestions(
+        _supplierIndexService,
+        query,
+      );
       if (mounted) {
         setState(() {
           _supplierSuggestions = suggestions;
@@ -434,7 +445,7 @@ class _SalesScreenState extends State<SalesScreen> {
     });
   }
 
-// 2. اختيار اقتراح للعبوة
+  // 2. اختيار اقتراح للعبوة
   void _selectPackagingSuggestion(String suggestion, int rowIndex) {
     // التأكد من أن الصف لا يزال موجوداً
     if (rowIndex >= rowControllers.length) return;
@@ -463,7 +474,7 @@ class _SalesScreenState extends State<SalesScreen> {
     });
   }
 
-// 3. اختيار اقتراح للمورد (العائدية)
+  // 3. اختيار اقتراح للمورد (العائدية)
   void _selectSupplierSuggestion(String suggestion, int rowIndex) {
     // التأكد من أن الصف لا يزال موجوداً
     if (rowIndex >= rowControllers.length) return;
@@ -492,7 +503,7 @@ class _SalesScreenState extends State<SalesScreen> {
     });
   }
 
-// 4. اختيار اقتراح للزبون
+  // 4. اختيار اقتراح للزبون
   void _selectCustomerSuggestion(String suggestion, int rowIndex) {
     // التأكد من أن الصف لا يزال موجوداً
     if (rowIndex >= rowControllers.length) return;
@@ -565,7 +576,9 @@ class _SalesScreenState extends State<SalesScreen> {
       } else if (standing == 0 && net > 0) {
         controllers[7].text = '0.00';
         _showInlineWarning(
-            rowIndex, 'إذا كان القائم صفر، يجب أن يكون الصافي صفر');
+          rowIndex,
+          'إذا كان القائم صفر، يجب أن يكون الصافي صفر',
+        );
 
         _calculateRowValues(rowIndex);
         _calculateAllTotals();
@@ -673,8 +686,10 @@ class _SalesScreenState extends State<SalesScreen> {
           TextEditingController(),
         ];
 
-        List<FocusNode> newFocusNodes =
-            List.generate(12, (index) => FocusNode());
+        List<FocusNode> newFocusNodes = List.generate(
+          12,
+          (index) => FocusNode(),
+        );
 
         // تخزين اسم البائع لهذا الصف
         sellerNames.add(sale.sellerName);
@@ -767,25 +782,70 @@ class _SalesScreenState extends State<SalesScreen> {
       contentRows.add(
         TableRow(
           children: [
-            _buildTableCell(rowControllers[i][0], rowFocusNodes[i][0], i, 0,
-                isOwnedByCurrentSeller),
-            _buildMaterialCell(rowControllers[i][1], rowFocusNodes[i][1], i, 1,
-                isOwnedByCurrentSeller),
-            _buildSupplierCell(rowControllers[i][2], rowFocusNodes[i][2], i, 2,
-                isOwnedByCurrentSeller),
-            _buildTableCell(rowControllers[i][3], rowFocusNodes[i][3], i, 3,
-                isOwnedByCurrentSeller,
-                isSField: true),
-            _buildTableCell(rowControllers[i][4], rowFocusNodes[i][4], i, 4,
-                isOwnedByCurrentSeller),
-            _buildPackagingCell(rowControllers[i][5], rowFocusNodes[i][5], i, 5,
-                isOwnedByCurrentSeller),
-            _buildTableCell(rowControllers[i][6], rowFocusNodes[i][6], i, 6,
-                isOwnedByCurrentSeller),
-            _buildTableCell(rowControllers[i][7], rowFocusNodes[i][7], i, 7,
-                isOwnedByCurrentSeller),
-            _buildTableCell(rowControllers[i][8], rowFocusNodes[i][8], i, 8,
-                isOwnedByCurrentSeller),
+            _buildTableCell(
+              rowControllers[i][0],
+              rowFocusNodes[i][0],
+              i,
+              0,
+              isOwnedByCurrentSeller,
+            ),
+            _buildMaterialCell(
+              rowControllers[i][1],
+              rowFocusNodes[i][1],
+              i,
+              1,
+              isOwnedByCurrentSeller,
+            ),
+            _buildSupplierCell(
+              rowControllers[i][2],
+              rowFocusNodes[i][2],
+              i,
+              2,
+              isOwnedByCurrentSeller,
+            ),
+            _buildTableCell(
+              rowControllers[i][3],
+              rowFocusNodes[i][3],
+              i,
+              3,
+              isOwnedByCurrentSeller,
+              isSField: true,
+            ),
+            _buildTableCell(
+              rowControllers[i][4],
+              rowFocusNodes[i][4],
+              i,
+              4,
+              isOwnedByCurrentSeller,
+            ),
+            _buildPackagingCell(
+              rowControllers[i][5],
+              rowFocusNodes[i][5],
+              i,
+              5,
+              isOwnedByCurrentSeller,
+            ),
+            _buildTableCell(
+              rowControllers[i][6],
+              rowFocusNodes[i][6],
+              i,
+              6,
+              isOwnedByCurrentSeller,
+            ),
+            _buildTableCell(
+              rowControllers[i][7],
+              rowFocusNodes[i][7],
+              i,
+              7,
+              isOwnedByCurrentSeller,
+            ),
+            _buildTableCell(
+              rowControllers[i][8],
+              rowFocusNodes[i][8],
+              i,
+              8,
+              isOwnedByCurrentSeller,
+            ),
             TableComponents.buildTotalValueCell(rowControllers[i][9]),
             _buildCashOrDebtCell(i, 10, isOwnedByCurrentSeller),
             _buildEmptiesCell(i, 11, isOwnedByCurrentSeller),
@@ -827,9 +887,14 @@ class _SalesScreenState extends State<SalesScreen> {
     );
   }
 
-  Widget _buildTableCell(TextEditingController controller, FocusNode focusNode,
-      int rowIndex, int colIndex, bool isOwnedByCurrentSeller,
-      {bool isSField = false}) {
+  Widget _buildTableCell(
+    TextEditingController controller,
+    FocusNode focusNode,
+    int rowIndex,
+    int colIndex,
+    bool isOwnedByCurrentSeller, {
+    bool isSField = false,
+  }) {
     final bool enabled = _canEditRow(rowIndex);
     bool isSerialField = colIndex == 0;
     bool isNumericField =
@@ -855,11 +920,11 @@ class _SalesScreenState extends State<SalesScreen> {
               FilteringTextInputFormatter.digitsOnly,
             ]
           : (isNumericField
-              ? [
-                  FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*$')),
-                  FilteringTextInputFormatter.deny(RegExp(r'\.\d{3,}')),
-                ]
-              : null),
+                ? [
+                    FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*$')),
+                    FilteringTextInputFormatter.deny(RegExp(r'\.\d{3,}')),
+                  ]
+                : null),
       fontSize: isSField ? 11 : 13,
       textAlign: isSField ? TextAlign.center : TextAlign.right,
       textDirection: isSField ? TextDirection.ltr : TextDirection.rtl,
@@ -871,9 +936,7 @@ class _SalesScreenState extends State<SalesScreen> {
         child: Opacity(
           opacity: 0.7,
           child: Container(
-            decoration: BoxDecoration(
-              color: Colors.grey[100],
-            ),
+            decoration: BoxDecoration(color: Colors.grey[100]),
             child: cell,
           ),
         ),
@@ -884,11 +947,12 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   Widget _buildMaterialCell(
-      TextEditingController controller,
-      FocusNode focusNode,
-      int rowIndex,
-      int colIndex,
-      bool isOwnedByCurrentSeller) {
+    TextEditingController controller,
+    FocusNode focusNode,
+    int rowIndex,
+    int colIndex,
+    bool isOwnedByCurrentSeller,
+  ) {
     return TableBuilder.buildTableCell(
       controller: controller,
       focusNode: focusNode,
@@ -906,11 +970,12 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   Widget _buildPackagingCell(
-      TextEditingController controller,
-      FocusNode focusNode,
-      int rowIndex,
-      int colIndex,
-      bool isOwnedByCurrentSeller) {
+    TextEditingController controller,
+    FocusNode focusNode,
+    int rowIndex,
+    int colIndex,
+    bool isOwnedByCurrentSeller,
+  ) {
     return TableBuilder.buildTableCell(
       controller: controller,
       focusNode: focusNode,
@@ -928,11 +993,12 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   Widget _buildSupplierCell(
-      TextEditingController controller,
-      FocusNode focusNode,
-      int rowIndex,
-      int colIndex,
-      bool isOwnedByCurrentSeller) {
+    TextEditingController controller,
+    FocusNode focusNode,
+    int rowIndex,
+    int colIndex,
+    bool isOwnedByCurrentSeller,
+  ) {
     return TableBuilder.buildTableCell(
       controller: controller,
       focusNode: focusNode,
@@ -1004,8 +1070,9 @@ class _SalesScreenState extends State<SalesScreen> {
         FocusScope.of(context).requestFocus(rowFocusNodes[newRowIndex][1]);
       }
     } else if (colIndex < 11) {
-      FocusScope.of(context)
-          .requestFocus(rowFocusNodes[rowIndex][colIndex + 1]);
+      FocusScope.of(
+        context,
+      ).requestFocus(rowFocusNodes[rowIndex][colIndex + 1]);
     }
 
     _hideAllSuggestionsImmediately();
@@ -1056,7 +1123,10 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   Widget _buildCashOrDebtCell(
-      int rowIndex, int colIndex, bool isOwnedByCurrentSeller) {
+    int rowIndex,
+    int colIndex,
+    bool isOwnedByCurrentSeller,
+  ) {
     Widget cell = Stack(
       children: [
         TableBuilder.buildCashOrDebtCell(
@@ -1090,9 +1160,7 @@ class _SalesScreenState extends State<SalesScreen> {
         child: Opacity(
           opacity: 0.7,
           child: Container(
-            decoration: BoxDecoration(
-              color: Colors.grey[100],
-            ),
+            decoration: BoxDecoration(color: Colors.grey[100]),
             child: cell,
           ),
         ),
@@ -1101,10 +1169,13 @@ class _SalesScreenState extends State<SalesScreen> {
 
     return cell;
   }
-// بناء قائمة اقتراحات الزبائن بشكل أفقي - مثل purchases_screen بالضبط
+  // بناء قائمة اقتراحات الزبائن بشكل أفقي - مثل purchases_screen بالضبط
 
   Widget _buildEmptiesCell(
-      int rowIndex, int colIndex, bool isOwnedByCurrentSeller) {
+    int rowIndex,
+    int colIndex,
+    bool isOwnedByCurrentSeller,
+  ) {
     Widget cell = TableComponents.buildEmptiesCell(
       value: emptiesValues[rowIndex],
       onTap: () => _showEmptiesDialog(rowIndex),
@@ -1119,9 +1190,7 @@ class _SalesScreenState extends State<SalesScreen> {
         child: Opacity(
           opacity: 0.7,
           child: Container(
-            decoration: BoxDecoration(
-              color: Colors.grey[100],
-            ),
+            decoration: BoxDecoration(color: Colors.grey[100]),
             child: cell,
           ),
         ),
@@ -1159,8 +1228,9 @@ class _SalesScreenState extends State<SalesScreen> {
             // تركيز الماوس على حقل اسم الزبون بعد تأخير بسيط
             Future.delayed(const Duration(milliseconds: 100), () {
               if (mounted && rowIndex < rowFocusNodes.length) {
-                FocusScope.of(context)
-                    .requestFocus(rowFocusNodes[rowIndex][10]);
+                FocusScope.of(
+                  context,
+                ).requestFocus(rowFocusNodes[rowIndex][10]);
                 // تحديث الاقتراحات
                 _updateCustomerSuggestions(rowIndex);
               }
@@ -1249,8 +1319,10 @@ class _SalesScreenState extends State<SalesScreen> {
             Expanded(
               child: Text(
                 'يومية مبيعات رقم /$serialNumber/ تاريخ ${widget.selectedDate} البائع ${widget.sellerName}',
-                style:
-                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
                 textAlign: TextAlign.right,
               ),
             ),
@@ -1292,10 +1364,7 @@ class _SalesScreenState extends State<SalesScreen> {
                               minWidth: 12,
                               minHeight: 12,
                             ),
-                            child: const SizedBox(
-                              width: 8,
-                              height: 8,
-                            ),
+                            child: const SizedBox(width: 8, height: 8),
                           ),
                         ),
                     ],
@@ -1408,7 +1477,9 @@ class _SalesScreenState extends State<SalesScreen> {
                   borderRadius: BorderRadius.circular(12),
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 28, vertical: 16),
+                      horizontal: 28,
+                      vertical: 16,
+                    ),
                     child: const Text(
                       'إضافة',
                       style: TextStyle(
@@ -1451,9 +1522,7 @@ class _SalesScreenState extends State<SalesScreen> {
           ),
           SliverToBoxAdapter(
             child: Container(
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey),
-              ),
+              decoration: BoxDecoration(border: Border.all(color: Colors.grey)),
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 controller: _horizontalScrollController,
@@ -1471,7 +1540,7 @@ class _SalesScreenState extends State<SalesScreen> {
     );
   }
 
- Future<void> _saveCurrentRecord({bool silent = false}) async {
+  Future<void> _saveCurrentRecord({bool silent = false}) async {
     if (_isSaving) return;
 
     setState(() => _isSaving = true);
@@ -1505,7 +1574,9 @@ class _SalesScreenState extends State<SalesScreen> {
           total: controllers[9].text,
           cashOrDebt: cashOrDebtValues[i],
           empties: emptiesValues[i],
-          customerName: cashOrDebtValues[i] == 'دين' ? customerNames[i].trim() : null,
+          customerName: cashOrDebtValues[i] == 'دين'
+              ? customerNames[i].trim()
+              : null,
           sellerName: sellerNames[i],
         );
 
@@ -1519,26 +1590,36 @@ class _SalesScreenState extends State<SalesScreen> {
 
     // 2. منطق تحديث الأرصدة الجديد (الإلغاء ثم التطبيق)
     Map<String, double> customerBalanceChanges = {};
-    final existingDoc = await _storageService.loadSalesDocument(widget.selectedDate);
+    final existingDoc = await _storageService.loadSalesDocument(
+      widget.selectedDate,
+    );
 
     // الخطوة أ: إلغاء أثر جميع ديون البائع القديمة في هذا اليوم
     if (existingDoc != null) {
       for (var oldSale in existingDoc.sales) {
-        if (oldSale.sellerName == widget.sellerName && oldSale.cashOrDebt == 'دين' && oldSale.customerName != null && oldSale.customerName!.isNotEmpty) {
+        if (oldSale.sellerName == widget.sellerName &&
+            oldSale.cashOrDebt == 'دين' &&
+            oldSale.customerName != null &&
+            oldSale.customerName!.isNotEmpty) {
           double oldAmount = double.tryParse(oldSale.total) ?? 0;
-          customerBalanceChanges[oldSale.customerName!] = (customerBalanceChanges[oldSale.customerName!] ?? 0) - oldAmount;
+          customerBalanceChanges[oldSale.customerName!] =
+              (customerBalanceChanges[oldSale.customerName!] ?? 0) - oldAmount;
         }
       }
     }
 
     // الخطوة ب: تطبيق أثر جميع ديون البائع الجديدة من الواجهة
     for (var newSale in allSalesFromUI) {
-      if (newSale.sellerName == widget.sellerName && newSale.cashOrDebt == 'دين' && newSale.customerName != null && newSale.customerName!.isNotEmpty) {
+      if (newSale.sellerName == widget.sellerName &&
+          newSale.cashOrDebt == 'دين' &&
+          newSale.customerName != null &&
+          newSale.customerName!.isNotEmpty) {
         double newAmount = double.tryParse(newSale.total) ?? 0;
-        customerBalanceChanges[newSale.customerName!] = (customerBalanceChanges[newSale.customerName!] ?? 0) + newAmount;
+        customerBalanceChanges[newSale.customerName!] =
+            (customerBalanceChanges[newSale.customerName!] ?? 0) + newAmount;
       }
     }
-    
+
     // 3. بناء الوثيقة النهائية للحفظ
     final documentToSave = SalesDocument(
       recordNumber: serialNumber,
@@ -1562,7 +1643,10 @@ class _SalesScreenState extends State<SalesScreen> {
       // تطبيق التغييرات الصافية على أرصدة الزبائن
       for (var entry in customerBalanceChanges.entries) {
         if (entry.value != 0) {
-          await _customerIndexService.updateCustomerBalance(entry.key, entry.value);
+          await _customerIndexService.updateCustomerBalance(
+            entry.key,
+            entry.value,
+          );
         }
       }
       setState(() => _hasUnsavedChanges = false);
@@ -1571,11 +1655,15 @@ class _SalesScreenState extends State<SalesScreen> {
 
     setState(() => _isSaving = false);
     if (!silent && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
           content: Text(success ? 'تم الحفظ بنجاح' : 'فشل الحفظ'),
-          backgroundColor: success ? Colors.green : Colors.red));
+          backgroundColor: success ? Colors.green : Colors.red,
+        ),
+      );
     }
   }
+
   Future<bool> _showUnsavedChangesDialog() async {
     return await showDialog<bool>(
           context: context,
@@ -1633,7 +1721,7 @@ class _SalesScreenState extends State<SalesScreen> {
     });
   }
 
-// دالة مساعدة لإخفاء جميع الاقتراحات
+  // دالة مساعدة لإخفاء جميع الاقتراحات
   void _clearAllSuggestions() {
     if (_materialSuggestions.isNotEmpty ||
         _packagingSuggestions.isNotEmpty ||
@@ -1670,7 +1758,8 @@ class _SalesScreenState extends State<SalesScreen> {
         debugPrint('✅ تم تحميل ${dates.length} يومية مبيعات');
         for (var date in dates) {
           debugPrint(
-              '   - تاريخ: ${date['date']}, رقم: ${date['journalNumber']}');
+            '   - تاريخ: ${date['date']}, رقم: ${date['journalNumber']}',
+          );
         }
       }
 
@@ -1694,8 +1783,10 @@ class _SalesScreenState extends State<SalesScreen> {
   void _updateCustomerSuggestions(int rowIndex) async {
     final query = rowControllers[rowIndex][10].text;
     if (query.length >= 1 && cashOrDebtValues[rowIndex] == 'دين') {
-      final suggestions =
-          await getEnhancedSuggestions(_customerIndexService, query);
+      final suggestions = await getEnhancedSuggestions(
+        _customerIndexService,
+        query,
+      );
       if (mounted) {
         setState(() {
           _customerSuggestions = suggestions;
@@ -1728,8 +1819,10 @@ class _SalesScreenState extends State<SalesScreen> {
     }
   }
 
-  void _toggleFullScreenSuggestions(
-      {required String type, required bool show}) {
+  void _toggleFullScreenSuggestions({
+    required String type,
+    required bool show,
+  }) {
     if (mounted) {
       setState(() {
         _showFullScreenSuggestions = show;
@@ -1774,8 +1867,9 @@ class _SalesScreenState extends State<SalesScreen> {
 
   Future<void> _loadJournalNumber() async {
     try {
-      final journalNumber =
-          await _storageService.getJournalNumberForDate(widget.selectedDate);
+      final journalNumber = await _storageService.getJournalNumberForDate(
+        widget.selectedDate,
+      );
       if (mounted) {
         setState(() {
           serialNumber = journalNumber;
@@ -1800,7 +1894,7 @@ class _SalesScreenState extends State<SalesScreen> {
     }
   }
 
-// 2. تطبيق الحماية في الخلايا
+  // 2. تطبيق الحماية في الخلايا
   bool _canEditRow(int rowIndex) {
     if (rowIndex >= sellerNames.length) {
       return true; // صف جديد لم يحفظ بعد
@@ -1819,8 +1913,9 @@ class _SalesScreenState extends State<SalesScreen> {
 
       var arabicFont;
       try {
-        final fontData =
-            await rootBundle.load("assets/fonts/Cairo-Regular.ttf");
+        final fontData = await rootBundle.load(
+          "assets/fonts/Cairo-Regular.ttf",
+        );
         arabicFont = pw.Font.ttf(fontData);
       } catch (e) {
         arabicFont = pw.Font.courier();
@@ -1845,18 +1940,29 @@ class _SalesScreenState extends State<SalesScreen> {
                 child: pw.Column(
                   children: [
                     pw.Center(
-                        child: pw.Text('يومية مبيعات رقم /$serialNumber/',
-                            style: pw.TextStyle(
-                                fontSize: 16, fontWeight: pw.FontWeight.bold))),
+                      child: pw.Text(
+                        'يومية مبيعات رقم /$serialNumber/',
+                        style: pw.TextStyle(
+                          fontSize: 16,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                      ),
+                    ),
                     pw.Center(
-                        child: pw.Text(
-                            'تاريخ ${widget.selectedDate} - البائع ${widget.sellerName}',
-                            style: const pw.TextStyle(
-                                fontSize: 12, color: PdfColors.grey700))),
+                      child: pw.Text(
+                        'تاريخ ${widget.selectedDate} - البائع ${widget.sellerName}',
+                        style: const pw.TextStyle(
+                          fontSize: 12,
+                          color: PdfColors.grey700,
+                        ),
+                      ),
+                    ),
                     pw.SizedBox(height: 10),
                     pw.Table(
-                      border:
-                          pw.TableBorder.all(color: borderColor, width: 0.5),
+                      border: pw.TableBorder.all(
+                        color: borderColor,
+                        width: 0.5,
+                      ),
                       columnWidths: {
                         0: const pw.FlexColumnWidth(2),
                         1: const pw.FlexColumnWidth(2),
@@ -1895,10 +2001,12 @@ class _SalesScreenState extends State<SalesScreen> {
                           if (controllers[1].text.isEmpty &&
                               controllers[4].text.isEmpty) {
                             return pw.TableRow(
-                                children: List.filled(12, pw.SizedBox()));
+                              children: List.filled(12, pw.SizedBox()),
+                            );
                           }
-                          final color =
-                              index % 2 == 0 ? rowEvenColor : rowOddColor;
+                          final color = index % 2 == 0
+                              ? rowEvenColor
+                              : rowOddColor;
                           return pw.TableRow(
                             decoration: pw.BoxDecoration(color: color),
                             children: [
@@ -1919,20 +2027,29 @@ class _SalesScreenState extends State<SalesScreen> {
                         }).toList(),
                         pw.TableRow(
                           decoration: pw.BoxDecoration(
-                              color: PdfColor.fromInt(0xFFFFCC80)),
+                            color: PdfColor.fromInt(0xFFFFCC80),
+                          ),
                           children: [
                             _buildPdfCell(''),
                             _buildPdfCell(''),
-                            _buildPdfCell(totalGrandController.text,
-                                isBold: true),
+                            _buildPdfCell(
+                              totalGrandController.text,
+                              isBold: true,
+                            ),
                             _buildPdfCell(''),
-                            _buildPdfCell(totalNetController.text,
-                                isBold: true),
-                            _buildPdfCell(totalBaseController.text,
-                                isBold: true),
+                            _buildPdfCell(
+                              totalNetController.text,
+                              isBold: true,
+                            ),
+                            _buildPdfCell(
+                              totalBaseController.text,
+                              isBold: true,
+                            ),
                             _buildPdfCell(''),
-                            _buildPdfCell(totalCountController.text,
-                                isBold: true),
+                            _buildPdfCell(
+                              totalCountController.text,
+                              isBold: true,
+                            ),
                             _buildPdfCell(''),
                             _buildPdfCell(''),
                             _buildPdfCell(''),
@@ -1955,11 +2072,13 @@ class _SalesScreenState extends State<SalesScreen> {
       final file = File("${output.path}/يومية_مبيعات_$safeDate.pdf");
 
       await file.writeAsBytes(await pdf.save());
-      await Share.shareXFiles([XFile(file.path)],
-          text: 'يومية مبيعات ${widget.selectedDate}');
+      await Share.shareXFiles([
+        XFile(file.path),
+      ], text: 'يومية مبيعات ${widget.selectedDate}');
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red));
+        SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red),
+      );
     }
   }
 
@@ -1967,10 +2086,15 @@ class _SalesScreenState extends State<SalesScreen> {
     return pw.Container(
       padding: const pw.EdgeInsets.all(4),
       alignment: pw.Alignment.center,
-      child: pw.Text(text,
-          textAlign: pw.TextAlign.center,
-          style: pw.TextStyle(
-              color: color, fontSize: 8, fontWeight: pw.FontWeight.bold)),
+      child: pw.Text(
+        text,
+        textAlign: pw.TextAlign.center,
+        style: pw.TextStyle(
+          color: color,
+          fontSize: 8,
+          fontWeight: pw.FontWeight.bold,
+        ),
+      ),
     );
   }
 
@@ -1978,11 +2102,14 @@ class _SalesScreenState extends State<SalesScreen> {
     return pw.Container(
       padding: const pw.EdgeInsets.all(4),
       alignment: pw.Alignment.center,
-      child: pw.Text(text,
-          textAlign: pw.TextAlign.center,
-          style: pw.TextStyle(
-              fontSize: 8,
-              fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal)),
+      child: pw.Text(
+        text,
+        textAlign: pw.TextAlign.center,
+        style: pw.TextStyle(
+          fontSize: 8,
+          fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal,
+        ),
+      ),
     );
   }
 }
@@ -1994,7 +2121,10 @@ class _StickyTableHeaderDelegate extends SliverPersistentHeaderDelegate {
 
   @override
   Widget build(
-      BuildContext context, double shrinkOffset, bool overlapsContent) {
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
     return SizedBox.expand(child: child);
   }
 
